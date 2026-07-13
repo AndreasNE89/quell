@@ -18,14 +18,21 @@ const { RE2 } = require('@adguard/re2-wasm');
 const MAX_URL_FILTER_LEN = 2000;
 
 /**
- * Chromium DNR compiles each regexFilter with RE2 `max_mem = 2 << 10` (2048).
- * We use a slightly tighter 1990 — same margin as AdGuard's tsurlfilter — because
- * re2-wasm is Unicode-only while Chrome uses Latin1, and a few borderline patterns
- * (e.g. remaining pussyspace allowlists) still trip Chrome near the ceiling.
+ * Chromium DNR compiles each regexFilter with RE2 `max_mem = 2 << 10` (2048),
+ * Latin1 encoding, and case-sensitivity matching `isUrlFilterCaseSensitive`
+ * (Chrome 118+ defaults that to false).
+ *
+ * `@adguard/re2-wasm` is Unicode-only, so we cannot mirror Latin1 exactly. We:
+ * 1. Validate with `iu` when the emitted rule will be case-insensitive (default),
+ *    and `u` when `$match-case` / `isUrlFilterCaseSensitive: true`.
+ * 2. Use a tighter budget than AdGuard's 1990 — Unicode underestimates Latin1
+ *    Prog size for dense character classes (e.g. ubo-filters id 4247 needs ~1980
+ *    in Unicode/`u` but still trips Chrome's 2KB Latin1 limit).
+ *
  * @see https://source.chromium.org/chromium/chromium/src/+/main:extensions/browser/api/declarative_net_request/utils.cc
  * @see https://developer.chrome.com/docs/extensions/reference/api/declarativeNetRequest#regex-rules
  */
-const CHROME_REGEX_MAX_MEM = 1990;
+const CHROME_REGEX_MAX_MEM = 1950;
 
 /** Is the string safe as a DNR urlFilter? DNR requires ASCII; non-ASCII needs punycode. */
 function isAscii(s) {
@@ -74,15 +81,19 @@ export function normalizeUrlFilter(pattern) {
  * Filter lists routinely use JS-only features (lookarounds, backrefs) that must
  * be dropped at compile time.
  *
- * Memory check uses AdGuard's RE2 WASM with Chromium's `max_mem` (2 KiB). That is
- * the same approach as tsurlfilter; it is an approximation of Chrome's Latin1
- * RE2 build, but it catches known `memoryLimitExceeded` offenders (nested
- * counted classes, `[-a-z_]{4,22}`, large `.{n,}` / `[…]{n,}`, etc.).
+ * Memory check uses AdGuard's RE2 WASM. Flags must match Chrome's case-sensitivity
+ * for the emitted rule: default DNR matching is case-insensitive (`iu`); `$match-case`
+ * uses `u`. Validating only with `u` underestimates Prog size and ships rules Chrome
+ * then skips (e.g. ubo-badware hex.sbs patterns).
  *
+ * @param {string} pattern
+ * @param {{ caseSensitive?: boolean }} [options]
  * @see https://github.com/google/re2/wiki/Syntax
  * @returns {string|null} skip reason, or null if the pattern looks RE2-safe
  */
-export function re2UnsupportedReason(pattern) {
+export function re2UnsupportedReason(pattern, options = {}) {
+  const caseSensitive = options.caseSensitive === true;
+
   // Lookahead / lookbehind — the usual EasyList/uBO offenders.
   if (/\(\?(?:[=!]|<=|<!)/.test(pattern)) return 'regex-lookaround';
 
@@ -115,11 +126,12 @@ export function re2UnsupportedReason(pattern) {
   }
 
   // Enforce Chrome's ~2KB compiled-size budget so oversized rules are never shipped.
-  // re2-wasm requires the `u` flag; Chromium uses Latin1, so this can be slightly
-  // more aggressive than Chrome — prefer dropping a borderline rule over load warnings.
+  // re2-wasm requires Unicode (`u` / `iu`); Chromium uses Latin1 — prefer dropping a
+  // borderline rule over load-time "exceeded the 2KB memory limit" warnings.
+  const flags = caseSensitive ? 'u' : 'iu';
   try {
     // RE2 constructor throws when the pattern cannot be compiled within maxMem.
-    new RE2(pattern, 'u', CHROME_REGEX_MAX_MEM);
+    new RE2(pattern, flags, CHROME_REGEX_MAX_MEM);
   } catch (err) {
     const msg = String(err?.message ?? err);
     if (/too large|memory|compile failed/i.test(msg)) return 'regex-memory';
@@ -188,7 +200,8 @@ export function toDnrRule(f) {
     const regex = f.pattern.slice(1, -1);
     if (!regex) return { skip: 'empty-regex' };
     if (!isAscii(regex)) return { skip: 'non-ascii-regex' };
-    const re2Skip = re2UnsupportedReason(regex);
+    // Match Chrome's compile flags: default case-insensitive, `$match-case` → sensitive.
+    const re2Skip = re2UnsupportedReason(regex, { caseSensitive: !!f.options.matchCase });
     if (re2Skip) return { skip: re2Skip };
     condition.regexFilter = regex;
   } else if (f.pattern && f.pattern !== '*') {

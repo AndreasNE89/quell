@@ -153,12 +153,17 @@ test('should skip regex with repetition count above RE2 max (1000)', () => {
 });
 
 test('should emit compact RE2-safe regex without lookarounds', () => {
-  const { dnr } = convert('/^https?:\\/\\/cdn\\.example\\.com\\/lib\\/[a-z0-9]{6,12}\\.js$/$script');
+  // Use $match-case so validation mirrors Chrome's case-sensitive compile path;
+  // the same counted class is over budget when compiled case-insensitively.
+  const { dnr } = convert(
+    '/^https?:\\/\\/cdn\\.example\\.com\\/lib\\/[a-z0-9]{6,12}\\.js$/$script,match-case',
+  );
   assert.equal(dnr.skip, undefined);
   assert.equal(
     dnr.rule.condition.regexFilter,
     '^https?:\\/\\/cdn\\.example\\.com\\/lib\\/[a-z0-9]{6,12}\\.js$',
   );
+  assert.equal(dnr.rule.condition.isUrlFilterCaseSensitive, true);
 });
 
 test('should skip regex that exceeds Chrome DNR ~2KB compiled memory (jsdelivr offender)', () => {
@@ -183,10 +188,41 @@ test('should skip large counted any-byte regex (gorhill memoryLimitExceeded samp
   assert.equal(dnr.skip, 'regex-memory');
 });
 
+test('should skip case-insensitive regex that exceeds Chrome 2KB memory (ubo-badware sbs)', () => {
+  // Chrome 118+ defaults isUrlFilterCaseSensitive to false. Validating only with
+  // case-sensitive RE2 underestimates Prog size — these shipped and Chrome skipped them.
+  const line = '/^https?:\\/\\/[a-f0-9]{32}\\.[a-z]{7}\\.sbs\\b/$doc,to=sbs';
+  const { dnr } = convert(line);
+  assert.equal(dnr.skip, 'regex-memory');
+});
+
+test('should skip dense repeated-class regex under case-insensitive compile (ubo-badware)', () => {
+  const line =
+    '/^https?:\\/\\/[a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9]\\.[a-z][a-z][a-z][a-z][a-z][a-z][a-z]\\.sbs\\//$doc,to=sbs';
+  const { dnr } = convert(line);
+  assert.equal(dnr.skip, 'regex-memory');
+});
+
+test('should skip match-case regex near Chrome Latin1 2KB ceiling (ubo-filters 4247)', () => {
+  // Unicode/`u` compiles under 1990 but Chrome Latin1 still rejects — tighter budget.
+  const line =
+    '/^https:\\/\\/[a-z0-9-]{7,}\\.[a-z]{3,6}\\/(?:load|register)\\/(?:movie|show|episode)\\/[0-9]+(?:\\/[0-9]{1,2}){0,2}\\/?\\?[a-z]+=[a-zA-Z0-9%&]+(?:&[a-z]+=[0-9a-z]+)?$/$doc,match-case,to=~edu|~gov';
+  const { dnr } = convert(line);
+  assert.equal(dnr.skip, 'regex-memory');
+});
+
 test('re2UnsupportedReason reports regex-memory for oversized class repeats', async () => {
   const { re2UnsupportedReason } = await import('../scripts/lib/to-dnr.mjs');
   assert.equal(re2UnsupportedReason('[-a-z_]{4,22}'), 'regex-memory');
   assert.equal(re2UnsupportedReason('ads?[0-9]+'), null);
+  // Chrome default is case-insensitive; counted classes often fit only when `$match-case`.
+  assert.equal(re2UnsupportedReason('[a-z]{10,20}'), 'regex-memory');
+  assert.equal(re2UnsupportedReason('[a-z]{10,20}', { caseSensitive: true }), null);
+  // ubo-badware hex.sbs — over budget even with match-case (Latin1 margin).
+  assert.equal(
+    re2UnsupportedReason('^https?:\\/\\/[a-f0-9]{32}\\.[a-z]{7}\\.sbs\\b', { caseSensitive: true }),
+    'regex-memory',
+  );
 });
 
 test('should sanitize ||* urlFilter (Chrome forbids domain-anchor + leading wildcard)', () => {
