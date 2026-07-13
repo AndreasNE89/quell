@@ -14,7 +14,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync, readdirSync
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseLine } from './lib/parse-filter.mjs';
-import { toDnrRule, ruleKey } from './lib/to-dnr.mjs';
+import { toDnrRule, ruleKey, networkFilterIdentity } from './lib/to-dnr.mjs';
 import { DNR } from './lib/limits.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -75,9 +75,10 @@ function compileList(list, text, ctx) {
   const stats = { network: 0, converted: 0, deduped: 0, regexUsed: 0, cosmetic: 0, scriptlet: 0 };
   const skips = ctx.skips;
   const cos = ctx.byList[list.id];
+  const lines = text.split('\n');
 
   let nextId = 1;
-  for (const raw of text.split('\n')) {
+  for (const raw of lines) {
     const parsed = parseLine(raw);
     if (!parsed) continue;
 
@@ -91,6 +92,14 @@ function compileList(list, text, ctx) {
     const out = toDnrRule(parsed);
     if (out.cosmeticException) {
       applyNetworkCosmeticException(out, parsed, ctx.networkCosmeticExceptions);
+      continue;
+    }
+    if (out.badfilter) {
+      skips['badfilter'] = (skips['badfilter'] || 0) + 1;
+      continue;
+    }
+    if (ctx.badfilters.has(networkFilterIdentity(parsed))) {
+      skips['badfilter-cancelled'] = (skips['badfilter-cancelled'] || 0) + 1;
       continue;
     }
     if (out.skip) {
@@ -249,6 +258,8 @@ function main() {
     regexCount: 0,
     skips: {},
     byList: {},
+    /** @type {Set<string>} identities cancelled by $badfilter across all lists */
+    badfilters: new Set(),
     networkCosmeticExceptions: {
       generichide: new Set(),
       elemhide: new Set(),
@@ -258,6 +269,18 @@ function main() {
 
   const metaLists = [];
   let totalEnabledRules = 0;
+
+  // Collect $badfilter identities from every list before emit so later lists can
+  // cancel earlier ones (and vice versa).
+  for (const list of registry.lists) {
+    const file = join(FILTERS_DIR, list.file);
+    if (!existsSync(file)) continue;
+    for (const raw of readFileSync(file, 'utf8').split('\n')) {
+      const parsed = parseLine(raw);
+      if (!parsed || parsed.type !== 'network' || !parsed.options?.badfilter) continue;
+      ctx.badfilters.add(networkFilterIdentity(parsed));
+    }
+  }
 
   for (const list of registry.lists) {
     const file = join(FILTERS_DIR, list.file);

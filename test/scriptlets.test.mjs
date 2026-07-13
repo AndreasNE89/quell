@@ -21,6 +21,7 @@ before(async () => {
           parsePrunePaths,
           pruneObject,
           stripYoutubeAdKeys,
+          abortCurrentInlineScript,
         } from './src/scriptlets/library.js';
       `,
       resolveDir: ROOT,
@@ -79,4 +80,31 @@ test('stripYoutubeAdKeys clears nested player ad fields to empty arrays', () => 
   assert.deepEqual(obj.nested.adSlots, []);
   assert.equal(obj.nested.ok, true);
   assert.equal(obj.videoDetails.title, 'ok');
+});
+
+test('abort-current-inline-script setter retains assigned values', () => {
+  // Minimal document/window so the scriptlet can install a property trap.
+  const g = globalThis;
+  const prevWindow = Object.getOwnPropertyDescriptor(g, 'window');
+  const prevDocument = Object.getOwnPropertyDescriptor(g, 'document');
+  const prevHTMLScript = g.HTMLScriptElement;
+  class FakeHTMLScriptElement {}
+  g.HTMLScriptElement = FakeHTMLScriptElement;
+  const doc = { currentScript: null };
+  Object.defineProperty(g, 'document', { value: doc, configurable: true, writable: true });
+  Object.defineProperty(g, 'window', { value: g, configurable: true, writable: true });
+  g.__acisProbe = 'initial';
+  try {
+    mod.abortCurrentInlineScript(['__acisProbe']);
+    g.__acisProbe = 'after-assign';
+    assert.equal(g.__acisProbe, 'after-assign');
+  } finally {
+    delete g.__acisProbe;
+    if (prevWindow) Object.defineProperty(g, 'window', prevWindow);
+    else delete g.window;
+    if (prevDocument) Object.defineProperty(g, 'document', prevDocument);
+    else delete g.document;
+    if (prevHTMLScript) g.HTMLScriptElement = prevHTMLScript;
+    else delete g.HTMLScriptElement;
+  }
 });

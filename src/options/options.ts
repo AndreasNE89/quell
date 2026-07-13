@@ -52,6 +52,7 @@ function listItem(l: ListsData['lists'][number]): HTMLElement {
   const input = document.createElement('input');
   input.type = 'checkbox';
   input.checked = l.enabled;
+  input.setAttribute('aria-label', `Enable filter list ${l.title}`);
   const slider = document.createElement('span');
   slider.className = 'slider';
   sw.append(input, slider);

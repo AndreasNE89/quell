@@ -207,7 +207,8 @@ function textMatcher(pattern: string | undefined): (t: string) => boolean {
   return (t) => t.includes(pattern);
 }
 
-function abortCurrentInlineScript(args: string[]): void {
+/** Install abort-on-read getter; setter keeps a mutable held value (uBO-style). */
+export function abortCurrentInlineScript(args: string[]): void {
   const [chain, search] = args;
   const match = textMatcher(search);
   const parts = chain.split('.');
@@ -219,16 +220,21 @@ function abortCurrentInlineScript(args: string[]): void {
     if (owner == null) return;
   }
   const desc = Object.getOwnPropertyDescriptor(owner, prop);
-  const orig = desc?.value;
-  const guard = (): unknown => {
+  // Mirror uBO: keep a mutable held value. A no-op setter breaks pages that assign
+  // the property; throw only when a matching inline script is the currentScript.
+  let held: unknown = desc?.get ? desc.get.call(owner) : desc?.value;
+  const get = (): unknown => {
     const el = document.currentScript;
     if (el instanceof HTMLScriptElement && !el.src && match(el.textContent ?? '')) {
       throw new ReferenceError('StampStack: aborted inline script');
     }
-    return orig;
+    return held;
+  };
+  const set = (v: unknown): void => {
+    held = v;
   };
   try {
-    Object.defineProperty(owner, prop, { get: guard, set: () => {}, configurable: true });
+    Object.defineProperty(owner, prop, { get, set, configurable: true });
   } catch {
     /* ignore */
   }

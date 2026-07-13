@@ -1,4 +1,4 @@
-﻿# Chrome Web Store — StampStack release checklist
+# Chrome Web Store — StampStack release checklist
 
 Use this when uploading StampStack to the [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole).
 
@@ -69,9 +69,11 @@ These steps require your Google account, developer registration, and (usually) p
 
 ### Privacy practices form
 
-- [ ] Single purpose: **Block ads / improve browsing by blocking ads and trackers**
+- [ ] Single purpose (short purpose only — do **not** paste host-permission text):  
+  `Block ads and trackers using Declarative Net Request, cosmetic filters, and scriptlets.`
 - [ ] Declare you **do not** collect user data (no remote analytics)
-- [ ] Paste permission justifications from [store/PERMISSIONS.md](../store/PERMISSIONS.md)
+- [ ] Remote code: **No** (extension does not load remote code)
+- [ ] Paste permission justifications from [store/PERMISSIONS.md](../store/PERMISSIONS.md) — each field once, matching that permission
 - [ ] Certify limited-use / privacy compliance checkboxes
 
 ### Reviewer notes
@@ -93,7 +95,7 @@ These steps require your Google account, developer registration, and (usually) p
 ```
 StampStack is a Manifest V3 ad/tracker blocker.
 
-Single purpose: block ads and trackers using Declarative Net Request + cosmetic/scriptlet filters.
+Single purpose: Block ads and trackers using Declarative Net Request, cosmetic filters, and scriptlets.
 
 Permissions:
 - declarativeNetRequest: apply packaged EasyList-style rulesets

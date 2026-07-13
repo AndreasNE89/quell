@@ -13,6 +13,7 @@ import {
   domainSuffixes,
   domainSpecMatches,
   matchesExceptionHost,
+  entityDomainKeys,
 } from '../shared/hostname.js';
 
 export interface CosmeticMatch {
@@ -94,17 +95,20 @@ export function matchCosmetic(
   const hide = new Set<string>();
   const unhide = new Set<string>();
 
+  // Suffixes plus entity keys (`example.*`) so entity-domain cosmetics apply.
+  const lookupKeys = [...suffixes, ...entityDomainKeys(hostname)];
+
   if (!disableSpecific) {
-    for (const suffix of suffixes) {
-      const h = merged.hideSpecific[suffix];
+    for (const key of lookupKeys) {
+      const h = merged.hideSpecific[key];
       if (h) for (const s of h) hide.add(s);
-      const u = merged.unhideSpecific[suffix];
+      const u = merged.unhideSpecific[key];
       if (u) for (const s of u) unhide.add(s);
     }
   } else {
     // Still apply explicit unhides (exceptions) even when specifichide is on.
-    for (const suffix of suffixes) {
-      const u = merged.unhideSpecific[suffix];
+    for (const key of lookupKeys) {
+      const u = merged.unhideSpecific[key];
       if (u) for (const s of u) unhide.add(s);
     }
   }

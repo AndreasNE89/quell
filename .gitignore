@@ -17,3 +17,5 @@ docs/youtube-features-audit.json
 # Personal agent overrides
 .claude.local.md
 .cursor/*.local.*
+# Chrome Web Store upload assist (Playwright persistent profile — keeps Google login)
+.cws-chrome-profile/

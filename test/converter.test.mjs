@@ -128,6 +128,35 @@ test('regex end-anchor + options: body and options both survive', () => {
   assert.deepEqual(dnr.rule.condition.resourceTypes, ['script']);
 });
 
+test('path-anchored filter with options is not treated as full regex', () => {
+  // `/ad/image/*$image` has a second `/` but is a path pattern, not `/regex/`.
+  // Options must split at `$`; otherwise `$image` stays in urlFilter and the rule is dead.
+  const { parsed, dnr } = convert('/ad/image/*$image');
+  assert.equal(parsed.isRegex, false);
+  assert.equal(parsed.pattern, '/ad/image/*');
+  assert.deepEqual(parsed.options.resourceTypes, ['image']);
+  assert.equal(dnr.rule.condition.urlFilter, '/ad/image/*');
+  assert.deepEqual(dnr.rule.condition.resourceTypes, ['image']);
+  assert.ok(!String(dnr.rule.condition.urlFilter).includes('$'));
+});
+
+test('should parse $badfilter without treating it as unsupported', () => {
+  const { parsed, dnr } = convert('||ads.example^$script,badfilter');
+  assert.equal(parsed.options.badfilter, true);
+  assert.equal(dnr.badfilter, true);
+  assert.equal(dnr.rule, undefined);
+  assert.equal(dnr.skip, undefined);
+});
+
+test('should match badfilter identity to target without badfilter token', async () => {
+  const { networkFilterIdentity } = await import('../scripts/lib/to-dnr.mjs');
+  const bad = parseLine('||ads.example^$script,badfilter');
+  const target = parseLine('||ads.example^$script');
+  assert.equal(networkFilterIdentity(bad), networkFilterIdentity(target));
+  const other = parseLine('||ads.example^$image');
+  assert.notEqual(networkFilterIdentity(bad), networkFilterIdentity(other));
+});
+
 test('should skip regex with positive lookahead (RE2 / Chrome DNR rejects)', () => {
   // Real offender from ubo-filters (was static rule id 1302).
   const line =

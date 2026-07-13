@@ -29,6 +29,7 @@ import {
   ALLOWLIST_ID_END,
   ALLOWLIST_PRIORITY,
   GENERIC_CSS_SCRIPT_ID,
+  SCRIPTLETS_SCRIPT_ID,
   YOUTUBE_SCRIPTLETS_SCRIPT_ID,
 } from '../shared/constants.js';
 import { loadSettings, saveSettings, isListEnabled } from './settings.js';
@@ -36,6 +37,7 @@ import { matchCosmetic, matchScriptlets } from '../engine/cosmetic-match.js';
 import {
   normalizeHostname,
   isAllowlistedHost,
+  isValidMatchPatternHost,
 } from '../shared/hostname.js';
 
 import cosmeticJson from '../generated/cosmetic.json';
@@ -80,6 +82,9 @@ async function syncRulesets(settings: Settings): Promise<void> {
 
 function allowlistPatterns(host: string): string[] {
   const h = normalizeHostname(host);
+  // Match patterns reject IPv6 / empty / garbage hosts; one bad entry must not abort
+  // chrome.scripting registration for cosmetics + YouTube hooks.
+  if (!isValidMatchPatternHost(h)) return [];
   return [`*://${h}/*`, `*://*.${h}/*`, `*://www.${h}/*`];
 }
 
@@ -90,7 +95,13 @@ async function syncAllowlist(settings: Settings): Promise<void> {
     .filter((r) => r.id >= ALLOWLIST_ID_START && r.id < ALLOWLIST_ID_END)
     .map((r) => r.id);
 
-  const hosts = [...new Set(settings.allowlist.map(normalizeHostname).filter(Boolean))];
+  const hosts = [
+    ...new Set(
+      settings.allowlist
+        .map(normalizeHostname)
+        .filter((h) => isValidMatchPatternHost(h)),
+    ),
+  ];
   const addRules: chrome.declarativeNetRequest.Rule[] = hosts.map((host, i) => ({
     id: ALLOWLIST_ID_START + i,
     priority: ALLOWLIST_PRIORITY,
@@ -154,7 +165,9 @@ async function syncRegisteredScripts(settings: Settings): Promise<void> {
   try {
     // Drop any legacy MAIN scriptlets registration from older builds.
     try {
-      await chrome.scripting.unregisterContentScripts({ ids: ['StampStack-scriptlets'] });
+      await chrome.scripting.unregisterContentScripts({
+        ids: ['StampStack-scriptlets', SCRIPTLETS_SCRIPT_ID],
+      });
     } catch {
       /* not registered */
     }

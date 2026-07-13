@@ -90,15 +90,22 @@ export function parseProcedural(selector: string): Parsed {
 function parseOps(s: string, ops: Op[]): void {
   let i = 0;
   while (i < s.length) {
+    while (i < s.length && s[i] === ' ') i++;
+    if (i >= s.length) break;
     if (s[i] !== ':') {
-      i++;
-      continue;
+      // Trailing CSS after a procedural op (e.g. `:has-text(x) > .inner`).
+      const rest = s.slice(i).trim();
+      if (rest) ops.push({ name: 'selector', arg: rest });
+      break;
     }
     const m = /^:([-a-z]+)\(/.exec(s.slice(i));
     if (!m) {
-      i++;
-      continue;
+      // Bare `:hover` etc. — keep as trailing CSS rather than dropping it.
+      const rest = s.slice(i).trim();
+      if (rest) ops.push({ name: 'selector', arg: rest });
+      break;
     }
+    // After the first procedural op, also accept `:not()` / `:is()` / `:where()` etc.
     const name = m[1];
     const open = i + m[0].length - 1;
     const paren = readParen(s, open);
@@ -248,6 +255,38 @@ function applyOp(els: Element[], op: Op): Element[] {
       // Attribute watching is handled by the content-script MutationObserver
       // (attributes: true). This op is a no-op transform — keep the set.
       return els;
+    }
+    case 'selector': {
+      // Trailing CSS after a procedural filter — narrow the matched set so we don't
+      // hide the wrong (ancestor) element.
+      const raw = op.arg.trim();
+      const out = new Set<Element>();
+      for (const el of els) {
+        try {
+          if (raw.startsWith('>')) {
+            const childSel = raw.replace(/^>\s*/, '');
+            for (const child of Array.from(el.children)) {
+              if (child.matches(childSel)) out.add(child);
+            }
+          } else if (raw.startsWith('+')) {
+            const sel = raw.replace(/^\+\s*/, '');
+            const sib = el.nextElementSibling;
+            if (sib?.matches(sel)) out.add(sib);
+          } else if (raw.startsWith('~')) {
+            const sel = raw.replace(/^~\s*/, '');
+            let sib = el.nextElementSibling;
+            while (sib) {
+              if (sib.matches(sel)) out.add(sib);
+              sib = sib.nextElementSibling;
+            }
+          } else {
+            for (const n of Array.from(el.querySelectorAll(raw))) out.add(n);
+          }
+        } catch {
+          /* bad selector */
+        }
+      }
+      return [...out];
     }
     default:
       return els;

@@ -176,11 +176,39 @@ function unsupportedReason(tokens) {
   return `unsupported:${names[0] || 'option'}`;
 }
 
+/**
+ * Identity for `$badfilter` matching: pattern + options minus the badfilter token.
+ * Two filters cancel when their identities are equal.
+ */
+export function networkFilterIdentity(f) {
+  const o = f.options || {};
+  return JSON.stringify({
+    isException: !!f.isException,
+    pattern: f.pattern,
+    isRegex: !!f.isRegex,
+    resourceTypes: [...(o.resourceTypes || [])].sort(),
+    excludedResourceTypes: [...(o.excludedResourceTypes || [])].sort(),
+    initiatorDomains: [...(o.initiatorDomains || [])].sort(),
+    excludedInitiatorDomains: [...(o.excludedInitiatorDomains || [])].sort(),
+    requestDomains: [...(o.requestDomains || [])].sort(),
+    excludedRequestDomains: [...(o.excludedRequestDomains || [])].sort(),
+    thirdParty: o.thirdParty ?? null,
+    matchCase: !!o.matchCase,
+    important: !!o.important,
+    redirect: f.redirect || null,
+  });
+}
+
 export function toDnrRule(f) {
   // Cosmetic-only exceptions are never network actions — even when they carry a URL
   // pattern (`@@||example.com^$generichide`). Emitting `allow` would unblock traffic.
   if (f.cosmeticException) {
     return { cosmeticException: f.cosmeticException, pattern: f.pattern, isException: f.isException };
+  }
+
+  // $badfilter cancels another filter; never emit it as a DNR rule.
+  if (f.options?.badfilter) {
+    return { badfilter: true, identity: networkFilterIdentity(f) };
   }
 
   // $redirect-rule means "redirect only if the request would otherwise be blocked".

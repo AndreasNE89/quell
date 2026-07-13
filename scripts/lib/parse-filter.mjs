@@ -192,6 +192,7 @@ function parseNetwork(line) {
     thirdParty: null, // true | false | null
     matchCase: false,
     important: false,
+    badfilter: false,
   };
   const unsupported = [];
   let cosmeticException = null; // generichide / elemhide / specifichide
@@ -261,6 +262,10 @@ function parseNetwork(line) {
         case 'important':
           options.important = true;
           break;
+        case 'badfilter':
+          // Cancels a matching filter (same pattern+options minus this token) at compile time.
+          options.badfilter = true;
+          break;
         case 'all':
           // matches all resource types — leave resourceTypes empty (DNR default = all)
           break;
@@ -303,12 +308,19 @@ function findOptionsDollar(text) {
   // options never contain `/`, so for a full regex the closing delimiter is simply
   // the LAST `/` in the string — options (if any) begin with the `$` right after it.
   // This preserves a `$` end-anchor *inside* the regex (e.g. `/ads$/`, `/ad/x$/`).
-  const isFullRegex = text.length > 1 && text.startsWith('/') && text.lastIndexOf('/') > 0;
-  if (isFullRegex) {
+  //
+  // Path-anchored patterns also start with `/` and often contain a second `/`
+  // (e.g. `/ad/image/*$image`). Those are NOT full regexes: only treat as regex when
+  // the last `/` is the final character, or is immediately followed by `$options`.
+  // Otherwise fall through to the first-unescaped-`$` scan.
+  const isFullRegexCandidate = text.length > 1 && text.startsWith('/') && text.lastIndexOf('/') > 0;
+  if (isFullRegexCandidate) {
     const close = text.lastIndexOf('/');
-    return close + 1 < text.length && text[close + 1] === '$' ? close + 1 : -1;
+    if (close + 1 === text.length) return -1; // `/pattern/` with no options
+    if (text[close + 1] === '$') return close + 1; // `/pattern/$options`
+    // else: path-like `/foo/bar*$opts` — fall through
   }
-  // Non-regex: the first unescaped `$` introduces options.
+  // Non-regex (or path-anchored): the first unescaped `$` introduces options.
   for (let i = 0; i < text.length; i++) {
     if (text[i] === '\\') {
       i++;

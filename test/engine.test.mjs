@@ -18,7 +18,7 @@ before(async () => {
   await build({
     stdin: {
       contents: `
-        export { domainSuffixes, hostMatchesDomain, domainSpecMatches, normalizeHostname, isAllowlistedHost } from './src/shared/hostname.js';
+        export { domainSuffixes, hostMatchesDomain, domainSpecMatches, normalizeHostname, isAllowlistedHost, isValidMatchPatternHost } from './src/shared/hostname.js';
         export { matchCosmetic, matchScriptlets, mergeCosmeticLists } from './src/engine/cosmetic-match.js';
         export { parseProcedural } from './src/engine/procedural.js';
       `,
@@ -54,6 +54,24 @@ test('hostMatchesDomain handles exact and subdomain', () => {
   assert.equal(mod.hostMatchesDomain('evil-example.com', 'example.com'), false);
 });
 
+test('should match entity domains ending in .* against registrable name', () => {
+  assert.equal(mod.hostMatchesDomain('example.com', 'example.*'), true);
+  assert.equal(mod.hostMatchesDomain('www.example.org', 'example.*'), true);
+  assert.equal(mod.hostMatchesDomain('ads.example.co.uk', 'example.*'), true);
+  assert.equal(mod.hostMatchesDomain('notexample.com', 'example.*'), false);
+  assert.equal(mod.hostMatchesDomain('example.evil.com', 'example.*'), false);
+});
+
+test('should reject IPv6 and garbage hosts for match patterns', () => {
+  assert.equal(mod.isValidMatchPatternHost('example.com'), true);
+  assert.equal(mod.isValidMatchPatternHost('192.168.1.1'), true);
+  assert.equal(mod.isValidMatchPatternHost(''), false);
+  assert.equal(mod.isValidMatchPatternHost('2001:db8::1'), false);
+  assert.equal(mod.isValidMatchPatternHost('[2001:db8::1]'), false);
+  assert.equal(mod.isValidMatchPatternHost('bad host'), false);
+  assert.equal(mod.isValidMatchPatternHost('ex_ample.com'), false);
+});
+
 test('domainSpecMatches respects include/exclude', () => {
   assert.equal(mod.domainSpecMatches('a.com', { include: ['a.com'], exclude: [] }), true);
   assert.equal(mod.domainSpecMatches('b.com', { include: ['a.com'], exclude: [] }), false);
@@ -82,6 +100,25 @@ test('matchCosmetic gathers generic-free specific selectors and applies exceptio
   assert.ok(!m.hide.includes('.promo'), 'specific unhide should cancel the hide');
   assert.equal(m.procedural.length, 1);
   assert.equal(m.procedural[0].expr, '.x:has-text(y)');
+});
+
+test('should apply hideSpecific keys keyed as entity.*', () => {
+  const data = {
+    byList: {
+      seed: {
+        hideGeneric: [],
+        unhideGeneric: [],
+        hideSpecific: { 'example.*': ['.entity-ad'] },
+        unhideSpecific: {},
+        procedural: [],
+      },
+    },
+    networkExceptions: { generichide: [], elemhide: [], specifichide: [] },
+  };
+  const m = mod.matchCosmetic('www.example.co.uk', data, ['seed']);
+  assert.ok(m.hide.includes('.entity-ad'));
+  const miss = mod.matchCosmetic('other.com', data, ['seed']);
+  assert.ok(!miss.hide.includes('.entity-ad'));
 });
 
 test('matchCosmetic honors mixed include/exclude via unhideSpecific cancel', () => {
@@ -205,6 +242,17 @@ test('parseProcedural captures a trailing :not so it is not silently dropped', (
     ['has-text', 'not'],
   );
   assert.equal(r.ops[1].arg, '.keep');
+});
+
+test('should keep trailing CSS after a procedural op', () => {
+  const r = mod.parseProcedural('.ad:has-text(Sponsored) > .inner');
+  assert.equal(r.prefix, '.ad');
+  assert.deepEqual(
+    r.ops.map((o) => o.name),
+    ['has-text', 'selector'],
+  );
+  assert.equal(r.ops[0].arg, 'Sponsored');
+  assert.equal(r.ops[1].arg, '> .inner');
 });
 
 test('quote-aware paren reading: a ) inside a string does not truncate the arg', () => {
