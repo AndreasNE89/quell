@@ -17,13 +17,16 @@ const GROUP_LABEL: Record<ListGroup, string> = {
 
 async function loadStats(): Promise<void> {
   const s = (await send({ type: 'stats:get' })) as StatsData;
-  // Only count rules that are actually enforced right now.
   const activeRules = s.paused
     ? 0
     : s.lists.filter((l) => l.enabled).reduce((n, l) => n + l.ruleCount, 0);
-  $('statTotal').textContent = s.blockedTotal.toLocaleString();
+  $('statTotal').textContent = s.statsReliable ? s.blockedTotal.toLocaleString() : 'n/a';
   $('statRules').textContent = activeRules.toLocaleString();
   $('statRegex').textContent = String(s.regexRulesUsed);
+  const totalLabel = document.querySelector('#statTotal')?.parentElement?.querySelector('.card-label');
+  if (totalLabel) {
+    totalLabel.textContent = s.statsReliable ? 'requests blocked' : 'blocked count (dev only)';
+  }
 }
 
 function listItem(l: ListsData['lists'][number]): HTMLElement {
@@ -41,7 +44,7 @@ function listItem(l: ListsData['lists'][number]): HTMLElement {
   title.appendChild(badge);
   const meta = document.createElement('div');
   meta.className = 'list-meta';
-  meta.textContent = `${l.ruleCount.toLocaleString()} network rules`;
+  meta.textContent = `${l.ruleCount.toLocaleString()} network rules · cosmetics follow this toggle`;
   info.append(title, meta);
 
   const sw = document.createElement('label');
@@ -75,5 +78,11 @@ async function loadLists(): Promise<void> {
   for (const l of data.lists) container.appendChild(listItem(l));
 }
 
+async function loadVersion(): Promise<void> {
+  const man = chrome.runtime.getManifest();
+  $('ver').textContent = man.version;
+}
+
 void loadStats();
 void loadLists();
+void loadVersion();

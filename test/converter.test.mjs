@@ -60,6 +60,48 @@ test('redirect rule outranks block and points at the bundled resource', () => {
   assert.ok(dnr.rule.priority < PRIORITY.ALLOW, 'allow must beat redirect');
 });
 
+test('important redirect outranks important block', () => {
+  const { dnr } = convert('||host.example/ad.js$script,redirect=noopjs,important');
+  assert.equal(dnr.rule.action.type, 'redirect');
+  assert.equal(dnr.rule.priority, PRIORITY.IMPORTANT_REDIRECT);
+  assert.ok(dnr.rule.priority > PRIORITY.IMPORTANT_BLOCK);
+  assert.ok(dnr.rule.priority < PRIORITY.IMPORTANT_ALLOW);
+});
+
+test('$redirect-rule is skipped (not expressible in DNR)', () => {
+  const { dnr } = convert('||host.example/ad.js$script,redirect-rule=noopjs');
+  assert.equal(dnr.skip, 'redirect-rule');
+});
+
+test('$csp is skipped rather than emitted as block', () => {
+  const { dnr } = convert('||example.com^$csp=script-src');
+  assert.ok(dnr.skip?.startsWith('unsupported:'), dnr.skip);
+});
+
+test('$to maps to requestDomains', () => {
+  const { dnr } = convert('||tracker.example^$to=ads.example|~cdn.example');
+  assert.deepEqual(dnr.rule.condition.requestDomains, ['ads.example']);
+  assert.deepEqual(dnr.rule.condition.excludedRequestDomains, ['cdn.example']);
+});
+
+test('$generichide with a pattern is a cosmetic exception, not network allow', () => {
+  const { dnr } = convert('@@||example.com^$generichide');
+  assert.equal(dnr.rule, undefined);
+  assert.equal(dnr.cosmeticException, 'generichide');
+});
+
+test('ruleKey distinguishes $important from plain block', async () => {
+  const { ruleKey } = await import('../scripts/lib/to-dnr.mjs');
+  const a = convert('||ads.example^').dnr.rule;
+  const b = convert('||ads.example^$important').dnr.rule;
+  assert.notEqual(ruleKey(a), ruleKey(b));
+});
+
+test('noop.txt redirect resource resolves', () => {
+  const { dnr } = convert('||host.example/pixel$redirect=nooptext');
+  assert.equal(dnr.rule.action.redirect.extensionPath, '/redirects/noop.txt');
+});
+
 test('unknown redirect resource is skipped, not emitted', () => {
   const { dnr } = convert('||host.example/ad.js$redirect=totally-unknown');
   assert.ok(dnr.skip, 'should skip');

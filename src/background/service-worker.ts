@@ -3,8 +3,8 @@
 // Responsibilities:
 //   - Sync per-list static rulesets with user settings (updateEnabledRulesets).
 //   - Maintain the per-site allowlist as dynamic allowAllRequests rules.
-//   - Register/update the generic cosmetic stylesheet, excluding allowlisted sites.
-//   - Answer cosmetic/popup/options messages.
+//   - Register/update generic cosmetic CSS (+ MAIN scriptlets) excluding allowlisted sites.
+//   - Answer cosmetic/popup/options messages with list-scoped data.
 //   - Count blocked requests per tab and drive the toolbar badge (dev builds).
 //
 // The SW is ephemeral: in-memory maps are rebuilt on wake, durable state lives in
@@ -13,31 +13,47 @@
 import type {
   Message,
   CosmeticResponse,
+  ScriptletsResponse,
   PopupData,
   ListsData,
   StatsData,
   Settings,
   CosmeticData,
+  ScriptletData,
+  ScriptletRule,
   GeneratedMeta,
 } from '../shared/types.js';
 import {
   ALLOWLIST_ID_START,
+  ALLOWLIST_ID_END,
   ALLOWLIST_PRIORITY,
   GENERIC_CSS_SCRIPT_ID,
-  SCRIPTLETS_SCRIPT_ID,
-  GENERIC_CSS_PATH,
 } from '../shared/constants.js';
 import { loadSettings, saveSettings, isListEnabled } from './settings.js';
-import { matchCosmetic } from '../engine/cosmetic-match.js';
+import { matchCosmetic, matchScriptlets } from '../engine/cosmetic-match.js';
+import {
+  normalizeHostname,
+  isAllowlistedHost,
+} from '../shared/hostname.js';
 
 import cosmeticJson from '../generated/cosmetic.json';
+import scriptletJson from '../generated/scriptlets.json';
 import metaJson from '../generated/meta.json';
 
 const COSMETIC = cosmeticJson as CosmeticData;
+const SCRIPTLETS = scriptletJson as ScriptletData;
 const META = metaJson as GeneratedMeta;
+
+const STATS_RELIABLE = !!chrome.declarativeNetRequest.onRuleMatchedDebug;
 
 // Per-tab blocked counters (rebuilt on SW wake; best-effort for the badge).
 const tabBlocked = new Map<number, number>();
+
+function enabledListIds(settings: Settings): string[] {
+  return META.lists
+    .filter((l) => !settings.paused && isListEnabled(settings, l.id, l.enabledByDefault))
+    .map((l) => l.id);
+}
 
 // ---------------------------------------------------------------------------
 // Rule / script synchronization
@@ -61,17 +77,19 @@ async function syncRulesets(settings: Settings): Promise<void> {
 }
 
 function allowlistPatterns(host: string): string[] {
-  return [`*://${host}/*`, `*://*.${host}/*`];
+  const h = normalizeHostname(host);
+  return [`*://${h}/*`, `*://*.${h}/*`, `*://www.${h}/*`];
 }
 
 async function syncAllowlist(settings: Settings): Promise<void> {
-  // Rebuild the whole allowlist rule set from scratch (index-based ids).
+  // Rebuild only the allowlist id band — never touch custom rules (>= ALLOWLIST_ID_END).
   const existing = await chrome.declarativeNetRequest.getDynamicRules();
   const removeRuleIds = existing
-    .filter((r) => r.id >= ALLOWLIST_ID_START)
+    .filter((r) => r.id >= ALLOWLIST_ID_START && r.id < ALLOWLIST_ID_END)
     .map((r) => r.id);
 
-  const addRules: chrome.declarativeNetRequest.Rule[] = settings.allowlist.map((host, i) => ({
+  const hosts = [...new Set(settings.allowlist.map(normalizeHostname).filter(Boolean))];
+  const addRules: chrome.declarativeNetRequest.Rule[] = hosts.map((host, i) => ({
     id: ALLOWLIST_ID_START + i,
     priority: ALLOWLIST_PRIORITY,
     action: { type: 'allowAllRequests' as chrome.declarativeNetRequest.RuleActionType },
@@ -92,59 +110,53 @@ async function syncAllowlist(settings: Settings): Promise<void> {
 }
 
 /**
- * Register (or update / unregister) the two dynamically-managed content scripts:
- * the generic cosmetic stylesheet (ISOLATED) and the scriptlet injector (MAIN).
- * Both carry `excludeMatches` = the allowlist, so allowlisted sites get neither —
- * which is how MAIN-world scriptlets (no chrome.storage access) honor the allowlist.
+ * Register (or update / unregister) per-enabled-list generic cosmetic stylesheets.
+ * Scriptlets are injected on demand via executeScript (list-scoped) from the content script.
  */
 async function syncRegisteredScripts(settings: Settings): Promise<void> {
   const shouldExist = !settings.paused;
   const excludeMatches = settings.allowlist.flatMap(allowlistPatterns);
   const exclude = excludeMatches.length ? excludeMatches : undefined;
+  const ids = enabledListIds(settings);
+  const cssFiles = ids
+    .map((id) => META.lists.find((l) => l.id === id)?.genericCssFile)
+    .filter((p): p is string => !!p)
+    .map((p) => `generated/${p}`);
 
-  const scripts: chrome.scripting.RegisteredContentScript[] = [
-    {
-      id: GENERIC_CSS_SCRIPT_ID,
-      css: [GENERIC_CSS_PATH],
-      matches: ['<all_urls>'],
-      excludeMatches: exclude,
-      runAt: 'document_start',
-      allFrames: true,
-      persistAcrossSessions: true,
-    },
-    {
-      id: SCRIPTLETS_SCRIPT_ID,
-      js: ['scriptlets.js'],
-      world: 'MAIN' as chrome.scripting.ExecutionWorld,
-      matches: ['<all_urls>'],
-      excludeMatches: exclude,
-      runAt: 'document_start',
-      allFrames: true,
-      persistAcrossSessions: true,
-    },
-  ];
+  const script: chrome.scripting.RegisteredContentScript = {
+    id: GENERIC_CSS_SCRIPT_ID,
+    css: cssFiles.length ? cssFiles : undefined,
+    matches: ['<all_urls>'],
+    excludeMatches: exclude,
+    runAt: 'document_start',
+    allFrames: true,
+    persistAcrossSessions: true,
+  };
 
-  for (const script of scripts) {
+  try {
+    // Drop any legacy MAIN scriptlets registration from older builds.
     try {
-      const existing = await chrome.scripting.getRegisteredContentScripts({ ids: [script.id] });
-      if (!shouldExist) {
-        if (existing.length) await chrome.scripting.unregisterContentScripts({ ids: [script.id] });
-        continue;
-      }
-      if (existing.length) {
-        await chrome.scripting.updateContentScripts([script]);
-      } else {
-        // register/update isn't atomic across overlapping syncs; fall back on the
-        // duplicate-id error rather than dropping the update.
-        try {
-          await chrome.scripting.registerContentScripts([script]);
-        } catch {
-          await chrome.scripting.updateContentScripts([script]);
-        }
-      }
-    } catch (e) {
-      console.error('[quell] syncRegisteredScripts failed for', script.id, e);
+      await chrome.scripting.unregisterContentScripts({ ids: ['quell-scriptlets'] });
+    } catch {
+      /* not registered */
     }
+
+    const existing = await chrome.scripting.getRegisteredContentScripts({ ids: [script.id] });
+    if (!shouldExist || !cssFiles.length) {
+      if (existing.length) await chrome.scripting.unregisterContentScripts({ ids: [script.id] });
+      return;
+    }
+    if (existing.length) {
+      await chrome.scripting.updateContentScripts([script]);
+    } else {
+      try {
+        await chrome.scripting.registerContentScripts([script]);
+      } catch {
+        await chrome.scripting.updateContentScripts([script]);
+      }
+    }
+  } catch (e) {
+    console.error('[quell] syncRegisteredScripts failed', e);
   }
 }
 
@@ -167,8 +179,14 @@ function mutateSettings(mutator: (s: Settings) => void): Promise<Settings> {
     await saveSettings(s);
     return s;
   });
-  // Keep the chain usable even if one mutation rejects.
   settingsChain = next.catch(() => loadSettings());
+  return next;
+}
+
+/** Run work after the current settings chain (and extend the chain so init can't race). */
+function withSettings<T>(fn: (s: Settings) => Promise<T>): Promise<T> {
+  const next = settingsChain.then(async (s) => fn(s));
+  settingsChain = next.then(() => loadSettings()).catch(() => loadSettings());
   return next;
 }
 
@@ -177,9 +195,10 @@ function mutateSettings(mutator: (s: Settings) => void): Promise<Settings> {
 // ---------------------------------------------------------------------------
 
 async function init(): Promise<void> {
-  const settings = await loadSettings();
-  await applyAll(settings);
-  await chrome.action.setBadgeBackgroundColor({ color: '#2f6f4f' });
+  await withSettings(async (settings) => {
+    await applyAll(settings);
+    await chrome.action.setBadgeBackgroundColor({ color: '#2f6f4f' });
+  });
 }
 
 chrome.runtime.onInstalled.addListener(() => void init());
@@ -195,9 +214,7 @@ if (debug) {
   const SESSION = chrome.declarativeNetRequest.SESSION_RULESET_ID;
   debug.addListener((info) => {
     const tabId = info.request.tabId;
-    if (tabId < 0) return; // not tied to a tab
-    // Our dynamic/session rules are the allowlist allowAllRequests — those aren't
-    // blocks, so counting them would inflate the badge on allowlisted sites.
+    if (tabId < 0) return;
     if (info.rule.rulesetId === DYNAMIC || info.rule.rulesetId === SESSION) return;
     const next = (tabBlocked.get(tabId) ?? 0) + 1;
     tabBlocked.set(tabId, next);
@@ -222,7 +239,7 @@ async function bumpTotal(): Promise<void> {
 }
 
 chrome.webNavigation?.onBeforeNavigate.addListener((d) => {
-  if (d.frameId !== 0) return; // main frame only
+  if (d.frameId !== 0) return;
   tabBlocked.set(d.tabId, 0);
   void chrome.action.setBadgeText({ tabId: d.tabId, text: '' });
 });
@@ -233,23 +250,26 @@ chrome.tabs.onRemoved.addListener((tabId) => tabBlocked.delete(tabId));
 // Messaging
 // ---------------------------------------------------------------------------
 
-chrome.runtime.onMessage.addListener((msg: Message, _sender, sendResponse) => {
-  handleMessage(msg)
+chrome.runtime.onMessage.addListener((msg: Message, sender, sendResponse) => {
+  handleMessage(msg, sender)
     .then((r) => sendResponse(r))
     .catch((e) => {
       console.error('[quell] message handler error', msg.type, e);
       sendResponse(null);
     });
-  return true; // async response
+  return true;
 });
 
-async function handleMessage(msg: Message): Promise<unknown> {
+async function handleMessage(msg: Message, sender: chrome.runtime.MessageSender): Promise<unknown> {
   switch (msg.type) {
     case 'cosmetic:get':
       return handleCosmetic(msg.hostname);
 
-    case 'cosmetic:hidden':
-      return { ok: true };
+    case 'scriptlets:get':
+      return handleScriptlets(msg.hostname);
+
+    case 'scriptlets:inject':
+      return handleScriptletsInject(msg.scriptlets, sender);
 
     case 'popup:get':
       return handlePopupGet();
@@ -270,7 +290,6 @@ async function handleMessage(msg: Message): Promise<unknown> {
       return handleStatsGet();
 
     default:
-      // Exhaustiveness guard.
       void (msg satisfies never);
       return null;
   }
@@ -278,11 +297,71 @@ async function handleMessage(msg: Message): Promise<unknown> {
 
 async function handleCosmetic(hostname: string): Promise<CosmeticResponse> {
   const settings = await loadSettings();
-  const allowlisted =
-    settings.paused || settings.allowlist.some((h) => hostname === h || hostname.endsWith('.' + h));
-  if (allowlisted) return { allowlisted: true, hide: [], unhide: [], procedural: [] };
-  const m = matchCosmetic(hostname, COSMETIC);
-  return { allowlisted: false, hide: m.hide, unhide: m.unhide, procedural: m.procedural };
+  if (settings.paused || isAllowlistedHost(hostname, settings.allowlist)) {
+    return {
+      allowlisted: true,
+      hide: [],
+      unhide: [],
+      procedural: [],
+      disableGeneric: true,
+      disableSpecific: true,
+    };
+  }
+  const m = matchCosmetic(hostname, COSMETIC, enabledListIds(settings));
+  return {
+    allowlisted: false,
+    hide: m.hide,
+    unhide: m.unhide,
+    procedural: m.procedural,
+    disableGeneric: m.disableGeneric,
+    disableSpecific: m.disableSpecific,
+  };
+}
+
+async function handleScriptlets(hostname: string): Promise<ScriptletsResponse> {
+  const settings = await loadSettings();
+  if (settings.paused || isAllowlistedHost(hostname, settings.allowlist)) {
+    return { allowlisted: true, scriptlets: [] };
+  }
+  return {
+    allowlisted: false,
+    scriptlets: matchScriptlets(hostname, SCRIPTLETS, enabledListIds(settings)),
+  };
+}
+
+async function handleScriptletsInject(
+  scriptlets: ScriptletRule[],
+  sender: chrome.runtime.MessageSender,
+): Promise<{ ok: boolean }> {
+  const tabId = sender.tab?.id;
+  if (tabId == null || !scriptlets.length) return { ok: false };
+  const frameIds = sender.frameId != null ? [sender.frameId] : undefined;
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId, frameIds },
+      world: 'MAIN',
+      injectImmediately: true,
+      files: ['scriptlets.js'],
+    });
+    await chrome.scripting.executeScript({
+      target: { tabId, frameIds },
+      world: 'MAIN',
+      injectImmediately: true,
+      func: (rules) => {
+        const g = globalThis as unknown as {
+          __quellApplyScriptlets?: (r: typeof rules) => void;
+          __quellPendingScriptlets?: typeof rules;
+        };
+        if (typeof g.__quellApplyScriptlets === 'function') g.__quellApplyScriptlets(rules);
+        else g.__quellPendingScriptlets = rules;
+      },
+      args: [scriptlets],
+    });
+    return { ok: true };
+  } catch (e) {
+    console.error('[quell] scriptlets inject failed', e);
+    return { ok: false };
+  }
 }
 
 async function handlePopupGet(): Promise<PopupData> {
@@ -297,9 +376,7 @@ async function handlePopupGet(): Promise<PopupData> {
       hostname = null;
     }
   }
-  const allowlisted =
-    !!hostname &&
-    settings.allowlist.some((h) => hostname === h || hostname!.endsWith('.' + h));
+  const allowlisted = !!hostname && isAllowlistedHost(hostname, settings.allowlist);
   return {
     hostname,
     url,
@@ -307,14 +384,16 @@ async function handlePopupGet(): Promise<PopupData> {
     allowlisted,
     tabBlocked: tab?.id != null ? tabBlocked.get(tab.id) ?? 0 : 0,
     blockedTotal: settings.blockedTotal,
+    statsReliable: STATS_RELIABLE,
   };
 }
 
 async function handleToggleSite(hostname: string, enabled: boolean): Promise<PopupData> {
+  const host = normalizeHostname(hostname);
   const settings = await mutateSettings((s) => {
-    const set = new Set(s.allowlist);
-    if (enabled) set.delete(hostname); // enabled = blocking ON = not allowlisted
-    else set.add(hostname);
+    const set = new Set(s.allowlist.map(normalizeHostname));
+    if (enabled) set.delete(host);
+    else set.add(host);
     s.allowlist = [...set];
   });
   await Promise.all([syncAllowlist(settings), syncRegisteredScripts(settings)]);
@@ -343,7 +422,8 @@ async function handleListSetEnabled(id: string, enabled: boolean): Promise<Lists
   const settings = await mutateSettings((s) => {
     s.enabledLists[id] = enabled;
   });
-  await syncRulesets(settings);
+  // Network + cosmetics + scriptlets all honor list enablement.
+  await Promise.all([syncRulesets(settings), syncRegisteredScripts(settings)]);
   return handleListsGet();
 }
 
@@ -357,5 +437,6 @@ async function handleStatsGet(): Promise<StatsData> {
       enabled: isListEnabled(settings, l.id, l.enabledByDefault),
     })),
     regexRulesUsed: META.regexRulesUsed,
+    statsReliable: STATS_RELIABLE,
   };
 }

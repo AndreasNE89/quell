@@ -75,12 +75,21 @@ function copyStatic() {
   // Icons, redirect resources.
   cpSync(join(SRC, 'icons'), join(DIST, 'icons'), { recursive: true });
   cpSync(join(SRC, 'redirects'), join(DIST, 'redirects'), { recursive: true });
-  // Generated DNR rulesets + generic cosmetic CSS.
+  // Generated DNR rulesets + per-list generic cosmetic CSS.
   mkdirSync(join(DIST, 'generated', 'rulesets'), { recursive: true });
+  mkdirSync(join(DIST, 'generated', 'generic-cosmetic'), { recursive: true });
   for (const f of readdirSync(join(GEN, 'rulesets'))) {
     cpSync(join(GEN, 'rulesets', f), join(DIST, 'generated', 'rulesets', f));
   }
-  cpSync(join(GEN, 'generic-cosmetic.css'), join(DIST, 'generated', 'generic-cosmetic.css'));
+  const genericDir = join(GEN, 'generic-cosmetic');
+  if (existsSync(genericDir)) {
+    for (const f of readdirSync(genericDir)) {
+      cpSync(join(genericDir, f), join(DIST, 'generated', 'generic-cosmetic', f));
+    }
+  }
+  if (existsSync(join(GEN, 'generic-cosmetic.css'))) {
+    cpSync(join(GEN, 'generic-cosmetic.css'), join(DIST, 'generated', 'generic-cosmetic.css'));
+  }
 }
 
 async function run() {

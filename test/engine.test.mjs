@@ -18,8 +18,8 @@ before(async () => {
   await build({
     stdin: {
       contents: `
-        export { domainSuffixes, hostMatchesDomain, domainSpecMatches } from './src/shared/hostname.js';
-        export { matchCosmetic } from './src/engine/cosmetic-match.js';
+        export { domainSuffixes, hostMatchesDomain, domainSpecMatches, normalizeHostname, isAllowlistedHost } from './src/shared/hostname.js';
+        export { matchCosmetic, matchScriptlets, mergeCosmeticLists } from './src/engine/cosmetic-match.js';
         export { parseProcedural } from './src/engine/procedural.js';
       `,
       resolveDir: ROOT,
@@ -63,20 +63,117 @@ test('domainSpecMatches respects include/exclude', () => {
 
 test('matchCosmetic gathers generic-free specific selectors and applies exceptions', () => {
   const data = {
-    hideGeneric: ['.g'],
-    unhideGeneric: [],
-    hideSpecific: { 'example.com': ['.ad', '.promo'], 'com': ['.tld-wide'] },
-    unhideSpecific: { 'example.com': ['.promo'] },
-    procedural: [
-      { domains: { include: ['example.com'], exclude: [] }, expr: '.x:has-text(y)' },
-      { domains: { include: ['other.com'], exclude: [] }, expr: '.z' },
-    ],
+    byList: {
+      seed: {
+        hideGeneric: ['.g'],
+        unhideGeneric: [],
+        hideSpecific: { 'example.com': ['.ad', '.promo'], 'com': ['.tld-wide'] },
+        unhideSpecific: { 'example.com': ['.promo'] },
+        procedural: [
+          { domains: { include: ['example.com'], exclude: [] }, expr: '.x:has-text(y)' },
+          { domains: { include: ['other.com'], exclude: [] }, expr: '.z' },
+        ],
+      },
+    },
+    networkExceptions: { generichide: [], elemhide: [], specifichide: [] },
   };
-  const m = mod.matchCosmetic('www.example.com', data);
+  const m = mod.matchCosmetic('www.example.com', data, ['seed']);
   assert.ok(m.hide.includes('.ad'));
   assert.ok(!m.hide.includes('.promo'), 'specific unhide should cancel the hide');
   assert.equal(m.procedural.length, 1);
   assert.equal(m.procedural[0].expr, '.x:has-text(y)');
+});
+
+test('matchCosmetic honors mixed include/exclude via unhideSpecific cancel', () => {
+  const data = {
+    byList: {
+      seed: {
+        hideGeneric: [],
+        unhideGeneric: [],
+        hideSpecific: { 'example.com': ['.ad'] },
+        unhideSpecific: { 'ads.example.com': ['.ad'] },
+        procedural: [],
+      },
+    },
+    networkExceptions: { generichide: [], elemhide: [], specifichide: [] },
+  };
+  const parent = mod.matchCosmetic('www.example.com', data, ['seed']);
+  assert.ok(parent.hide.includes('.ad'));
+  const child = mod.matchCosmetic('ads.example.com', data, ['seed']);
+  assert.ok(!child.hide.includes('.ad'), 'exclude domain should cancel via unhide');
+});
+
+test('matchCosmetic generichide returns generic selectors as unhide', () => {
+  const data = {
+    byList: {
+      seed: {
+        hideGeneric: ['.g'],
+        unhideGeneric: [],
+        hideSpecific: {},
+        unhideSpecific: {},
+        procedural: [],
+      },
+    },
+    networkExceptions: { generichide: ['example.com'], elemhide: [], specifichide: [] },
+  };
+  const m = mod.matchCosmetic('www.example.com', data, ['seed']);
+  assert.equal(m.disableGeneric, true);
+  assert.ok(m.unhide.includes('.g'));
+});
+
+test('matchScriptlets applies exceptions and dedupes', () => {
+  const data = {
+    byList: {
+      a: {
+        scriptlets: [
+          { domains: { include: ['example.com'], exclude: [] }, name: 'set-constant', args: ['x', 'true'] },
+          { domains: { include: ['example.com'], exclude: [] }, name: 'set-constant', args: ['x', 'true'] },
+        ],
+        exceptions: [
+          { domains: { include: ['example.com'], exclude: [] }, name: 'abort-on-property-read', args: ['ads'] },
+        ],
+      },
+      b: {
+        scriptlets: [
+          { domains: { include: ['example.com'], exclude: [] }, name: 'abort-on-property-read', args: ['ads'] },
+        ],
+        exceptions: [],
+      },
+    },
+  };
+  const rules = mod.matchScriptlets('example.com', data, ['a', 'b']);
+  assert.equal(rules.length, 1);
+  assert.equal(rules[0].name, 'set-constant');
+});
+
+test('normalizeHostname strips www', () => {
+  assert.equal(mod.normalizeHostname('www.Example.COM'), 'example.com');
+  assert.equal(mod.isAllowlistedHost('www.example.com', ['example.com']), true);
+});
+
+test('disabled lists are excluded from mergeCosmeticLists', () => {
+  const data = {
+    byList: {
+      on: {
+        hideGeneric: ['.on'],
+        unhideGeneric: [],
+        hideSpecific: { 'example.com': ['.a'] },
+        unhideSpecific: {},
+        procedural: [],
+      },
+      off: {
+        hideGeneric: ['.off'],
+        unhideGeneric: [],
+        hideSpecific: { 'example.com': ['.b'] },
+        unhideSpecific: {},
+        procedural: [],
+      },
+    },
+    networkExceptions: { generichide: [], elemhide: [], specifichide: [] },
+  };
+  const m = mod.matchCosmetic('example.com', data, ['on']);
+  assert.ok(m.hide.includes('.a'));
+  assert.ok(!m.hide.includes('.b'));
 });
 
 test('parseProcedural keeps native :has in prefix, splits at :has-text', () => {

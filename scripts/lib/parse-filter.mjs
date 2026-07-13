@@ -187,13 +187,16 @@ function parseNetwork(line) {
     excludedResourceTypes: [],
     initiatorDomains: [],
     excludedInitiatorDomains: [],
+    requestDomains: [],
+    excludedRequestDomains: [],
     thirdParty: null, // true | false | null
     matchCase: false,
     important: false,
   };
   const unsupported = [];
-  let cosmeticException = null; // generichide / elemhide handling flag
-  let redirect = null; // $redirect=<resource> token, if any
+  let cosmeticException = null; // generichide / elemhide / specifichide
+  let redirect = null; // $redirect=<resource>
+  let redirectRule = false; // $redirect-rule=… (not expressible in DNR)
 
   if (optionStr) {
     for (const tokenRaw of optionStr.split(',')) {
@@ -235,6 +238,23 @@ function parseNetwork(line) {
             else options.initiatorDomains.push(dd);
           }
           break;
+        case 'to':
+          // Destination host(s) of the request (DNR requestDomains).
+          for (const d of value.split('|')) {
+            const dd = d.trim().toLowerCase();
+            if (!dd) continue;
+            if (dd.startsWith('~')) options.excludedRequestDomains.push(dd.slice(1));
+            else options.requestDomains.push(dd);
+          }
+          break;
+        case 'denyallow':
+          // Allowlisted destination exceptions within a broader block.
+          for (const d of value.split('|')) {
+            const dd = d.trim().toLowerCase();
+            if (!dd || dd.startsWith('~')) continue;
+            options.excludedRequestDomains.push(dd);
+          }
+          break;
         case 'match-case':
           options.matchCase = true;
           break;
@@ -245,15 +265,18 @@ function parseNetwork(line) {
           // matches all resource types — leave resourceTypes empty (DNR default = all)
           break;
         case 'redirect':
-        case 'redirect-rule':
           // $redirect=noopjs → serve a neutered bundled resource instead of the request.
+          redirect = value.trim();
+          break;
+        case 'redirect-rule':
+          // Only redirect if the request would otherwise be blocked — not expressible in DNR.
+          redirectRule = true;
           redirect = value.trim();
           break;
         case 'generichide':
         case 'elemhide':
         case 'specifichide':
           cosmeticException = name;
-          unsupported.push(token); // not a network action; handled by cosmetic engine
           break;
         default:
           unsupported.push(token);
@@ -271,6 +294,7 @@ function parseNetwork(line) {
     unsupported,
     cosmeticException,
     redirect,
+    redirectRule,
   };
 }
 

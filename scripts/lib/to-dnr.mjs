@@ -2,6 +2,7 @@
 // rule object (without an `id` — the compiler assigns ids). Returns:
 //   { rule }                     on success
 //   { skip: reason }             when the filter can't be represented in DNR
+//   { cosmeticException }        generichide/elemhide/specifichide (not a network rule)
 //
 // The lucky break of MV3: DNR's `urlFilter` grammar mirrors EasyList's own anchors
 // (`||` domain anchor, `^` separator, `|` boundary, `*` wildcard), so the pattern
@@ -17,9 +18,58 @@ function isAscii(s) {
   return /^[\x00-\x7F]*$/.test(s);
 }
 
+/**
+ * Options we cannot (yet) express correctly as DNR. Emitting a plain block/allow for
+ * these would be wrong (e.g. $csp must not become block). Cosmetic exceptions are
+ * handled separately and must not fall through to network conversion.
+ */
+const HARD_UNSUPPORTED = new Set([
+  'csp',
+  'removeparam',
+  'removeparam-rule',
+  'method',
+  'header',
+  'permissions',
+  'cookie',
+  'replace',
+  'jsonprune',
+  'hls',
+  'empty',
+  'mp4',
+  'inline-script',
+  'inline-font',
+  'ping',
+  'popup',
+  'popunder',
+  'webrtc',
+  'strict3p',
+  'strict1p',
+]);
+
+function unsupportedReason(tokens) {
+  const names = tokens.map((t) => t.replace(/^~/, '').split('=')[0].toLowerCase());
+  const hard = names.filter((n) => HARD_UNSUPPORTED.has(n) || n.startsWith('removeparam'));
+  if (hard.length) return `unsupported:${hard[0]}`;
+  return `unsupported:${names[0] || 'option'}`;
+}
+
 export function toDnrRule(f) {
-  // Cosmetic-only exceptions ($generichide/$elemhide) aren't network actions.
-  if (f.cosmeticException && !f.pattern) return { skip: 'cosmetic-exception' };
+  // Cosmetic-only exceptions are never network actions — even when they carry a URL
+  // pattern (`@@||example.com^$generichide`). Emitting `allow` would unblock traffic.
+  if (f.cosmeticException) {
+    return { cosmeticException: f.cosmeticException, pattern: f.pattern, isException: f.isException };
+  }
+
+  // $redirect-rule means "redirect only if the request would otherwise be blocked".
+  // DNR cannot express that; treating it as $redirect over-neuters allowed resources.
+  if (f.redirectRule) {
+    return { skip: 'redirect-rule' };
+  }
+
+  // Remaining unsupported options must not silently become block/allow.
+  if (f.unsupported?.length) {
+    return { skip: unsupportedReason(f.unsupported) };
+  }
 
   const condition = {};
 
@@ -45,11 +95,17 @@ export function toDnrRule(f) {
   if (f.options.thirdParty === true) condition.domainType = 'thirdParty';
   else if (f.options.thirdParty === false) condition.domainType = 'firstParty';
 
-  // Initiator (document) domain constraints.
+  // Initiator (document) domain constraints ($domain / $from).
   const initDomains = dedup(f.options.initiatorDomains);
   const exInitDomains = dedup(f.options.excludedInitiatorDomains);
   if (initDomains.length) condition.initiatorDomains = initDomains;
   if (exInitDomains.length) condition.excludedInitiatorDomains = exInitDomains;
+
+  // Destination host constraints ($to / $denyallow).
+  const reqDomains = dedup(f.options.requestDomains);
+  const exReqDomains = dedup(f.options.excludedRequestDomains);
+  if (reqDomains.length) condition.requestDomains = reqDomains;
+  if (exReqDomains.length) condition.excludedRequestDomains = exReqDomains;
 
   if (f.options.matchCase) condition.isUrlFilterCaseSensitive = true;
 
@@ -58,6 +114,7 @@ export function toDnrRule(f) {
     !condition.urlFilter &&
     !condition.regexFilter &&
     !initDomains.length &&
+    !reqDomains.length &&
     !rt.length
   ) {
     return { skip: 'too-broad' };
@@ -100,7 +157,7 @@ export function toDnrRule(f) {
     if (!resource) return { skip: `redirect:${f.redirect}` };
     return {
       rule: {
-        priority: important ? PRIORITY.IMPORTANT_BLOCK : PRIORITY.REDIRECT,
+        priority: important ? PRIORITY.IMPORTANT_REDIRECT : PRIORITY.REDIRECT,
         action: {
           type: 'redirect',
           redirect: { extensionPath: `/redirects/${resource.file}` },
@@ -123,7 +180,7 @@ function dedup(arr) {
   return [...new Set(arr)];
 }
 
-/** Stable dedup key so identical rules from multiple lists collapse. */
+/** Stable dedup key — priority must be included so $important variants are kept. */
 export function ruleKey(rule) {
-  return JSON.stringify([rule.action, rule.condition]);
+  return JSON.stringify([rule.priority, rule.action, rule.condition]);
 }

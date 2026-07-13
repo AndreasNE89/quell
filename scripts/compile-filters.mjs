@@ -2,8 +2,9 @@
 //
 // Inputs:  filters/lists.json  (list registry) + the referenced .txt files
 // Outputs: src/generated/rulesets/<id>.json   one DNR ruleset per list
-//          src/generated/cosmetic.json         element-hiding data
-//          src/generated/scriptlets.json        scriptlet-injection data
+//          src/generated/cosmetic.json         per-list element-hiding + network cosmetic exceptions
+//          src/generated/scriptlets.json        per-list scriptlet-injection data
+//          src/generated/generic-cosmetic/<id>.css
 //          src/generated/meta.json              list metadata for runtime + manifest
 //
 // Run via `npm run compile-filters`. Prints a coverage report so we can see what
@@ -21,6 +22,7 @@ const ROOT = join(__dirname, '..');
 const FILTERS_DIR = join(ROOT, 'filters');
 const OUT_DIR = join(ROOT, 'src', 'generated');
 const RULESET_DIR = join(OUT_DIR, 'rulesets');
+const GENERIC_CSS_DIR = join(OUT_DIR, 'generic-cosmetic');
 
 function loadRegistry() {
   const p = join(FILTERS_DIR, 'lists.json');
@@ -29,6 +31,38 @@ function loadRegistry() {
     return { lists: [] };
   }
   return JSON.parse(readFileSync(p, 'utf8'));
+}
+
+function emptyCosmeticBucket() {
+  return {
+    hideGeneric: new Set(),
+    unhideGeneric: new Set(),
+    hideSpecific: {},
+    unhideSpecific: {},
+    procedural: [],
+    scriptlets: [],
+    scriptletExceptions: [],
+  };
+}
+
+/** Extract initiator/request hosts from a network pattern for cosmetic exceptions. */
+function hostsFromPattern(pattern, isRegex) {
+  if (!pattern || isRegex) return [];
+  // ||example.com^ or ||example.com/path or |https://example.com^
+  const m =
+    /^\|\|([^^*/]+)/.exec(pattern) ||
+    /^\|https?:\/\/([^^*/]+)/i.exec(pattern) ||
+    /^([a-z0-9.-]+\.[a-z]{2,})/i.exec(pattern);
+  if (!m) return [];
+  return [m[1].toLowerCase().replace(/\.$/, '')];
+}
+
+/** Reject selectors that could break out of a CSS rule (e.g. `a{}body{display:none}`). */
+function isSafeSelector(sel) {
+  if (!sel || typeof sel !== 'string') return false;
+  if (/[{}]/.test(sel)) return false;
+  if (sel.length > 2048) return false;
+  return true;
 }
 
 /** Compile one list's lines into DNR rules + cosmetic/scriptlet contributions. */
@@ -40,6 +74,7 @@ function compileList(list, text, ctx) {
   const seen = new Set();
   const stats = { network: 0, converted: 0, deduped: 0, regexUsed: 0, cosmetic: 0, scriptlet: 0 };
   const skips = ctx.skips;
+  const cos = ctx.byList[list.id];
 
   let nextId = 1;
   for (const raw of text.split('\n')) {
@@ -47,13 +82,17 @@ function compileList(list, text, ctx) {
     if (!parsed) continue;
 
     if (parsed.type === 'cosmetic') {
-      applyCosmetic(parsed, ctx, stats);
+      applyCosmetic(parsed, cos, stats);
       continue;
     }
 
     // network
     stats.network++;
     const out = toDnrRule(parsed);
+    if (out.cosmeticException) {
+      applyNetworkCosmeticException(out, parsed, ctx.networkCosmeticExceptions);
+      continue;
+    }
     if (out.skip) {
       skips[out.skip] = (skips[out.skip] || 0) + 1;
       continue;
@@ -92,12 +131,32 @@ function compileList(list, text, ctx) {
   return { dnrRules, stats };
 }
 
-function applyCosmetic(c, ctx, stats) {
-  const cos = ctx.cosmetic;
+function applyNetworkCosmeticException(out, parsed, bag) {
+  if (!parsed.isException) return; // only @@…$generichide etc.
+  const kind = out.cosmeticException;
+  const hosts = [
+    ...hostsFromPattern(parsed.pattern, parsed.isRegex),
+    ...(parsed.options?.initiatorDomains || []),
+  ];
+  const set = bag[kind];
+  if (!set) return;
+  for (const h of hosts) if (h) set.add(h);
+}
+
+function applyCosmetic(c, cos, stats) {
   if (c.kind === 'scriptlet') {
     // Scriptlets must be domain-scoped (injecting into every page is unsafe).
-    if (!c.domains.include.length || c.isException) return;
-    ctx.scriptlets.push({
+    if (!c.domains.include.length) return;
+    if (c.isException) {
+      cos.scriptletExceptions.push({
+        domains: c.domains,
+        name: c.scriptlet.name,
+        args: c.scriptlet.args,
+      });
+      stats.scriptlet++;
+      return;
+    }
+    cos.scriptlets.push({
       domains: c.domains,
       name: c.scriptlet.name,
       args: c.scriptlet.args,
@@ -116,13 +175,22 @@ function applyCosmetic(c, ctx, stats) {
 
   const isUnhide = c.kind === 'unhide';
   const selector = c.selector;
-  if (!selector) return;
+  if (!selector || !isSafeSelector(selector)) return;
 
   const { include, exclude } = c.domains;
   if (include.length) {
-    // Domain-scoped rule: hide/unhide only on the named domains.
+    // Domain-scoped rule: hide/unhide on named domains, honoring ~excludes.
     const target = isUnhide ? cos.unhideSpecific : cos.hideSpecific;
-    for (const d of include) (target[d] ||= new Set()).add(selector);
+    for (const d of include) {
+      if (exclude.some((ex) => d === ex || d.endsWith('.' + ex))) continue;
+      (target[d] ||= new Set()).add(selector);
+    }
+    // Explicit excludes under an include parent: cancel via the opposite map so
+    // suffix matching on the parent cannot re-apply the selector.
+    if (exclude.length) {
+      const cancel = isUnhide ? cos.hideSpecific : cos.unhideSpecific;
+      for (const ex of exclude) (cancel[ex] ||= new Set()).add(selector);
+    }
   } else if (exclude.length) {
     // Domain-excluded generic (`~a.com##.ad`): generic everywhere, except the excluded
     // domains, which we express as per-domain unhide exceptions.
@@ -142,6 +210,28 @@ function setMapToObj(m) {
   return o;
 }
 
+function serializeBucket(cos) {
+  return {
+    hideGeneric: [...cos.hideGeneric],
+    unhideGeneric: [...cos.unhideGeneric],
+    hideSpecific: setMapToObj(cos.hideSpecific),
+    unhideSpecific: setMapToObj(cos.unhideSpecific),
+    procedural: cos.procedural,
+  };
+}
+
+function writeGenericCss(listId, bucket) {
+  const generic = bucket.hideGeneric.filter((s) => !bucket.unhideGeneric.includes(s) && isSafeSelector(s));
+  const CHUNK = 500;
+  let css = `/* Quell generic element-hiding for list "${listId}" — generated, do not edit. */\n`;
+  for (let i = 0; i < generic.length; i += CHUNK) {
+    const group = generic.slice(i, i + CHUNK).join(',\n');
+    if (group) css += `${group} { display: none !important; }\n`;
+  }
+  writeFileSync(join(GENERIC_CSS_DIR, `${listId}.css`), css);
+  return generic.length;
+}
+
 function main() {
   const registry = loadRegistry();
 
@@ -149,19 +239,21 @@ function main() {
   if (existsSync(RULESET_DIR)) {
     for (const f of readdirSync(RULESET_DIR)) rmSync(join(RULESET_DIR, f));
   }
+  if (existsSync(GENERIC_CSS_DIR)) {
+    for (const f of readdirSync(GENERIC_CSS_DIR)) rmSync(join(GENERIC_CSS_DIR, f));
+  }
   mkdirSync(RULESET_DIR, { recursive: true });
+  mkdirSync(GENERIC_CSS_DIR, { recursive: true });
 
   const ctx = {
     regexCount: 0,
     skips: {},
-    cosmetic: {
-      hideGeneric: new Set(),
-      unhideGeneric: new Set(),
-      hideSpecific: {},
-      unhideSpecific: {},
-      procedural: [],
+    byList: {},
+    networkCosmeticExceptions: {
+      generichide: new Set(),
+      elemhide: new Set(),
+      specifichide: new Set(),
     },
-    scriptlets: [],
   };
 
   const metaLists = [];
@@ -173,6 +265,7 @@ function main() {
       console.warn(`  ! skipping "${list.id}" — file not found: ${list.file}`);
       continue;
     }
+    ctx.byList[list.id] = emptyCosmeticBucket();
     const text = readFileSync(file, 'utf8');
     const { dnrRules, stats } = compileList(list, text, ctx);
 
@@ -190,6 +283,9 @@ function main() {
     const enabled = list.enabledByDefault !== false;
     if (enabled) totalEnabledRules += dnrRules.length;
 
+    const bucket = serializeBucket(ctx.byList[list.id]);
+    const genericCount = writeGenericCss(list.id, bucket);
+
     metaLists.push({
       id: list.id,
       title: list.title,
@@ -197,6 +293,8 @@ function main() {
       enabledByDefault: enabled,
       ruleCount: dnrRules.length,
       rulesetFile: `rulesets/${list.id}.json`,
+      genericCssFile: `generic-cosmetic/${list.id}.css`,
+      genericHideCount: genericCount,
     });
 
     console.log(
@@ -215,31 +313,47 @@ function main() {
     console.warn(`  ! more than ${DNR.MAX_NUMBER_OF_ENABLED_STATIC_RULESETS} rulesets enabled by default.`);
   }
 
-  // Write cosmetic + scriptlet + meta outputs.
+  // Per-list cosmetic + scriptlet outputs (runtime merges enabled lists).
+  const cosmeticByList = {};
+  const scriptletsByList = {};
+  for (const [id, cos] of Object.entries(ctx.byList)) {
+    cosmeticByList[id] = serializeBucket(cos);
+    scriptletsByList[id] = {
+      scriptlets: cos.scriptlets,
+      exceptions: cos.scriptletExceptions,
+    };
+  }
+
   const cosmeticOut = {
-    hideGeneric: [...ctx.cosmetic.hideGeneric],
-    unhideGeneric: [...ctx.cosmetic.unhideGeneric],
-    hideSpecific: setMapToObj(ctx.cosmetic.hideSpecific),
-    unhideSpecific: setMapToObj(ctx.cosmetic.unhideSpecific),
-    procedural: ctx.cosmetic.procedural,
+    byList: cosmeticByList,
+    networkExceptions: {
+      generichide: [...ctx.networkCosmeticExceptions.generichide],
+      elemhide: [...ctx.networkCosmeticExceptions.elemhide],
+      specifichide: [...ctx.networkCosmeticExceptions.specifichide],
+    },
   };
   writeFileSync(join(OUT_DIR, 'cosmetic.json'), JSON.stringify(cosmeticOut));
+  writeFileSync(join(OUT_DIR, 'scriptlets.json'), JSON.stringify({ byList: scriptletsByList }));
 
-  // Generic element-hiding → a standalone stylesheet injected on every page (except
-  // allowlisted ones, via registerContentScripts excludeMatches). Chunked into
-  // grouped selectors so a single malformed selector can't nuke the whole sheet.
-  const generic = cosmeticOut.hideGeneric.filter((s) => !cosmeticOut.unhideGeneric.includes(s));
-  const CHUNK = 500;
-  let css = '/* Quell generic element-hiding — generated, do not edit. */\n';
-  for (let i = 0; i < generic.length; i += CHUNK) {
-    const group = generic.slice(i, i + CHUNK).join(',\n');
-    if (group) css += `${group} { display: none !important; }\n`;
+  // Legacy combined sheet kept for older loaders / docs; runtime prefers per-list files.
+  let combinedCss = '/* Quell combined generic element-hiding — generated, do not edit. */\n';
+  for (const list of metaLists) {
+    const p = join(GENERIC_CSS_DIR, `${list.id}.css`);
+    if (existsSync(p)) combinedCss += readFileSync(p, 'utf8') + '\n';
   }
-  writeFileSync(join(OUT_DIR, 'generic-cosmetic.css'), css);
-  writeFileSync(join(OUT_DIR, 'scriptlets.json'), JSON.stringify({ scriptlets: ctx.scriptlets }));
+  writeFileSync(join(OUT_DIR, 'generic-cosmetic.css'), combinedCss);
+
   writeFileSync(
     join(OUT_DIR, 'meta.json'),
-    JSON.stringify({ generatedAt: null, lists: metaLists, regexRulesUsed: ctx.regexCount }, null, 2),
+    JSON.stringify(
+      {
+        generatedAt: new Date().toISOString(),
+        lists: metaLists,
+        regexRulesUsed: ctx.regexCount,
+      },
+      null,
+      2,
+    ),
   );
 
   // Coverage report.
@@ -247,9 +361,9 @@ function main() {
   console.log('\nCoverage:');
   console.log(`  DNR network rules:  ${totalNet}`);
   console.log(`  regex rules used:   ${ctx.regexCount}/${DNR.MAX_NUMBER_OF_REGEX_RULES}`);
-  console.log(`  cosmetic hide (generic/specific): ${cosmeticOut.hideGeneric.length}/${Object.keys(cosmeticOut.hideSpecific).length} domains`);
-  console.log(`  procedural cosmetics: ${cosmeticOut.procedural.length}`);
-  console.log(`  scriptlets:         ${ctx.scriptlets.length}`);
+  console.log(
+    `  generichide hosts:  ${ctx.networkCosmeticExceptions.generichide.size}, elemhide: ${ctx.networkCosmeticExceptions.elemhide.size}, specifichide: ${ctx.networkCosmeticExceptions.specifichide.size}`,
+  );
   const skipEntries = Object.entries(ctx.skips).sort((a, b) => b[1] - a[1]);
   if (skipEntries.length) {
     console.log('  skipped network filters (not representable in DNR):');

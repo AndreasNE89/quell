@@ -216,8 +216,41 @@ function applyOp(els: Element[], op: Op): Element[] {
     case 'where': {
       return els.filter((el) => elementMatches(el, op.arg));
     }
+    case 'matches-path': {
+      // Keep elements only when the current path matches the arg (literal or /regex/).
+      const arg = op.arg.trim();
+      let ok = false;
+      try {
+        if (arg.startsWith('/') && arg.lastIndexOf('/') > 0) {
+          const last = arg.lastIndexOf('/');
+          const body = arg.slice(1, last);
+          const flags = arg.slice(last + 1);
+          ok = new RegExp(body, flags).test(location.pathname + location.search);
+        } else {
+          ok = (location.pathname + location.search).includes(arg);
+        }
+      } catch {
+        ok = false;
+      }
+      return ok ? els : [];
+    }
+    case 'remove': {
+      for (const el of els) {
+        try {
+          el.remove();
+        } catch {
+          /* ignore */
+        }
+      }
+      return [];
+    }
+    case 'watch-attr': {
+      // Attribute watching is handled by the content-script MutationObserver
+      // (attributes: true). This op is a no-op transform — keep the set.
+      return els;
+    }
     default:
-      return els; // watch-attr / remove / matches-path: no-op in the prototype
+      return els;
   }
 }
 

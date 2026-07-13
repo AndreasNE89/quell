@@ -26,8 +26,8 @@ export const DNR = {
 };
 
 // Priority bands. DNR resolves conflicts by highest numeric priority first; only when
-// priorities tie does it fall back to action order (allow > block). We use disjoint
-// bands so intent is unambiguous regardless of action tiebreak rules.
+// priorities tie does it fall back to action order (allow > block > redirect). We use
+// disjoint bands so intent is unambiguous regardless of action tiebreak rules.
 export const PRIORITY = {
   BLOCK: 1000,
   // Redirects must outrank plain block: a broad domain block and a specific
@@ -38,11 +38,15 @@ export const PRIORITY = {
   REDIRECT: 1500,
   ALLOW: 2000, // @@ exceptions beat blocks and redirects
   IMPORTANT_BLOCK: 3000, // $important beats normal exceptions
-  IMPORTANT_ALLOW: 4000, // @@ ...$important beats important blocks
+  // Important redirects must sit above important blocks for the same reason as
+  // REDIRECT > BLOCK — equal priority would let block win the tiebreak.
+  IMPORTANT_REDIRECT: 3500,
+  IMPORTANT_ALLOW: 4000, // @@ ...$important beats important blocks/redirects
 };
 
 // Reserve dynamic-rule ID ranges so runtime subsystems never collide.
 export const DYNAMIC_ID_RANGES = {
   ALLOWLIST_START: 1_000_000, // per-site page allowlisting (allowAllRequests)
+  ALLOWLIST_END: 2_000_000, // exclusive upper bound for allowlist GC
   CUSTOM_START: 2_000_000, // user custom network rules
 };

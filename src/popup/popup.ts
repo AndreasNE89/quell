@@ -32,9 +32,16 @@ function render(data: PopupData): void {
 
   el.siteToggle.checked = blockingHere;
   el.siteToggle.disabled = data.paused || !data.hostname;
+  el.siteToggleLabel.textContent = blockingHere ? 'Block on this site' : 'Block on this site';
+  if (data.allowlisted) el.siteToggleLabel.textContent = 'Blocking off (allowlisted)';
+  else if (data.paused) el.siteToggleLabel.textContent = 'Paused globally';
+  else el.siteToggleLabel.textContent = 'Block on this site';
+
   el.pauseToggle.checked = data.paused;
-  el.tabBlocked.textContent = String(data.tabBlocked);
-  el.totalBlocked.textContent = data.blockedTotal.toLocaleString();
+  el.tabBlocked.textContent = data.statsReliable ? String(data.tabBlocked) : '—';
+  el.totalBlocked.textContent = data.statsReliable
+    ? data.blockedTotal.toLocaleString()
+    : 'n/a';
 
   el.statusDot.classList.toggle('off', !blockingHere);
   document.body.classList.toggle('paused', data.paused);

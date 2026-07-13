@@ -1,25 +1,41 @@
-// Quell scriptlet injector (MAIN world, document_start).
+// Quell scriptlet library entry (MAIN world).
 //
-// A MAIN-world content script bypasses the page's CSP and runs at document_start —
-// the two things ad-hoc injection can't guarantee under MV3. It has no chrome APIs,
-// so the scriptlet map is embedded at build time and we match location.hostname here.
-//
-// Allowlisting is honored at the injection boundary: the service worker registers this
-// script (chrome.scripting) with excludeMatches = the allowlist, so it is never
-// injected on allowlisted sites. That's why MAIN world needing no chrome.storage is fine.
+// Loaded via chrome.scripting.executeScript from the service worker with the
+// enabled-list-filtered rule set. Exposes `__quellApplyScriptlets` for the injector
+// and also self-applies if `__quellPendingScriptlets` was staged first.
 
-import scriptletData from '../generated/scriptlets.json';
 import type { ScriptletRule } from '../shared/types.js';
-import { domainSpecMatches } from '../shared/hostname.js';
 import { runScriptlet } from '../scriptlets/library.js';
 
-const rules = (scriptletData as { scriptlets: ScriptletRule[] }).scriptlets;
-const host = location.hostname;
+function keyOf(r: ScriptletRule): string {
+  return `${r.name}\0${r.args.join('\0')}`;
+}
 
-if (host && rules.length) {
+function applyScriptlets(rules: ScriptletRule[]): void {
+  const seen = new Set<string>();
   for (const rule of rules) {
-    if (domainSpecMatches(host, rule.domains)) {
+    const k = keyOf(rule);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    try {
       runScriptlet(rule.name, rule.args);
+    } catch {
+      /* never break the page */
     }
   }
+}
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __quellApplyScriptlets: ((rules: ScriptletRule[]) => void) | undefined;
+  // eslint-disable-next-line no-var
+  var __quellPendingScriptlets: ScriptletRule[] | undefined;
+}
+
+globalThis.__quellApplyScriptlets = applyScriptlets;
+
+const pending = globalThis.__quellPendingScriptlets;
+if (Array.isArray(pending) && pending.length) {
+  globalThis.__quellPendingScriptlets = undefined;
+  applyScriptlets(pending);
 }

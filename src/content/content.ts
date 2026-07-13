@@ -1,41 +1,62 @@
 // Quell content script (ISOLATED world, document_start).
 //
 // Generic element-hiding arrives as a browser-injected stylesheet (registered by the
-// service worker, allowlist-aware). This script handles the two things that need the
-// page's live DOM: site-specific hide selectors and procedural cosmetic filters.
+// service worker, allowlist-aware). This script handles site-specific hide selectors,
+// procedural cosmetic filters, and asks the SW to inject list-scoped MAIN scriptlets.
 
-import type { Message, CosmeticResponse } from '../shared/types.js';
+import type { Message, CosmeticResponse, ScriptletsResponse } from '../shared/types.js';
 import { queryProcedural } from '../engine/procedural.js';
 
-// Only operate in real web documents.
 if (location.protocol === 'http:' || location.protocol === 'https:' || location.protocol === 'about:') {
   void start();
 }
 
 async function start(): Promise<void> {
-  let resp: CosmeticResponse | null = null;
-  try {
-    resp = (await send({ type: 'cosmetic:get', hostname: location.hostname })) as CosmeticResponse;
-  } catch {
-    return; // service worker unavailable
-  }
-  if (!resp || resp.allowlisted) return;
+  const host = location.hostname;
+  const resp = await sendWithRetry({ type: 'cosmetic:get', hostname: host });
+  if (resp?.allowlisted) return;
 
-  injectSpecificCss(resp.hide, resp.unhide);
-
-  if (resp.procedural.length) {
-    const exprs = resp.procedural.map((p) => p.expr);
-    runProcedural(exprs);
-    observe(() => runProcedural(exprs));
+  if (resp) {
+    injectSpecificCss(resp.hide, resp.unhide);
+    if (resp.procedural.length) {
+      const exprs = resp.procedural.map((p) => p.expr);
+      runProcedural(exprs);
+      observe(() => runProcedural(exprs));
+    }
   }
+
+  // List-scoped MAIN scriptlets (SW filters by enabled lists, then executeScript).
+  void send({ type: 'scriptlets:get', hostname: host }).then((raw) => {
+    const s = raw as ScriptletsResponse | null;
+    if (!s || s.allowlisted || !s.scriptlets.length) return;
+    return send({ type: 'scriptlets:inject', scriptlets: s.scriptlets });
+  });
+}
+
+async function sendWithRetry(msg: Message, attempts = 5): Promise<CosmeticResponse | null> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const resp = (await send(msg)) as CosmeticResponse | null;
+      if (resp) return resp;
+    } catch (e) {
+      lastErr = e;
+    }
+    await sleep(50 * (i + 1));
+  }
+  if (lastErr) console.warn('[quell] cosmetic:get failed after retries', lastErr);
+  return null;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 function send(msg: Message): Promise<unknown> {
   return chrome.runtime.sendMessage(msg);
 }
 
-/** Is `sel` a syntactically valid CSS selector? Guards against a compromised/auto-
- *  updated list injecting `a{}html{display:none}` and breaking out of the rule. */
+/** Is `sel` a syntactically valid CSS selector? Guards against CSS breakout. */
 function isValidSelector(sel: string): boolean {
   try {
     document.createDocumentFragment().querySelector(sel);
@@ -52,7 +73,6 @@ function injectSpecificCss(hide: string[], unhide: string[]): void {
   if (!safeHide.length && !safeUnhide.length) return;
   let css = '';
   if (safeHide.length) css += `${safeHide.join(',\n')} { display: none !important; }\n`;
-  // Un-hide overrides come last so they win over the generic/specific hides above.
   if (safeUnhide.length) css += `${safeUnhide.join(',\n')} { display: revert !important; }\n`;
 
   const style = document.createElement('style');
@@ -62,10 +82,8 @@ function injectSpecificCss(hide: string[], unhide: string[]): void {
 }
 
 const hidden = new WeakSet<Element>();
-let hiddenCount = 0;
 
 function runProcedural(exprs: string[]): void {
-  let added = 0;
   for (const expr of exprs) {
     let els: Element[];
     try {
@@ -76,15 +94,11 @@ function runProcedural(exprs: string[]): void {
     for (const el of els) {
       if (hidden.has(el)) continue;
       hidden.add(el);
-      (el as HTMLElement).style.setProperty('display', 'none', 'important');
-      added++;
+      // `:remove()` ops already detach nodes; others get display:none.
+      if (el.isConnected) {
+        (el as HTMLElement).style?.setProperty?.('display', 'none', 'important');
+      }
     }
-  }
-  // Only message the SW when this pass actually hid something new — otherwise every
-  // throttled MutationObserver tick would flood a message forever once anything hid.
-  if (added > 0) {
-    hiddenCount += added;
-    void send({ type: 'cosmetic:hidden', count: hiddenCount });
   }
 }
 
@@ -101,9 +115,12 @@ function observe(run: () => void): void {
   };
   const obs = new MutationObserver(schedule);
   const attach = (): void =>
-    obs.observe(document.documentElement, { childList: true, subtree: true });
+    obs.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+    });
   if (document.documentElement) attach();
   else document.addEventListener('DOMContentLoaded', attach, { once: true });
-  // A final pass once the DOM is parsed.
   document.addEventListener('DOMContentLoaded', run, { once: true });
 }
