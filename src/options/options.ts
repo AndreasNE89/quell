@@ -1,6 +1,6 @@
-// Options page: filter-list management + stats.
+// Options page: filter-list management, YouTube features, and stats.
 
-import type { Message, ListsData, StatsData, ListGroup } from '../shared/types.js';
+import type { Message, ListsData, StatsData, ListGroup, PopupData } from '../shared/types.js';
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -72,10 +72,30 @@ async function loadLists(): Promise<void> {
   const container = $('lists');
   container.textContent = '';
   if (!data.lists.length) {
-    container.textContent = 'No lists compiled. Run `npm run build`.';
+    container.textContent = 'No filter lists available. Reinstall Quell or contact support.';
     return;
   }
   for (const l of data.lists) container.appendChild(listItem(l));
+}
+
+async function loadYoutubeOptions(): Promise<void> {
+  const data = (await send({ type: 'popup:get' })) as PopupData;
+  const sponsored = $<HTMLInputElement>('ytSponsored');
+  const shorts = $<HTMLInputElement>('ytShorts');
+  sponsored.checked = data.youtubeBlockSponsored;
+  shorts.checked = data.youtubeBlockShorts;
+  sponsored.disabled = data.paused;
+  shorts.disabled = data.paused;
+}
+
+async function saveYoutubeOptions(): Promise<void> {
+  const sponsored = $<HTMLInputElement>('ytSponsored');
+  const shorts = $<HTMLInputElement>('ytShorts');
+  await send({
+    type: 'popup:setYoutubeOptions',
+    youtubeBlockSponsored: sponsored.checked,
+    youtubeBlockShorts: shorts.checked,
+  });
 }
 
 async function loadVersion(): Promise<void> {
@@ -83,6 +103,14 @@ async function loadVersion(): Promise<void> {
   $('ver').textContent = man.version;
 }
 
+$<HTMLInputElement>('ytSponsored').addEventListener('change', () => {
+  void saveYoutubeOptions();
+});
+$<HTMLInputElement>('ytShorts').addEventListener('change', () => {
+  void saveYoutubeOptions();
+});
+
 void loadStats();
 void loadLists();
+void loadYoutubeOptions();
 void loadVersion();

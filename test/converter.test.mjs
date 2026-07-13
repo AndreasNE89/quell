@@ -128,6 +128,83 @@ test('regex end-anchor + options: body and options both survive', () => {
   assert.deepEqual(dnr.rule.condition.resourceTypes, ['script']);
 });
 
+test('should skip regex with positive lookahead (RE2 / Chrome DNR rejects)', () => {
+  // Real offender from ubo-filters (was static rule id 1302).
+  const line =
+    '/^https?:\\/\\/[a-z]{8,15}\\.com?\\/(?=[0-9a-zA-Z]*%)(?=[%a-zA-Z]*\\d)(?=[%0-9a-z]*[A-Z])[%0-9a-zA-Z]{170,}$/$script,3p';
+  const { dnr } = convert(line);
+  assert.equal(dnr.skip, 'regex-lookaround');
+  assert.equal(dnr.rule, undefined);
+});
+
+test('should skip regex with negative lookahead', () => {
+  const { dnr } = convert('/^https?:\\/\\/[a-z]{8,15}\\.top\\/(?!api|available|team)[a-z]{4,}\\.json$/$script');
+  assert.equal(dnr.skip, 'regex-lookaround');
+});
+
+test('should skip regex with backreference', () => {
+  const { dnr } = convert('/^https:\\/\\/[0-9a-z]{7}\\.([0-9a-z]{7})\\.top\\/[0-9a-z]{7}\\?t=\\1/$script');
+  assert.equal(dnr.skip, 'regex-backref');
+});
+
+test('should skip regex with repetition count above RE2 max (1000)', () => {
+  const { dnr } = convert('/a{1001}/$script');
+  assert.equal(dnr.skip, 'regex-repeat-limit');
+});
+
+test('should emit compact RE2-safe regex without lookarounds', () => {
+  const { dnr } = convert('/^https?:\\/\\/cdn\\.example\\.com\\/lib\\/[a-z0-9]{6,12}\\.js$/$script');
+  assert.equal(dnr.skip, undefined);
+  assert.equal(
+    dnr.rule.condition.regexFilter,
+    '^https?:\\/\\/cdn\\.example\\.com\\/lib\\/[a-z0-9]{6,12}\\.js$',
+  );
+});
+
+test('should skip regex that exceeds Chrome DNR ~2KB compiled memory (jsdelivr offender)', () => {
+  // easyprivacy static rule id 13120 — Chrome: "regexFilter value exceeded the 2KB memory limit".
+  const line =
+    '/^https:\\/\\/cdn\\.jsdelivr\\.net\\/npm\\/[-a-z_]{4,22}@latest\\/dist\\/script\\.min\\.js$/$script,third-party';
+  const { dnr } = convert(line);
+  assert.equal(dnr.skip, 'regex-memory');
+  assert.equal(dnr.rule, undefined);
+});
+
+test('should skip nested counted character-class regex (ubo-badware offender)', () => {
+  // Nested `{7,25}` inside `{9,13}` blows RE2 Prog size past Chrome's max_mem.
+  const line =
+    '/\\/(?:[0-9a-z]{7,25}-){9,13}[0-9a-z]{10,15}\\/(?:[0-9a-z]+\\/)+index\\.php/$document';
+  const { dnr } = convert(line);
+  assert.equal(dnr.skip, 'regex-memory');
+});
+
+test('should skip large counted any-byte regex (gorhill memoryLimitExceeded sample)', () => {
+  const { dnr } = convert('/(https?:\\/\\/)104\\.154\\..{100,}/$script');
+  assert.equal(dnr.skip, 'regex-memory');
+});
+
+test('re2UnsupportedReason reports regex-memory for oversized class repeats', async () => {
+  const { re2UnsupportedReason } = await import('../scripts/lib/to-dnr.mjs');
+  assert.equal(re2UnsupportedReason('[-a-z_]{4,22}'), 'regex-memory');
+  assert.equal(re2UnsupportedReason('ads?[0-9]+'), null);
+});
+
+test('should sanitize ||* urlFilter (Chrome forbids domain-anchor + leading wildcard)', () => {
+  // Real offender from ubo-filters (was static rule id 4217).
+  const { dnr } = convert('||*ontent.steamplay.*^$all');
+  assert.equal(dnr.skip, undefined);
+  assert.equal(dnr.rule.condition.urlFilter, '*ontent.steamplay.*^');
+  assert.ok(!dnr.rule.condition.urlFilter.startsWith('||*'));
+});
+
+test('should sanitize ||* via normalizeUrlFilter', async () => {
+  const { normalizeUrlFilter } = await import('../scripts/lib/to-dnr.mjs');
+  assert.deepEqual(normalizeUrlFilter('||*ads.example^'), { urlFilter: '*ads.example^' });
+  assert.deepEqual(normalizeUrlFilter('||ads.example^'), { urlFilter: '||ads.example^' });
+  assert.equal(normalizeUrlFilter('').skip, 'empty-url-filter');
+  assert.equal(normalizeUrlFilter('||*').skip, 'url-filter-star');
+});
+
 test('bare @@||domain^ exception is a plain allow, NOT allowAllRequests', () => {
   const { dnr } = convert('@@||ads.example^');
   assert.equal(dnr.rule.action.type, 'allow');

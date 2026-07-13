@@ -142,6 +142,50 @@ forbes.com##.article-sponsored
 businessinsider.com##.sponsor-post
 theguardian.com##.ad-slot-container
 weather.com##.ad-wrapper
+weather.com##.AdUnit
+weather.com##.sp_bx
+weather.com##iframe[id*="google_ads"]
+weather.com##iframe[src*="safeframe"]
+weather.com##iframe[src*="doubleclick"]
+weather.com##div[class*="Ads"]
+weather.com##div[data-testid*="Ad"]
+imdb.com##.ipc-ad-slot
+imdb.com##.ad-banner-click
+imdb.com##div[id^="google_ads"]
+imdb.com##iframe[id^="google_ads"]
+! Twitch overlays (native :has is fine in Chrome CSS)
+twitch.tv##.video-player__overlay .player-ad-overlay
+twitch.tv##[data-a-target="video-ad-label"]
+twitch.tv##.avp-ad-overlay
+twitch.tv##div[class*="InjectLayout"][class*="player-ad"]
+
+! Google Search / SERP sponsored blocks (first-party HTML — cosmetics only)
+www.google.com##.uEierd
+www.google.com##.commercial-unit-desktop-rhs
+www.google.com##.commercial-unit-desktop-top
+www.google.com###tads
+www.google.com###tadsb
+www.google.com###bottomads
+www.google.com##div[data-text-ad="1"]
+www.google.com##div[aria-label="Ads"]
+google.com##.uEierd
+google.com###tads
+google.com###tadsb
+
+! YouTube leftover UI (player pre-roll still partly first-party; see docs/AD_AUDIT.md)
+youtube.com##ytd-ad-slot-renderer
+youtube.com##ytd-display-ad-renderer
+youtube.com##ytd-promoted-sparkles-web-renderer
+youtube.com##ytd-in-feed-ad-layout-renderer
+youtube.com##ytd-banner-promo-renderer
+youtube.com##ytd-player-legacy-desktop-watch-ads-renderer
+youtube.com##.ytd-movie-offer-module-renderer
+youtube.com##ytd-action-companion-ad-renderer
+youtube.com##ytd-promoted-video-renderer
+www.youtube.com##ytd-ad-slot-renderer
+www.youtube.com##ytd-display-ad-renderer
+www.youtube.com##ytd-promoted-sparkles-web-renderer
+m.youtube.com##.ad-container
 
 ! ==========================================================================
 ! COSMETIC — procedural (need the JS engine; :has / :matches-css / etc.)
@@ -150,8 +194,10 @@ imgur.com##.Gallery-Sidebar-PostContainer:has(> a[href*="/ad/"])
 example.org##div.container:has(> .sponsored-label)
 
 ! ==========================================================================
-! SCRIPTLETS — illustrative; real anti-adblock scriptlets arrive with uBO lists.
-!   Syntax: domain##+js(name, arg1, arg2)
+! SCRIPTLETS — illustrative; YouTube player ads use scriptlets-youtube.js
+!   (fetch/XHR scrub). Avoid set-constant on ytInitial* — hangs Chromium player.
 ! ==========================================================================
 example.com##+js(set-constant, canRunAds, true)
 example.com##+js(abort-on-property-read, adblockDetector)
+youtube.com,www.youtube.com##+js(trusted-replace-fetch-response, "adPlacements", "no_ads", player)
+youtube.com,www.youtube.com##+js(trusted-replace-fetch-response, "adSlots", "no_ads", player)

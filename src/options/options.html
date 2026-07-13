@@ -29,19 +29,50 @@
       </section>
 
       <section>
+        <h2>YouTube</h2>
+        <p class="hint">
+          Extra controls for YouTube. Sponsored blocking hides promoted tiles and
+          scrubs player ad payloads. Shorts blocking hides Shorts shelves and leaves
+          <code>/shorts/</code> pages.
+        </p>
+        <div class="lists">
+          <div class="list-item">
+            <div class="list-info">
+              <div class="list-title">Block sponsored videos</div>
+              <div class="list-meta">Promoted / Sponsored feed items and in-player ad UI</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="ytSponsored" />
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="list-item">
+            <div class="list-info">
+              <div class="list-title">Block Shorts</div>
+              <div class="list-meta">Hide Shorts entry points and redirect Shorts URLs</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="ytShorts" />
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <section>
         <h2>Filter lists</h2>
         <p class="hint">
-          Toggle lists on or off. This enables or disables each list's network rules,
-          cosmetics, and scriptlets together. To refresh list contents from upstream, run
-          <code>npm run update-lists</code> then <code>npm run build</code> and reload the
-          extension.
+          Toggle lists on or off. This enables or disables each list’s network rules,
+          cosmetics, and scriptlets together. List contents ship with the extension;
+          updates arrive with new Quell versions.
         </p>
         <div id="lists" class="lists">Loading…</div>
       </section>
 
       <footer class="page-foot">
         <span>Quell v<span id="ver">0.1.0</span></span>
-        <span>Loaded as an unpacked MV3 extension</span>
+        <a href="privacy.html" target="_blank" rel="noopener">Privacy</a>
+        <a href="https://github.com/AndreasNE89/quell" target="_blank" rel="noopener">Source</a>
       </footer>
     </main>
     <script type="module" src="options.js"></script>

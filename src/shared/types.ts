@@ -31,6 +31,10 @@ export interface Settings {
   allowlist: string[];
   /** Running total of blocked network requests (best-effort; only reliable in unpacked/dev). */
   blockedTotal: number;
+  /** Hide YouTube sponsored/promoted videos and scrub player ad payloads. */
+  youtubeBlockSponsored: boolean;
+  /** Hide YouTube Shorts shelves/entries and leave /shorts/ pages. */
+  youtubeBlockShorts: boolean;
 }
 
 /** Procedural cosmetic rule: a raw uBO/ABP-style selector the JS engine evaluates. */
@@ -85,6 +89,12 @@ export type Message =
   | { type: 'popup:get' }
   | { type: 'popup:toggleSite'; hostname: string; enabled: boolean }
   | { type: 'popup:setPaused'; paused: boolean }
+  | {
+      type: 'popup:setYoutubeOptions';
+      youtubeBlockSponsored: boolean;
+      youtubeBlockShorts: boolean;
+    }
+  | { type: 'youtube:getOptions'; hostname: string }
   | { type: 'lists:get' }
   | { type: 'lists:setEnabled'; id: string; enabled: boolean }
   | { type: 'stats:get' };
@@ -117,6 +127,15 @@ export interface PopupData {
   blockedTotal: number;
   /** False in packaged/CWS builds where onRuleMatchedDebug is unavailable. */
   statsReliable: boolean;
+  youtubeBlockSponsored: boolean;
+  youtubeBlockShorts: boolean;
+}
+
+export interface YoutubeOptionsData {
+  allowlisted: boolean;
+  paused: boolean;
+  youtubeBlockSponsored: boolean;
+  youtubeBlockShorts: boolean;
 }
 
 export interface ListsData {

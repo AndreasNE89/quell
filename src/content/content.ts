@@ -4,17 +4,43 @@
 // service worker, allowlist-aware). This script handles site-specific hide selectors,
 // procedural cosmetic filters, and asks the SW to inject list-scoped MAIN scriptlets.
 
-import type { Message, CosmeticResponse, ScriptletsResponse } from '../shared/types.js';
+import type {
+  Message,
+  CosmeticResponse,
+  ScriptletsResponse,
+  YoutubeOptionsData,
+} from '../shared/types.js';
+import { STORAGE_KEY } from '../shared/constants.js';
 import { queryProcedural } from '../engine/procedural.js';
+import { applyYoutubeFeatures, watchYoutubeSpa } from './youtube-ui.js';
 
 if (location.protocol === 'http:' || location.protocol === 'https:' || location.protocol === 'about:') {
   void start();
 }
 
+let youtubeOpts: YoutubeOptionsData | null = null;
+
 async function start(): Promise<void> {
   const host = location.hostname;
+
+  // Kick scriptlets immediately — do not wait on cosmetics. YouTube/player
+  // pages need MAIN-world hooks as early as the SW round-trip allows.
+  const scriptletsP = send({ type: 'scriptlets:get', hostname: host }).then((raw) => {
+    const s = raw as ScriptletsResponse | null;
+    if (!s || s.allowlisted || !s.scriptlets.length) return;
+    return send({ type: 'scriptlets:inject', scriptlets: s.scriptlets });
+  });
+
+  const ytOptsP = send({ type: 'youtube:getOptions', hostname: host }).then((raw) => {
+    youtubeOpts = raw as YoutubeOptionsData | null;
+    if (youtubeOpts) applyYoutubeFeatures(youtubeOpts);
+  });
+
   const resp = await sendWithRetry({ type: 'cosmetic:get', hostname: host });
-  if (resp?.allowlisted) return;
+  if (resp?.allowlisted) {
+    await Promise.all([scriptletsP.catch(() => {}), ytOptsP.catch(() => {})]);
+    return;
+  }
 
   if (resp) {
     injectSpecificCss(resp.hide, resp.unhide);
@@ -25,11 +51,16 @@ async function start(): Promise<void> {
     }
   }
 
-  // List-scoped MAIN scriptlets (SW filters by enabled lists, then executeScript).
-  void send({ type: 'scriptlets:get', hostname: host }).then((raw) => {
-    const s = raw as ScriptletsResponse | null;
-    if (!s || s.allowlisted || !s.scriptlets.length) return;
-    return send({ type: 'scriptlets:inject', scriptlets: s.scriptlets });
+  await Promise.all([scriptletsP.catch(() => {}), ytOptsP.catch(() => {})]);
+  watchYoutubeSpa(() => youtubeOpts);
+
+  // Live-update when the user flips YouTube toggles in the popup/options.
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local' || !changes[STORAGE_KEY]) return;
+    void send({ type: 'youtube:getOptions', hostname: host }).then((raw) => {
+      youtubeOpts = raw as YoutubeOptionsData | null;
+      if (youtubeOpts) applyYoutubeFeatures(youtubeOpts);
+    });
   });
 }
 

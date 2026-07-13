@@ -16,6 +16,9 @@ export const ALLOWLIST_PRIORITY = 1_000_000;
 /** chrome.scripting id for the dynamically-managed generic cosmetic stylesheet. */
 export const GENERIC_CSS_SCRIPT_ID = 'quell-generic-cosmetic';
 
+/** MAIN-world document_start YouTube ad hooks (registered only when not paused). */
+export const YOUTUBE_SCRIPTLETS_SCRIPT_ID = 'quell-scriptlets-youtube';
+
 /** Legacy id — unregistered on sync so older builds don't double-inject. */
 export const SCRIPTLETS_SCRIPT_ID = 'quell-scriptlets';
 

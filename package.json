@@ -1,6 +1,6 @@
 {
   "name": "quell-adblock",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Quell — a Manifest V3 ad blocker for Chromium browsers aiming for uBlock Origin blocking parity within the MV3 rules.",
   "type": "module",
@@ -10,6 +10,11 @@
     "update-lists": "node scripts/update-lists.mjs",
     "bundle": "node scripts/build.mjs",
     "build": "npm run compile-filters && npm run bundle",
+    "build:store": "npm run compile-filters && node scripts/build.mjs --store",
+    "package": "node scripts/package.mjs",
+    "ad-audit": "node scripts/ad-audit.mjs",
+    "store-assets": "node scripts/make-store-assets.mjs",
+    "icons": "node scripts/make-icons.mjs",
     "watch": "node scripts/build.mjs --watch",
     "typecheck": "tsc --noEmit",
     "test": "node --test",
@@ -19,8 +24,10 @@
     "node": ">=18"
   },
   "devDependencies": {
+    "@adguard/re2-wasm": "^1.2.0",
     "@types/chrome": "^0.0.268",
     "esbuild": "^0.23.0",
+    "playwright": "^1.49.1",
     "typescript": "^5.5.4"
   }
 }

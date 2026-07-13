@@ -8,14 +8,125 @@
 // (`||` domain anchor, `^` separator, `|` boundary, `*` wildcard), so the pattern
 // usually passes through untouched. The work is mapping the *options*.
 
+import { createRequire } from 'node:module';
 import { PRIORITY } from './limits.mjs';
 import { REDIRECT_RESOURCES } from './redirects.mjs';
 
+const require = createRequire(import.meta.url);
+const { RE2 } = require('@adguard/re2-wasm');
+
 const MAX_URL_FILTER_LEN = 2000;
+
+/**
+ * Chromium DNR compiles each regexFilter with RE2 `max_mem = 2 << 10` (2048).
+ * We use a slightly tighter 1990 — same margin as AdGuard's tsurlfilter — because
+ * re2-wasm is Unicode-only while Chrome uses Latin1, and a few borderline patterns
+ * (e.g. remaining pussyspace allowlists) still trip Chrome near the ceiling.
+ * @see https://source.chromium.org/chromium/chromium/src/+/main:extensions/browser/api/declarative_net_request/utils.cc
+ * @see https://developer.chrome.com/docs/extensions/reference/api/declarativeNetRequest#regex-rules
+ */
+const CHROME_REGEX_MAX_MEM = 1990;
 
 /** Is the string safe as a DNR urlFilter? DNR requires ASCII; non-ASCII needs punycode. */
 function isAscii(s) {
   return /^[\x00-\x7F]*$/.test(s);
+}
+
+/**
+ * Normalize / validate a plain (non-regex) pattern for Chrome DNR `urlFilter`.
+ *
+ * Chrome rejects the entire static ruleset when any rule has an invalid urlFilter
+ * ("Could not load manifest"). Documented constraints:
+ * - ASCII only
+ * - non-empty
+ * - must not begin with `||*` (domain anchor + leading wildcard) — use `*` instead
+ *
+ * @see https://developer.chrome.com/docs/extensions/reference/api/declarativeNetRequest
+ * @returns {{ urlFilter: string } | { skip: string }}
+ */
+export function normalizeUrlFilter(pattern) {
+  if (!pattern) return { skip: 'empty-url-filter' };
+  if (!isAscii(pattern)) return { skip: 'non-ascii' };
+  if (pattern.length > MAX_URL_FILTER_LEN) return { skip: 'too-long' };
+
+  // `||*foo` is illegal; Chrome docs: use `*foo` instead. Dropping the domain
+  // anchor is slightly broader but keeps the rule loadable and still useful.
+  let urlFilter = pattern;
+  if (urlFilter.startsWith('||*')) {
+    urlFilter = urlFilter.slice(2);
+  }
+
+  if (!urlFilter) return { skip: 'empty-url-filter' };
+  // `*` alone means "match everything" — omit urlFilter upstream instead.
+  if (urlFilter === '*') return { skip: 'url-filter-star' };
+
+  // After sanitization, still reject any residual `||*` (shouldn't happen).
+  if (urlFilter.startsWith('||*')) return { skip: 'url-filter-domain-wildcard' };
+
+  return { urlFilter };
+}
+
+/**
+ * Chrome DNR `regexFilter` is compiled with RE2 (plus a ~2KB compiled-size budget).
+ * Emitting a pattern RE2 rejects makes the entire static ruleset fail to load
+ * ("Could not load manifest"). Patterns that only exceed the memory budget are
+ * skipped per-rule at load time (noisy console warnings) — better not to emit them.
+ * Filter lists routinely use JS-only features (lookarounds, backrefs) that must
+ * be dropped at compile time.
+ *
+ * Memory check uses AdGuard's RE2 WASM with Chromium's `max_mem` (2 KiB). That is
+ * the same approach as tsurlfilter; it is an approximation of Chrome's Latin1
+ * RE2 build, but it catches known `memoryLimitExceeded` offenders (nested
+ * counted classes, `[-a-z_]{4,22}`, large `.{n,}` / `[…]{n,}`, etc.).
+ *
+ * @see https://github.com/google/re2/wiki/Syntax
+ * @returns {string|null} skip reason, or null if the pattern looks RE2-safe
+ */
+export function re2UnsupportedReason(pattern) {
+  // Lookahead / lookbehind — the usual EasyList/uBO offenders.
+  if (/\(\?(?:[=!]|<=|<!)/.test(pattern)) return 'regex-lookaround';
+
+  // Named / numbered backreferences and recursion (RE2: not supported).
+  if (/\(\?P=|\(\?&|\\k</.test(pattern)) return 'regex-backref';
+  if (/(?:^|[^\\])(?:\\\\)*\\[1-9]/.test(pattern)) return 'regex-backref';
+
+  // Atomic groups, possessive quantifiers, conditionals, verbs, comments, branch reset.
+  if (/\(\?>/.test(pattern)) return 'regex-atomic';
+  if (/(?:[*+?]|\{\d+(?:,\d*)?\})\+/.test(pattern)) return 'regex-possessive';
+  if (/\(\?\(/.test(pattern)) return 'regex-conditional';
+  if (/\(\?(?:[+\-]?\d|R|0)\)/.test(pattern)) return 'regex-recursion';
+  if (/\(\*[\w]+/.test(pattern)) return 'regex-verb';
+  if (/\(\?#/.test(pattern)) return 'regex-comment';
+  if (/\(\?\|/.test(pattern)) return 'regex-branch-reset';
+
+  // RE2 rejects counting forms with min/max above 1000.
+  for (const m of pattern.matchAll(/\{(\d+)(?:,(\d*))?\}/g)) {
+    const min = Number(m[1]);
+    if (min > 1000) return 'regex-repeat-limit';
+    if (m[2] !== undefined && m[2] !== '' && Number(m[2]) > 1000) return 'regex-repeat-limit';
+  }
+
+  // Catch obvious syntax errors early (unclosed classes, bad escapes, …).
+  // Note: JS RegExp accepts lookarounds — those are filtered above.
+  try {
+    new RegExp(pattern);
+  } catch {
+    return 'regex-syntax';
+  }
+
+  // Enforce Chrome's ~2KB compiled-size budget so oversized rules are never shipped.
+  // re2-wasm requires the `u` flag; Chromium uses Latin1, so this can be slightly
+  // more aggressive than Chrome — prefer dropping a borderline rule over load warnings.
+  try {
+    // RE2 constructor throws when the pattern cannot be compiled within maxMem.
+    new RE2(pattern, 'u', CHROME_REGEX_MAX_MEM);
+  } catch (err) {
+    const msg = String(err?.message ?? err);
+    if (/too large|memory|compile failed/i.test(msg)) return 'regex-memory';
+    return 'regex-syntax';
+  }
+
+  return null;
 }
 
 /**
@@ -77,11 +188,17 @@ export function toDnrRule(f) {
     const regex = f.pattern.slice(1, -1);
     if (!regex) return { skip: 'empty-regex' };
     if (!isAscii(regex)) return { skip: 'non-ascii-regex' };
+    const re2Skip = re2UnsupportedReason(regex);
+    if (re2Skip) return { skip: re2Skip };
     condition.regexFilter = regex;
   } else if (f.pattern && f.pattern !== '*') {
-    if (!isAscii(f.pattern)) return { skip: 'non-ascii' };
-    if (f.pattern.length > MAX_URL_FILTER_LEN) return { skip: 'too-long' };
-    condition.urlFilter = f.pattern;
+    const normalized = normalizeUrlFilter(f.pattern);
+    if (normalized.skip) {
+      // Bare `*` after sanitizing `||*` → treat like an empty pattern (match-all).
+      if (normalized.skip !== 'url-filter-star') return { skip: normalized.skip };
+    } else {
+      condition.urlFilter = normalized.urlFilter;
+    }
   }
   // An empty/`*` pattern is a valid "match every URL" condition (omit urlFilter).
 

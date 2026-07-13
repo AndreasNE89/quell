@@ -4,7 +4,14 @@ import type { Settings } from '../shared/types.js';
 import { STORAGE_KEY } from '../shared/constants.js';
 
 export function defaultSettings(): Settings {
-  return { paused: false, enabledLists: {}, allowlist: [], blockedTotal: 0 };
+  return {
+    paused: false,
+    enabledLists: {},
+    allowlist: [],
+    blockedTotal: 0,
+    youtubeBlockSponsored: true,
+    youtubeBlockShorts: false,
+  };
 }
 
 export async function loadSettings(): Promise<Settings> {

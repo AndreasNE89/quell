@@ -22,12 +22,14 @@ import type {
   ScriptletData,
   ScriptletRule,
   GeneratedMeta,
+  YoutubeOptionsData,
 } from '../shared/types.js';
 import {
   ALLOWLIST_ID_START,
   ALLOWLIST_ID_END,
   ALLOWLIST_PRIORITY,
   GENERIC_CSS_SCRIPT_ID,
+  YOUTUBE_SCRIPTLETS_SCRIPT_ID,
 } from '../shared/constants.js';
 import { loadSettings, saveSettings, isListEnabled } from './settings.js';
 import { matchCosmetic, matchScriptlets } from '../engine/cosmetic-match.js';
@@ -110,8 +112,8 @@ async function syncAllowlist(settings: Settings): Promise<void> {
 }
 
 /**
- * Register (or update / unregister) per-enabled-list generic cosmetic stylesheets.
- * Scriptlets are injected on demand via executeScript (list-scoped) from the content script.
+ * Register (or update / unregister) generic cosmetic CSS and YouTube MAIN hooks.
+ * Both honor pause + allowlist excludes. List-scoped scriptlets still inject on demand.
  */
 async function syncRegisteredScripts(settings: Settings): Promise<void> {
   const shouldExist = !settings.paused;
@@ -123,13 +125,29 @@ async function syncRegisteredScripts(settings: Settings): Promise<void> {
     .filter((p): p is string => !!p)
     .map((p) => `generated/${p}`);
 
-  const script: chrome.scripting.RegisteredContentScript = {
+  const cosmetic: chrome.scripting.RegisteredContentScript = {
     id: GENERIC_CSS_SCRIPT_ID,
     css: cssFiles.length ? cssFiles : undefined,
     matches: ['<all_urls>'],
     excludeMatches: exclude,
     runAt: 'document_start',
     allFrames: true,
+    persistAcrossSessions: true,
+  };
+
+  const youtube: chrome.scripting.RegisteredContentScript = {
+    id: YOUTUBE_SCRIPTLETS_SCRIPT_ID,
+    js: ['scriptlets-youtube.js'],
+    matches: [
+      '*://*.youtube.com/*',
+      '*://*.youtube-nocookie.com/*',
+      '*://youtu.be/*',
+      '*://*.youtubekids.com/*',
+    ],
+    excludeMatches: exclude,
+    runAt: 'document_start',
+    allFrames: true,
+    world: 'MAIN',
     persistAcrossSessions: true,
   };
 
@@ -141,22 +159,34 @@ async function syncRegisteredScripts(settings: Settings): Promise<void> {
       /* not registered */
     }
 
-    const existing = await chrome.scripting.getRegisteredContentScripts({ ids: [script.id] });
-    if (!shouldExist || !cssFiles.length) {
-      if (existing.length) await chrome.scripting.unregisterContentScripts({ ids: [script.id] });
-      return;
-    }
-    if (existing.length) {
-      await chrome.scripting.updateContentScripts([script]);
-    } else {
-      try {
-        await chrome.scripting.registerContentScripts([script]);
-      } catch {
-        await chrome.scripting.updateContentScripts([script]);
-      }
-    }
+    await syncOneRegisteredScript(cosmetic, shouldExist && cssFiles.length > 0);
+    // Sponsored scrub runs only when the YouTube sponsored toggle is on.
+    await syncOneRegisteredScript(
+      youtube,
+      shouldExist && settings.youtubeBlockSponsored !== false,
+    );
   } catch (e) {
     console.error('[quell] syncRegisteredScripts failed', e);
+  }
+}
+
+async function syncOneRegisteredScript(
+  script: chrome.scripting.RegisteredContentScript,
+  enabled: boolean,
+): Promise<void> {
+  const existing = await chrome.scripting.getRegisteredContentScripts({ ids: [script.id] });
+  if (!enabled) {
+    if (existing.length) await chrome.scripting.unregisterContentScripts({ ids: [script.id] });
+    return;
+  }
+  if (existing.length) {
+    await chrome.scripting.updateContentScripts([script]);
+  } else {
+    try {
+      await chrome.scripting.registerContentScripts([script]);
+    } catch {
+      await chrome.scripting.updateContentScripts([script]);
+    }
   }
 }
 
@@ -280,6 +310,12 @@ async function handleMessage(msg: Message, sender: chrome.runtime.MessageSender)
     case 'popup:setPaused':
       return handleSetPaused(msg.paused);
 
+    case 'popup:setYoutubeOptions':
+      return handleSetYoutubeOptions(msg.youtubeBlockSponsored, msg.youtubeBlockShorts);
+
+    case 'youtube:getOptions':
+      return handleYoutubeGetOptions(msg.hostname);
+
     case 'lists:get':
       return handleListsGet();
 
@@ -385,7 +421,31 @@ async function handlePopupGet(): Promise<PopupData> {
     tabBlocked: tab?.id != null ? tabBlocked.get(tab.id) ?? 0 : 0,
     blockedTotal: settings.blockedTotal,
     statsReliable: STATS_RELIABLE,
+    youtubeBlockSponsored: settings.youtubeBlockSponsored !== false,
+    youtubeBlockShorts: !!settings.youtubeBlockShorts,
   };
+}
+
+async function handleYoutubeGetOptions(hostname: string): Promise<YoutubeOptionsData> {
+  const settings = await loadSettings();
+  return {
+    paused: settings.paused,
+    allowlisted: isAllowlistedHost(hostname, settings.allowlist),
+    youtubeBlockSponsored: settings.youtubeBlockSponsored !== false,
+    youtubeBlockShorts: !!settings.youtubeBlockShorts,
+  };
+}
+
+async function handleSetYoutubeOptions(
+  youtubeBlockSponsored: boolean,
+  youtubeBlockShorts: boolean,
+): Promise<PopupData> {
+  const settings = await mutateSettings((s) => {
+    s.youtubeBlockSponsored = youtubeBlockSponsored;
+    s.youtubeBlockShorts = youtubeBlockShorts;
+  });
+  await syncRegisteredScripts(settings);
+  return handlePopupGet();
 }
 
 async function handleToggleSite(hostname: string, enabled: boolean): Promise<PopupData> {

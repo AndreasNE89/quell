@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Quell — Privacy Policy</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --fg: #1a1a1a;
+      --muted: #555;
+      --bg: #fafafa;
+      --card: #fff;
+      --border: #e5e5e5;
+      --accent: #0d9488;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --fg: #f0f0f0;
+        --muted: #aaa;
+        --bg: #121212;
+        --card: #1e1e1e;
+        --border: #333;
+      }
+    }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      line-height: 1.6;
+    }
+    main {
+      max-width: 40rem;
+      margin: 0 auto;
+      padding: 2rem 1.25rem 4rem;
+    }
+    h1 { font-size: 1.75rem; margin: 0 0 0.25rem; }
+    .meta { color: var(--muted); font-size: 0.9rem; margin-bottom: 2rem; }
+    h2 { font-size: 1.15rem; margin-top: 2rem; }
+    a { color: var(--accent); }
+    ul { padding-left: 1.25rem; }
+    .box {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.15rem;
+      margin: 1rem 0;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Quell Privacy Policy</h1>
+    <p class="meta">Effective date: July 13, 2026 · Last updated: July 13, 2026</p>
+
+    <div class="box">
+      <strong>Short version:</strong> Quell does not collect, sell, or transmit your browsing history.
+      Filtering runs on your device. Settings stay in your browser’s local storage.
+    </div>
+
+    <h2>Who we are</h2>
+    <p>
+      Quell is an open-source browser extension that blocks ads and trackers using
+      Declarative Net Request (Manifest V3) and local cosmetic/scriptlet filters.
+      Source code: <a href="https://github.com/AndreasNE89/quell">github.com/AndreasNE89/quell</a>.
+    </p>
+
+    <h2>Data we collect</h2>
+    <p><strong>We do not collect personal data.</strong> Quell does not operate analytics, crash reporting, advertising identifiers, or remote logging.</p>
+    <ul>
+      <li><strong>Browsing activity:</strong> Not sent to us. Network blocking is applied by Chrome’s Declarative Net Request engine using rules shipped in the extension package (and optional updates you enable).</li>
+      <li><strong>Settings &amp; allowlist:</strong> Stored locally via <code>chrome.storage</code> on your device. Not uploaded.</li>
+      <li><strong>Statistics:</strong> Any on-device counters (e.g. badge hints) stay local when available. Quell does not sync them to a server.</li>
+    </ul>
+
+    <h2>Permissions</h2>
+    <p>Quell requests only what is needed to block ads/trackers:</p>
+    <ul>
+      <li><code>declarativeNetRequest</code> — apply filter rules without reading page content on the network path.</li>
+      <li><code>scripting</code> — inject cosmetic filters and approved scriptlets on pages you visit.</li>
+      <li><code>storage</code> — save your preferences and site allowlist.</li>
+      <li><code>webNavigation</code> — know when navigations occur so filters can be applied consistently.</li>
+      <li><code>&lt;all_urls&gt;</code> host access — required so blocking and cosmetics can work on websites generally (the purpose of an ad blocker).</li>
+    </ul>
+
+    <h2>Third parties</h2>
+    <p>
+      Filter lists (e.g. EasyList and related community lists) may be downloaded from their
+      publishers when you update lists. Those downloads are list files only; Quell does not
+      send your browsing history to list publishers as part of filtering.
+    </p>
+    <p>We do not sell or share user data with third parties because we do not collect it.</p>
+
+    <h2>Children</h2>
+    <p>Quell is not directed at children under 13 and does not knowingly collect children’s data.</p>
+
+    <h2>Changes</h2>
+    <p>We may update this policy when the extension’s data practices change. The effective date above will be revised accordingly.</p>
+
+    <h2>Contact</h2>
+    <p>
+      Questions about privacy: open an issue on
+      <a href="https://github.com/AndreasNE89/quell/issues">GitHub Issues</a>
+      or contact the maintainer via the repository.
+    </p>
+  </main>
+</body>
+</html>

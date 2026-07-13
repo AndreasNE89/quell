@@ -1,15 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Quell",
-  "version": "0.1.0",
-  "description": "A Manifest V3 ad & tracker blocker for Chromium, aiming for uBlock Origin blocking parity within the MV3 rules.",
+  "version": "1.0.0",
+  "description": "Block ads and trackers with EasyList-style filters, cosmetics, and scriptlets — built for Manifest V3.",
+  "homepage_url": "https://github.com/AndreasNE89/quell",
   "minimum_chrome_version": "120",
   "permissions": [
     "declarativeNetRequest",
-    "declarativeNetRequestFeedback",
     "scripting",
     "storage",
-    "tabs",
     "webNavigation"
   ],
   "host_permissions": ["<all_urls>"],

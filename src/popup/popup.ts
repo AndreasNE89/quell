@@ -11,6 +11,8 @@ const el = {
   siteToggle: $<HTMLInputElement>('siteToggle'),
   siteToggleLabel: $('siteToggleLabel'),
   pauseToggle: $<HTMLInputElement>('pauseToggle'),
+  ytSponsoredToggle: $<HTMLInputElement>('ytSponsoredToggle'),
+  ytShortsToggle: $<HTMLInputElement>('ytShortsToggle'),
   tabBlocked: $('tabBlocked'),
   totalBlocked: $('totalBlocked'),
   optionsBtn: $('optionsBtn'),
@@ -32,12 +34,16 @@ function render(data: PopupData): void {
 
   el.siteToggle.checked = blockingHere;
   el.siteToggle.disabled = data.paused || !data.hostname;
-  el.siteToggleLabel.textContent = blockingHere ? 'Block on this site' : 'Block on this site';
   if (data.allowlisted) el.siteToggleLabel.textContent = 'Blocking off (allowlisted)';
   else if (data.paused) el.siteToggleLabel.textContent = 'Paused globally';
   else el.siteToggleLabel.textContent = 'Block on this site';
 
   el.pauseToggle.checked = data.paused;
+  el.ytSponsoredToggle.checked = data.youtubeBlockSponsored;
+  el.ytShortsToggle.checked = data.youtubeBlockShorts;
+  el.ytSponsoredToggle.disabled = data.paused;
+  el.ytShortsToggle.disabled = data.paused;
+
   el.tabBlocked.textContent = data.statsReliable ? String(data.tabBlocked) : '—';
   el.totalBlocked.textContent = data.statsReliable
     ? data.blockedTotal.toLocaleString()
@@ -70,6 +76,23 @@ el.pauseToggle.addEventListener('change', async () => {
   const data = (await send({ type: 'popup:setPaused', paused: el.pauseToggle.checked })) as PopupData;
   current = data;
   render(data);
+});
+
+async function saveYoutubeOptions(): Promise<void> {
+  const data = (await send({
+    type: 'popup:setYoutubeOptions',
+    youtubeBlockSponsored: el.ytSponsoredToggle.checked,
+    youtubeBlockShorts: el.ytShortsToggle.checked,
+  })) as PopupData;
+  current = data;
+  render(data);
+}
+
+el.ytSponsoredToggle.addEventListener('change', () => {
+  void saveYoutubeOptions();
+});
+el.ytShortsToggle.addEventListener('change', () => {
+  void saveYoutubeOptions();
 });
 
 function openOptions(): void {

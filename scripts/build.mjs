@@ -1,12 +1,10 @@
 // Bundle Quell into a loadable unpacked extension in dist/.
 //
-// - Service worker + popup + options → ESM bundles.
-// - Content scripts (content.js, scriptlets.js) → classic IIFE bundles, because
-//   manifest-declared content scripts are NOT ES modules.
-// - Static assets (HTML/CSS/icons/redirects/rulesets) are copied.
-// - The manifest's declarative_net_request.rule_resources is generated from meta.json.
+// Flags:
+//   --watch   rebuild JS on change
+//   --store   Chrome Web Store build (minified, no feedback permission)
 //
-// Assumes `npm run compile-filters` has produced src/generated/. Run via `npm run build`.
+// Assumes `npm run compile-filters` has produced src/generated/.
 
 import { build, context } from 'esbuild';
 import {
@@ -28,6 +26,7 @@ const GEN = join(SRC, 'generated');
 const DIST = join(ROOT, 'dist');
 
 const watch = process.argv.includes('--watch');
+const store = process.argv.includes('--store');
 
 const COMMON = {
   bundle: true,
@@ -35,6 +34,8 @@ const COMMON = {
   platform: 'browser',
   logLevel: 'info',
   legalComments: 'none',
+  minify: store,
+  sourcemap: false,
 };
 
 /** Entry points: [srcFile, outFile, format]. */
@@ -42,6 +43,7 @@ const ENTRIES = [
   ['background/service-worker.ts', 'background.js', 'esm'],
   ['content/content.ts', 'content.js', 'iife'],
   ['content/scriptlets-main.ts', 'scriptlets.js', 'iife'],
+  ['content/scriptlets-youtube.ts', 'scriptlets-youtube.js', 'iife'],
   ['popup/popup.ts', 'popup.js', 'esm'],
   ['options/options.ts', 'options.js', 'esm'],
 ];
@@ -56,26 +58,46 @@ function assertGenerated() {
 function buildManifest() {
   const manifest = JSON.parse(readFileSync(join(SRC, 'manifest.json'), 'utf8'));
   const meta = JSON.parse(readFileSync(join(GEN, 'meta.json'), 'utf8'));
+  const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+
+  // Keep extension version aligned with package.json.
+  if (pkg.version) manifest.version = pkg.version;
+
+  // Dev-only: optional feedback for badge counts when loading unpacked with --dev-feedback.
+  if (process.argv.includes('--dev-feedback')) {
+    if (!manifest.permissions.includes('declarativeNetRequestFeedback')) {
+      manifest.permissions.push('declarativeNetRequestFeedback');
+    }
+  }
+
+  if (!meta.lists.length) {
+    console.error('No compiled filter lists in meta.json — refusing to build an empty blocker.');
+    process.exit(1);
+  }
+
   manifest.declarative_net_request.rule_resources = meta.lists.map((l) => ({
     id: l.id,
     enabled: l.enabledByDefault,
     path: `generated/${l.rulesetFile}`,
   }));
-  writeFileSync(join(DIST, 'manifest.json'), JSON.stringify(manifest, null, 2));
+
+  writeFileSync(join(DIST, 'manifest.json'), JSON.stringify(manifest, null, store ? 0 : 2));
 }
 
 function copyStatic() {
-  // HTML + CSS for popup/options.
   for (const [dir, files] of [
     ['popup', ['popup.html', 'popup.css']],
     ['options', ['options.html', 'options.css']],
   ]) {
     for (const f of files) cpSync(join(SRC, dir, f), join(DIST, f));
   }
-  // Icons, redirect resources.
   cpSync(join(SRC, 'icons'), join(DIST, 'icons'), { recursive: true });
   cpSync(join(SRC, 'redirects'), join(DIST, 'redirects'), { recursive: true });
-  // Generated DNR rulesets + per-list generic cosmetic CSS.
+
+  // In-extension privacy page (also publish docs/privacy-policy.html on the web).
+  const privacySrc = join(ROOT, 'docs', 'privacy-policy.html');
+  if (existsSync(privacySrc)) cpSync(privacySrc, join(DIST, 'privacy.html'));
+
   mkdirSync(join(DIST, 'generated', 'rulesets'), { recursive: true });
   mkdirSync(join(DIST, 'generated', 'generic-cosmetic'), { recursive: true });
   for (const f of readdirSync(join(GEN, 'rulesets'))) {
@@ -107,7 +129,6 @@ async function run() {
   if (watch) {
     const ctxs = await Promise.all(configs.map((c) => context(c)));
     await Promise.all(ctxs.map((c) => c.watch()));
-    // Rebuild static bits once; JS rebuilds on change.
     buildManifest();
     copyStatic();
     console.log('watching for changes… (re-run `npm run compile-filters` if filters change)');
@@ -115,7 +136,10 @@ async function run() {
     await Promise.all(configs.map((c) => build(c)));
     buildManifest();
     copyStatic();
-    console.log(`\nBuilt unpacked extension → dist/  (load it via chrome://extensions → Load unpacked)`);
+    const mode = store ? 'store' : 'dev';
+    console.log(
+      `\nBuilt unpacked extension → dist/  [${mode}]  (chrome://extensions → Load unpacked)`,
+    );
   }
 }
 

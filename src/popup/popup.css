@@ -105,6 +105,27 @@ body {
   margin-top: 4px;
 }
 
+.feature-block {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 4px 10px 6px;
+  margin: 8px 0 4px;
+  background: var(--card);
+}
+.feature-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  padding: 6px 2px 2px;
+}
+.feature-block .switch-row.subtle {
+  border-top: none;
+  margin-top: 0;
+  color: var(--fg);
+}
+
 .switch {
   position: relative;
   width: 40px;
