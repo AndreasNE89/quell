@@ -11,9 +11,7 @@ StampStack does **not** collect, sell, or transmit your browsing history. Filter
 
 ## Who we are
 
-StampStack is an open-source browser extension that blocks ads and trackers using Declarative Net Request (Manifest V3) and local cosmetic/scriptlet filters.
-
-Repository: https://github.com/AndreasNE89/quell
+StampStack is a browser extension that blocks ads and trackers using Declarative Net Request (Manifest V3) and local cosmetic/scriptlet filters.
 
 ## Data we collect
 
@@ -41,4 +39,5 @@ Filter lists may be downloaded from their publishers when you update lists. Stam
 
 ## Contact
 
-https://github.com/AndreasNE89/quell/issues
+Email: andreas.nelvik.engebretsen@gmail.com  
+Or contact the publisher via the Chrome Web Store listing for StampStack.
