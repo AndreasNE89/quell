@@ -1,8 +1,8 @@
-# Quell ad-blocking audit (2026-07-13)
+# StampStack ad-blocking audit (2026-07-13)
 
-Automated headed Chromium run with Quell loaded from `dist/`, pausing via popup messaging between passes. Script: `npm run ad-audit` → `scripts/ad-audit.mjs`. Raw data: `docs/ad-audit-results.json`. Screenshots: `docs/ad-audit-shots/`.
+Automated headed Chromium run with StampStack loaded from `dist/`, pausing via popup messaging between passes. Script: `npm run ad-audit` → `scripts/ad-audit.mjs`. Raw data: `docs/ad-audit-results.json`. Screenshots: `docs/ad-audit-shots/`.
 
-Method: for each site, measure with Quell **ON**, then **paused (OFF)** — third-party ad-host requests, `ERR_BLOCKED_BY_CLIENT`, visible ad iframes / ad-like DOM, YouTube ad UI.
+Method: for each site, measure with StampStack **ON**, then **paused (OFF)** — third-party ad-host requests, `ERR_BLOCKED_BY_CLIENT`, visible ad iframes / ad-like DOM, YouTube ad UI.
 
 ## Results summary
 
@@ -22,7 +22,7 @@ Method: for each site, measure with Quell **ON**, then **paused (OFF)** — thir
 ### High priority
 
 1. **YouTube first-party / player ads**
-   - Pause OFF showed Maybelline pre-roll (“Sponsored 2 of 2”) + sidebar Sponsored — classic YouTube inventory Quell must beat.
+   - Pause OFF showed Maybelline pre-roll (“Sponsored 2 of 2”) + sidebar Sponsored — classic YouTube inventory StampStack must beat.
    - ON suppressed DoubleClick/syndication volume but the watch page did not fully render (skeleton UI). Fix needs both:
      - **Coverage:** YouTube-oriented scriptlets/cosmetics (uBO-style `json-prune` / player ad hooks where MV3 allows; domain-scoped only).
      - **Compatibility:** audit which DNR/scriptlet/cosmetic rules break the watch page shell; add exceptions or safer redirects so video UI still loads.
@@ -30,7 +30,7 @@ Method: for each site, measure with Quell **ON**, then **paused (OFF)** — thir
 
 2. **Google Search / Google properties (manual retest)**
    - Automation hit bot check; cannot judge Sponsored results from this run.
-   - **Manual:** load Quell in your normal Chrome → search commercial query → toggle pause.
+   - **Manual:** load StampStack in your normal Chrome → search commercial query → toggle pause.
    - Likely fix if Sponsored remain: **cosmetic** rules for Google ad result blocks (first-party HTML; DNR will not remove them).
 
 ### Medium priority
@@ -75,7 +75,7 @@ Full suite again (`npm run ad-audit`). Screenshots refreshed under `docs/ad-audi
 
 | Site | Network ON→OFF | Verdict |
 |------|----------------|---------|
-| YouTube | 5→7 (+ BLOCKED_BY_CLIENT≈9) | **Still missing:** Sponsored pre-roll visible with Quell ON (Extra gum). Player no longer hangs. |
+| YouTube | 5→7 (+ BLOCKED_BY_CLIENT≈9) | **Still missing:** Sponsored pre-roll visible with StampStack ON (Extra gum). Player no longer hangs. |
 | Google Search | n/a | **Inconclusive** — reCAPTCHA again |
 | CNN | 7→226 | Strong |
 | Forbes | 5→694 | Strong |

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "Quell",
-  "version": "1.0.0",
+  "name": "StampStack",
+  "version": "1.1.0",
   "description": "Block ads and trackers with EasyList-style filters, cosmetics, and scriptlets — built for Manifest V3.",
   "homepage_url": "https://github.com/AndreasNE89/quell",
   "minimum_chrome_version": "120",
@@ -18,7 +18,7 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Quell",
+    "default_title": "StampStack",
     "default_icon": {
       "16": "icons/icon-16.png",
       "32": "icons/icon-32.png",

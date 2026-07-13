@@ -1,4 +1,4 @@
-// Quell service worker — the coordinator.
+// StampStack service worker — the coordinator.
 //
 // Responsibilities:
 //   - Sync per-list static rulesets with user settings (updateEnabledRulesets).
@@ -74,7 +74,7 @@ async function syncRulesets(settings: Settings): Promise<void> {
       disableRulesetIds: disable,
     });
   } catch (e) {
-    console.error('[quell] updateEnabledRulesets failed', e);
+    console.error('[StampStack] updateEnabledRulesets failed', e);
   }
 }
 
@@ -107,7 +107,7 @@ async function syncAllowlist(settings: Settings): Promise<void> {
   try {
     await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds, addRules });
   } catch (e) {
-    console.error('[quell] updateDynamicRules (allowlist) failed', e);
+    console.error('[StampStack] updateDynamicRules (allowlist) failed', e);
   }
 }
 
@@ -154,7 +154,7 @@ async function syncRegisteredScripts(settings: Settings): Promise<void> {
   try {
     // Drop any legacy MAIN scriptlets registration from older builds.
     try {
-      await chrome.scripting.unregisterContentScripts({ ids: ['quell-scriptlets'] });
+      await chrome.scripting.unregisterContentScripts({ ids: ['StampStack-scriptlets'] });
     } catch {
       /* not registered */
     }
@@ -166,7 +166,7 @@ async function syncRegisteredScripts(settings: Settings): Promise<void> {
       shouldExist && settings.youtubeBlockSponsored !== false,
     );
   } catch (e) {
-    console.error('[quell] syncRegisteredScripts failed', e);
+    console.error('[StampStack] syncRegisteredScripts failed', e);
   }
 }
 
@@ -284,7 +284,7 @@ chrome.runtime.onMessage.addListener((msg: Message, sender, sendResponse) => {
   handleMessage(msg, sender)
     .then((r) => sendResponse(r))
     .catch((e) => {
-      console.error('[quell] message handler error', msg.type, e);
+      console.error('[StampStack] message handler error', msg.type, e);
       sendResponse(null);
     });
   return true;
@@ -395,7 +395,7 @@ async function handleScriptletsInject(
     });
     return { ok: true };
   } catch (e) {
-    console.error('[quell] scriptlets inject failed', e);
+    console.error('[StampStack] scriptlets inject failed', e);
     return { ok: false };
   }
 }

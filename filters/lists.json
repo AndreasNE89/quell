@@ -3,7 +3,7 @@
   "lists": [
     {
       "id": "quell-seed",
-      "title": "Quell Seed (built-in)",
+      "title": "StampStack Seed (built-in)",
       "group": "ads",
       "enabledByDefault": true,
       "file": "quell-seed.txt",
@@ -27,7 +27,7 @@
     },
     {
       "id": "ubo-filters",
-      "title": "uBlock Origin — Ads/Privacy",
+      "title": "uBlock Origin â€” Ads/Privacy",
       "group": "ads",
       "enabledByDefault": true,
       "file": "ubo-filters.txt",
@@ -35,7 +35,7 @@
     },
     {
       "id": "ubo-badware",
-      "title": "uBlock Origin — Badware risks",
+      "title": "uBlock Origin â€” Badware risks",
       "group": "security",
       "enabledByDefault": true,
       "file": "ubo-badware.txt",

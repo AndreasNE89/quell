@@ -72,7 +72,7 @@ async function loadLists(): Promise<void> {
   const container = $('lists');
   container.textContent = '';
   if (!data.lists.length) {
-    container.textContent = 'No filter lists available. Reinstall Quell or contact support.';
+    container.textContent = 'No filter lists available. Reinstall StampStack or contact support.';
     return;
   }
   for (const l of data.lists) container.appendChild(listItem(l));

@@ -1,13 +1,13 @@
-# Chrome Web Store — Quell release checklist
+﻿# Chrome Web Store — StampStack release checklist
 
-Use this when uploading Quell to the [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole).
+Use this when uploading StampStack to the [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole).
 
 ## Done in-repo (no dashboard login)
 
 | Item | Status / path |
 |------|----------------|
-| Version `1.0.0` | `package.json` + `src/manifest.json` (synced on build) |
-| Store zip | `npm run package` → `release/quell-1.0.0.zip` |
+| Version `1.1.0` | `package.json` + `src/manifest.json` (synced on build) |
+| Store zip | `npm run package` → `release/stampstack-1.1.0.zip` |
 | Store build flags | No `declarativeNetRequestFeedback`, no `tabs` |
 | Listing copy | [store/LISTING.md](../store/LISTING.md) |
 | Permission justifications | [store/PERMISSIONS.md](../store/PERMISSIONS.md) |
@@ -21,7 +21,7 @@ Use this when uploading Quell to the [Chrome Web Store Developer Dashboard](http
 1. Bump `version` in `package.json` when releasing a new version (manifest is synced on build).
 2. Confirm filter lists are current: `npm run update-lists` (or let `npm run package` do it).
 3. Run tests: `npm test` and `npm run typecheck`.
-4. Build store zip: `npm run package` → `release/quell-<version>.zip`.
+4. Build store zip: `npm run package` → `release/stampstack-<version>.zip`.
 
 ## Package validation (automatic in `npm run package`)
 
@@ -46,14 +46,14 @@ These steps require your Google account, developer registration, and (usually) p
 
 - [ ] Host `docs/privacy-policy.html` at a **public HTTPS** URL  
   - Suggested: GitHub → Settings → Pages → Deploy from branch → `/docs`  
-  - Expected URL: `https://andreasne89.github.io/quell/privacy-policy.html`
+  - Expected URL: `https://andreasne89.github.io/quell/privacy-policy.html` (repo folder may still be named `quell`)
 - [ ] Open that URL in a private window and confirm it loads
 - [ ] Paste the live URL into **Privacy practices → Privacy policy**
 
 ### Product / listing
 
-- [ ] **Upload package:** `release/quell-1.0.0.zip` (Package tab)
-- [ ] **Item name:** Quell
+- [ ] **Upload package:** `release/stampstack-1.1.0.zip` (Package tab)
+- [ ] **Item name:** StampStack
 - [ ] **Summary:** from [store/LISTING.md](../store/LISTING.md) (≤132 chars)
 - [ ] **Description:** from LISTING.md
 - [ ] **Category:** Productivity (or Tools)
@@ -82,7 +82,7 @@ These steps require your Google account, developer registration, and (usually) p
 ### After publish
 
 - [ ] Save the item ID and public listing URL
-- [ ] Tag the git release: `git tag v1.0.0 && git push origin v1.0.0` (when you choose to push)
+- [ ] Tag the git release: `git tag v1.1.0 && git push origin v1.1.0` (when you choose to push)
 - [ ] Update README with the Chrome Web Store badge/link
 - [ ] Respond to any review follow-ups within the deadline
 
@@ -91,7 +91,7 @@ These steps require your Google account, developer registration, and (usually) p
 ## Review notes (paste into “Notes for reviewer”)
 
 ```
-Quell is a Manifest V3 ad/tracker blocker.
+StampStack is a Manifest V3 ad/tracker blocker.
 
 Single purpose: block ads and trackers using Declarative Net Request + cosmetic/scriptlet filters.
 

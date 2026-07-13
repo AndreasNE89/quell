@@ -22,7 +22,7 @@ function downloadOnce(url, redirects = 0) {
     const req = getter(
       url,
       {
-        headers: { 'User-Agent': 'Quell-adblock/1.0 (+https://github.com/AndreasNE89/quell)' },
+        headers: { 'User-Agent': 'stampstack-adblock/1.1 (+https://github.com/AndreasNE89/quell)' },
         timeout: 120_000,
       },
       (res) => {

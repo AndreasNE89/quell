@@ -223,7 +223,7 @@ function serializeBucket(cos) {
 function writeGenericCss(listId, bucket) {
   const generic = bucket.hideGeneric.filter((s) => !bucket.unhideGeneric.includes(s) && isSafeSelector(s));
   const CHUNK = 500;
-  let css = `/* Quell generic element-hiding for list "${listId}" — generated, do not edit. */\n`;
+  let css = `/* StampStack generic element-hiding for list "${listId}" — generated, do not edit. */\n`;
   for (let i = 0; i < generic.length; i += CHUNK) {
     const group = generic.slice(i, i + CHUNK).join(',\n');
     if (group) css += `${group} { display: none !important; }\n`;
@@ -336,7 +336,7 @@ function main() {
   writeFileSync(join(OUT_DIR, 'scriptlets.json'), JSON.stringify({ byList: scriptletsByList }));
 
   // Legacy combined sheet kept for older loaders / docs; runtime prefers per-list files.
-  let combinedCss = '/* Quell combined generic element-hiding — generated, do not edit. */\n';
+  let combinedCss = '/* StampStack combined generic element-hiding — generated, do not edit. */\n';
   for (const list of metaLists) {
     const p = join(GENERIC_CSS_DIR, `${list.id}.css`);
     if (existsSync(p)) combinedCss += readFileSync(p, 'utf8') + '\n';

@@ -1,4 +1,4 @@
-// Bundle Quell into a loadable unpacked extension in dist/.
+// Bundle StampStack into a loadable unpacked extension in dist/.
 //
 // Flags:
 //   --watch   rebuild JS on change

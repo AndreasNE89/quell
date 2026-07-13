@@ -13,7 +13,10 @@ export const ALLOWLIST_ID_END = 2_000_000;
  */
 export const ALLOWLIST_PRIORITY = 1_000_000;
 
-/** chrome.scripting id for the dynamically-managed generic cosmetic stylesheet. */
+/**
+ * chrome.scripting ids — kept as `quell-*` so upgrades unregister the same ids
+ * registered by older installs (cosmetic / scriptlet registration is id-keyed).
+ */
 export const GENERIC_CSS_SCRIPT_ID = 'quell-generic-cosmetic';
 
 /** MAIN-world document_start YouTube ad hooks (registered only when not paused). */
@@ -25,4 +28,15 @@ export const SCRIPTLETS_SCRIPT_ID = 'quell-scriptlets';
 /** Path (relative to extension root) of the combined generic cosmetic stylesheet. */
 export const GENERIC_CSS_PATH = 'generated/generic-cosmetic.css';
 
-export const STORAGE_KEY = 'quell.settings';
+/** Current settings blob in chrome.storage.local. */
+export const STORAGE_KEY = 'stampstack.settings';
+
+/**
+ * Pre-rebrand settings keys — migrated once into STORAGE_KEY then removed.
+ * Includes short-lived intermediate rename keys from the rebrand process.
+ */
+export const LEGACY_STORAGE_KEYS = [
+  'quell.settings',
+  'passblock.settings',
+  'blockstack.settings',
+] as const;

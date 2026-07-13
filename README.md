@@ -1,4 +1,4 @@
-# Quell
+# StampStack
 
 Manifest V3 ad & tracker blocker for Chromium browsers. Compiles EasyList-style filter lists into `declarativeNetRequest` rulesets, plus cosmetic hiding and scriptlets, aiming for strong uBlock Origin–class coverage within Chrome’s MV3 rules.
 
@@ -23,7 +23,7 @@ npm run build          # compile filters + bundle → dist/
 
 ```bash
 npm run package
-# → release/quell-1.0.0.zip
+# → release/stampstack-1.1.0.zip
 ```
 
 Then follow [`docs/CHROME_WEB_STORE.md`](./docs/CHROME_WEB_STORE.md) for listing copy, privacy URL, screenshots, and review notes.
@@ -46,7 +46,7 @@ Then follow [`docs/CHROME_WEB_STORE.md`](./docs/CHROME_WEB_STORE.md) for listing
 | `npm run bundle` | esbuild + copy assets → `dist/` |
 | `npm run watch` | Rebuild JS on change |
 | `npm run update-lists` | Fetch remote lists into `filters/` |
-| `npm run store-assets` | Generate store promo PNG |
+| `npm run store-assets` / `icons` | Generate icons + store promo PNG from brand art |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm test` | `node --test` |
 | `npm run clean` | Remove build artifacts |

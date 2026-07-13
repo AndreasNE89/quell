@@ -27,7 +27,7 @@ function render(data: PopupData): void {
   const blockingHere = !data.paused && !data.allowlisted && !!data.hostname;
   el.host.textContent = data.hostname ?? 'This page';
   el.siteSub.textContent = data.paused
-    ? 'Quell is paused'
+    ? 'StampStack is paused'
     : data.allowlisted
       ? 'Blocking is off here'
       : 'Blocking on this site';

@@ -1,6 +1,6 @@
-# CLAUDE.md — Quell
+# CLAUDE.md — StampStack
 
-Quell is a private Manifest V3 Chromium extension (`quell-adblock`) that blocks ads/trackers using `declarativeNetRequest`, element-hiding cosmetics, and MAIN-world scriptlets. Goal: maximize EasyList / uBO filter coverage within Chrome MV3 limits.
+StampStack is a private Manifest V3 Chromium extension (`stampstack-adblock`) that blocks ads/trackers using `declarativeNetRequest`, element-hiding cosmetics, and MAIN-world scriptlets. Goal: maximize EasyList / uBO filter coverage within Chrome MV3 limits.
 
 ## Quick commands
 
@@ -28,6 +28,8 @@ Do not hand-edit `src/generated/` or `dist/`.
 - Generic cosmetics = injected CSS via `chrome.scripting`; specific/procedural = content script.
 - Scriptlets must be domain-scoped (compiler drops global scriptlet injection).
 - `src/manifest.json` has empty `rule_resources`; `scripts/build.mjs` fills them from `meta.json`.
+- Settings key is `stampstack.settings` (migrates legacy `quell.settings` and short-lived rename keys).
+- Ruleset id `quell-seed` stays stable; chrome.scripting ids stay `quell-*` for upgrade safety.
 
 ## Testing
 

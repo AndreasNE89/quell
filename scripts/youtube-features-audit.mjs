@@ -1,5 +1,5 @@
 /**
- * Browser test for Quell YouTube features (sponsored + Shorts toggles).
+ * Browser test for StampStack YouTube features (sponsored + Shorts toggles).
  *
  * Usage: node scripts/youtube-features-audit.mjs
  *
@@ -21,7 +21,7 @@ const SHOTS = join(ROOT, 'docs', 'youtube-features-shots');
 
 /**
  * Use the Shorts hub, not a /shorts/<id> that YouTube may rewrite to /watch.
- * Hub path is always `/shorts` until Quell (or the user) leaves it.
+ * Hub path is always `/shorts` until StampStack (or the user) leaves it.
  */
 const SHORTS_URL = 'https://www.youtube.com/shorts';
 const HOME_URL = 'https://www.youtube.com/';
@@ -53,7 +53,7 @@ function isShortsPath(pathname) {
 function shortsRedirectSucceeded(href, path) {
   if (!isOnWwwYoutube(href)) return false;
   if (isConsentHost(new URL(href).hostname)) return false;
-  // Quell leaves Shorts via location.replace → `/`. Reject /watch rewrites of
+  // StampStack leaves Shorts via location.replace → `/`. Reject /watch rewrites of
   // non-Short ids and consent `/m` bounce paths.
   if (isShortsPath(path)) return false;
   if (/^\/m(\/|$)/i.test(path)) return false;
@@ -73,7 +73,7 @@ async function getExtensionId(context) {
     const m = sw.url().match(/chrome-extension:\/\/([a-z]+)\//);
     if (m) return m[1];
   }
-  throw new Error('Quell service worker not found');
+  throw new Error('StampStack service worker not found');
 }
 
 async function setYoutubeOptions(context, extensionId, sponsored, shorts) {
@@ -225,7 +225,7 @@ async function waitForShortsOutcome(page, { expectLeave, timeoutMs = 12000 } = {
 async function measure(page, label) {
   await new Promise((r) => setTimeout(r, 2000));
   const data = await page.evaluate(() => {
-    const style = document.getElementById('quell-youtube-features');
+    const style = document.getElementById('StampStack-youtube-features');
     const css = style?.textContent || '';
     const visible = (sel) => {
       try {
@@ -274,8 +274,8 @@ async function measure(page, label) {
 }
 
 async function main() {
-  const userData = mkdtempSync(join(tmpdir(), 'quell-yt-feat-'));
-  console.log('Launching Chromium + Quell…');
+  const userData = mkdtempSync(join(tmpdir(), 'StampStack-yt-feat-'));
+  console.log('Launching Chromium + StampStack…');
   const context = await chromium.launchPersistentContext(userData, {
     headless: false,
     locale: 'en-US',

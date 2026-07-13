@@ -12,7 +12,7 @@ Required to inject cosmetic CSS and approved scriptlets into pages so leftover a
 
 ## storage
 
-Required to persist user settings (enabled filter lists, preferences) and the per-site allowlist locally on the device. Data is not uploaded to Quell servers.
+Required to persist user settings (enabled filter lists, preferences) and the per-site allowlist locally on the device. Data is not uploaded to StampStack servers.
 
 ## webNavigation
 
@@ -20,7 +20,7 @@ Required to detect navigations so cosmetic filters and scriptlets can be applied
 
 ## Host permission: &lt;all_urls&gt;
 
-Required for a general-purpose ad and tracker blocker that works across websites the user visits. Without broad host access, Quell cannot apply blocking and cosmetics on arbitrary sites.
+Required for a general-purpose ad and tracker blocker that works across websites the user visits. Without broad host access, StampStack cannot apply blocking and cosmetics on arbitrary sites.
 
 ## Not requested (intentionally)
 

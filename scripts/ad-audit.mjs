@@ -1,5 +1,5 @@
 /**
- * Headed Chromium audit: load Quell from dist/, visit ad-heavy sites with
+ * Headed Chromium audit: load StampStack from dist/, visit ad-heavy sites with
  * blocking ON then OFF, and report whether ad traffic / ad UI drops.
  *
  * Usage: node scripts/ad-audit.mjs
@@ -23,7 +23,7 @@ if (!existsSync(join(EXT, 'manifest.json'))) {
   process.exit(1);
 }
 
-/** Ad / tracker host fragments we expect Quell to reduce. */
+/** Ad / tracker host fragments we expect StampStack to reduce. */
 const AD_HOST_RE =
   /(?:^|\.)(?:doubleclick\.net|googlesyndication\.com|googleadservices\.com|googletagservices\.com|pagead2\.googlesyndication\.com|adservice\.google|adsystems\.google|amazon-adsystem\.com|adsrvr\.org|adnxs\.com|ads-twitter\.com|facebook\.com\/tr|connect\.facebook\.net\/.*\/fbevents|scorecardresearch\.com|outbrain\.com|taboola\.com|criteo\.com|moatads\.com|pubmatic\.com|openx\.net|rubiconproject\.com|casalemedia\.com|2mdn\.net|media\.net|adsafeprotected\.com|quantserve\.com|yieldmo\.com|smartadserver\.com|serving-sys\.com|adform\.net|lijit\.com|sharethrough\.com|teads\.tv|spot\.im|zergnet\.com)/i;
 
@@ -114,7 +114,7 @@ async function getExtensionId(context) {
     'Targets seen:',
     targetInfos.map((t) => `${t.type} ${t.url}`).join('\n'),
   );
-  throw new Error('Could not find Quell service worker — extension failed to load');
+  throw new Error('Could not find StampStack service worker — extension failed to load');
 }
 
 async function setPaused(context, extensionId, paused) {
@@ -260,7 +260,7 @@ function verdict(on, off, site) {
     if (on.dom.ytAdShowing || on.dom.ytAdUi) {
       issues.push({
         severity: 'high',
-        fix: 'YouTube in-player / companion ads still present with Quell ON — need better YouTube-specific filters/scriptlets (MV3 cannot match uBO fully; consider known yt ad scriptlets + cosmetics).',
+        fix: 'YouTube in-player / companion ads still present with StampStack ON — need better YouTube-specific filters/scriptlets (MV3 cannot match uBO fully; consider known yt ad scriptlets + cosmetics).',
       });
     } else {
       notes.push('No obvious YouTube ad-showing UI detected (may still miss mid-roll).');
@@ -278,7 +278,7 @@ function verdict(on, off, site) {
   } else if (adReqDrop <= 0 && on.blockedByClient === 0) {
     issues.push({
       severity: 'high',
-      fix: `Third-party ad requests not reduced with Quell ON (on=${on.adRequestCount}, off=${off.adRequestCount}). Check list enablement, DNR coverage for hosts: ${[...new Set([...on.adHosts, ...off.adHosts])].slice(0, 8).join(', ')}`,
+      fix: `Third-party ad requests not reduced with StampStack ON (on=${on.adRequestCount}, off=${off.adRequestCount}). Check list enablement, DNR coverage for hosts: ${[...new Set([...on.adHosts, ...off.adHosts])].slice(0, 8).join(', ')}`,
     });
   } else if (adReqDrop > 0 || blockedOk) {
     notes.push(
@@ -289,7 +289,7 @@ function verdict(on, off, site) {
   if (off.dom.adIframeCount > 0 && on.dom.adIframeCount >= off.dom.adIframeCount) {
     issues.push({
       severity: 'medium',
-      fix: `Ad iframes still visible with Quell ON (on=${on.dom.adIframeCount}, off=${off.dom.adIframeCount}). Need stronger cosmetic/element hiding or scriptlet anti-ad-recovery.`,
+      fix: `Ad iframes still visible with StampStack ON (on=${on.dom.adIframeCount}, off=${off.dom.adIframeCount}). Need stronger cosmetic/element hiding or scriptlet anti-ad-recovery.`,
     });
   } else if (iframeDrop > 0) {
     notes.push(`Ad iframes reduced: ${off.dom.adIframeCount} → ${on.dom.adIframeCount}.`);
@@ -307,8 +307,8 @@ function verdict(on, off, site) {
 }
 
 async function main() {
-  const userData = mkdtempSync(join(tmpdir(), 'quell-audit-'));
-  console.log('Launching Chromium with Quell from', EXT);
+  const userData = mkdtempSync(join(tmpdir(), 'StampStack-audit-'));
+  console.log('Launching Chromium with StampStack from', EXT);
   console.log('Profile:', userData);
 
   // Official Chrome 137+ dropped --load-extension; use Playwright Chromium
@@ -340,14 +340,14 @@ async function main() {
 
   for (const site of selected) {
     console.log(`\n=== ${site.id} ===`);
-    console.log('  Quell ON…');
+    console.log('  StampStack ON…');
     await setPaused(context, extensionId, false);
     const on = await measurePage(context, site, 'on', extensionId);
     console.log(
       `    adReqs=${on.adRequestCount} blockedClient=${on.blockedByClient} adIframes=${on.dom.adIframeCount} adLike=${on.dom.adLikeVisible}`,
     );
 
-    console.log('  Quell OFF (paused)…');
+    console.log('  StampStack OFF (paused)…');
     await setPaused(context, extensionId, true);
     const off = await measurePage(context, site, 'off', extensionId);
     console.log(

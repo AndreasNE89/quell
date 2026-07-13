@@ -5,7 +5,7 @@ Paste these into the Developer Dashboard. Character limits are approximate; trim
 ## Item name
 
 ```
-Quell
+StampStack
 ```
 
 ## Summary (≤132 characters)
@@ -17,7 +17,7 @@ Block ads and trackers with EasyList-style filters, cosmetics, and scriptlets �
 ## Detailed description
 
 ```
-Quell blocks ads and trackers in Chromium browsers using Manifest V3 Declarative Net Request, plus cosmetic filters and scriptlets for leftover page junk.
+StampStack blocks ads and trackers in Chromium browsers using Manifest V3 Declarative Net Request, plus cosmetic filters and scriptlets for leftover page junk.
 
 What it does
 • Network blocking with packaged filter lists (EasyList-style rules compiled for DNR)
@@ -28,7 +28,7 @@ What it does
 
 Privacy
 • No accounts
-• No analytics or telemetry to Quell servers
+• No analytics or telemetry to StampStack servers
 • Settings stay in your browser’s local storage
 • See the privacy policy linked on the store listing
 
@@ -37,7 +37,7 @@ https://github.com/AndreasNE89/quell
 
 Tips
 • After install, browse normally — blocking starts with the packaged lists
-• Use the popup to pause Quell on a site that breaks
+• Use the popup to pause StampStack on a site that breaks
 • Open Options to manage which lists are enabled
 ```
 
@@ -61,7 +61,7 @@ https://github.com/AndreasNE89/quell/issues
 
 1. **Popup** — toolbar popup on a normal page (show block status / allowlist control).
 2. **Options — Lists** — filter lists toggles.
-3. **Before/after** (optional) — same site with Quell on vs allowlisted (honest, not exaggerated).
+3. **Before/after** (optional) — same site with StampStack on vs allowlisted (honest, not exaggerated).
 
 Sizes: **1280×800** preferred, or **640×400**. PNG or JPEG. At least 1 screenshot required; 2–3 recommended.
 

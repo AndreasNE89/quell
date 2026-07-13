@@ -154,7 +154,7 @@ function setConstant(chain: string, rawValue: string): void {
 }
 
 const AbortError = (): never => {
-  throw new ReferenceError('Quell: aborted property access');
+  throw new ReferenceError('StampStack: aborted property access');
 };
 
 function abortOnPropertyRead(chain: string): void {
@@ -223,7 +223,7 @@ function abortCurrentInlineScript(args: string[]): void {
   const guard = (): unknown => {
     const el = document.currentScript;
     if (el instanceof HTMLScriptElement && !el.src && match(el.textContent ?? '')) {
-      throw new ReferenceError('Quell: aborted inline script');
+      throw new ReferenceError('StampStack: aborted inline script');
     }
     return orig;
   };

@@ -1,4 +1,4 @@
-# Quell — Agent guide
+# StampStack — Agent guide
 
 Manifest V3 Chromium ad/tracker blocker aiming for uBlock Origin–class blocking within MV3 limits (`declarativeNetRequest` + cosmetics + scriptlets).
 
@@ -40,7 +40,7 @@ Load the extension: Chrome → `chrome://extensions` → Developer mode → **Lo
 1. **Network**: filter lines → DNR static rulesets (`scripts/compile-filters.mjs` + `scripts/lib/*`).
 2. **Cosmetics**: generic CSS registered via `chrome.scripting`; hostname-specific + procedural via content script messaging.
 3. **Scriptlets**: MAIN-world IIFE (`scriptlets.js`) for domain-scoped injections.
-4. **Settings**: `chrome.storage.local` key `quell.settings` (`paused`, `enabledLists`, `allowlist`, `blockedTotal`).
+4. **Settings**: `chrome.storage.local` key `stampstack.settings` (`paused`, `enabledLists`, `allowlist`, `blockedTotal`). Migrates from `quell.settings` / intermediate rename keys.
 5. **Allowlist**: dynamic DNR `allowAllRequests` rules with ids ≥ `1_000_000`.
 
 Messages are a single discriminated union in `src/shared/types.ts`. Keep handlers and senders in sync.
@@ -54,6 +54,7 @@ Messages are a single discriminated union in `src/shared/types.ts`. Keep handler
 - Content scripts declared in the manifest must stay **IIFE** bundles; SW/popup/options are **ESM**.
 - Do not invent MV3 APIs that Chrome does not support (no full uBO network engine in the SW).
 - Commit only when the user asks.
+- Keep DNR ruleset id `quell-seed` stable for upgrades; user-visible title may say StampStack Seed.
 
 ## Load / debug tips
 

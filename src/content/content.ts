@@ -1,4 +1,4 @@
-// Quell content script (ISOLATED world, document_start).
+// StampStack content script (ISOLATED world, document_start).
 //
 // Generic element-hiding arrives as a browser-injected stylesheet (registered by the
 // service worker, allowlist-aware). This script handles site-specific hide selectors,
@@ -75,7 +75,7 @@ async function sendWithRetry(msg: Message, attempts = 5): Promise<CosmeticRespon
     }
     await sleep(50 * (i + 1));
   }
-  if (lastErr) console.warn('[quell] cosmetic:get failed after retries', lastErr);
+  if (lastErr) console.warn('[StampStack] cosmetic:get failed after retries', lastErr);
   return null;
 }
 
@@ -107,7 +107,7 @@ function injectSpecificCss(hide: string[], unhide: string[]): void {
   if (safeUnhide.length) css += `${safeUnhide.join(',\n')} { display: revert !important; }\n`;
 
   const style = document.createElement('style');
-  style.setAttribute('data-quell', 'cosmetic');
+  style.setAttribute('data-StampStack', 'cosmetic');
   style.textContent = css;
   (document.head || document.documentElement).appendChild(style);
 }

@@ -1,4 +1,4 @@
-/* Quell neutered stand-in for Google Publisher Tag (googletagservices gpt.js).
+/* StampStack neutered stand-in for Google Publisher Tag (googletagservices gpt.js).
    Reproduces the googletag API shape so page scripts run, but defines no ad slots. */
 (function () {
   'use strict';

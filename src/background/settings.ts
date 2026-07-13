@@ -1,7 +1,8 @@
 // Load/save of persisted settings with sane defaults.
+// Migrates pre-rebrand keys → `stampstack.settings`.
 
 import type { Settings } from '../shared/types.js';
-import { STORAGE_KEY } from '../shared/constants.js';
+import { LEGACY_STORAGE_KEYS, STORAGE_KEY } from '../shared/constants.js';
 
 export function defaultSettings(): Settings {
   return {
@@ -15,8 +16,25 @@ export function defaultSettings(): Settings {
 }
 
 export async function loadSettings(): Promise<Settings> {
-  const stored = await chrome.storage.local.get(STORAGE_KEY);
-  return { ...defaultSettings(), ...(stored[STORAGE_KEY] as Partial<Settings> | undefined) };
+  const keys = [STORAGE_KEY, ...LEGACY_STORAGE_KEYS];
+  const stored = await chrome.storage.local.get([...keys]);
+  const current = stored[STORAGE_KEY] as Partial<Settings> | undefined;
+  if (current) {
+    const stale = LEGACY_STORAGE_KEYS.filter((k) => k in stored);
+    if (stale.length) await chrome.storage.local.remove([...stale]);
+    return { ...defaultSettings(), ...current };
+  }
+
+  for (const legacyKey of LEGACY_STORAGE_KEYS) {
+    const legacy = stored[legacyKey] as Partial<Settings> | undefined;
+    if (!legacy) continue;
+    const migrated = { ...defaultSettings(), ...legacy };
+    await chrome.storage.local.set({ [STORAGE_KEY]: migrated });
+    await chrome.storage.local.remove([...LEGACY_STORAGE_KEYS]);
+    return migrated;
+  }
+
+  return defaultSettings();
 }
 
 export async function saveSettings(settings: Settings): Promise<void> {

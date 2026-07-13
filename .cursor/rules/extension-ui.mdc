@@ -4,7 +4,7 @@ globs: src/popup/**/*,src/options/**/*
 alwaysApply: false
 ---
 
-# Quell UI
+# StampStack UI
 
 - Match existing popup/options structure: plain HTML + CSS + small TS controller (no React).
 - Talk to the SW only through `Message` types; never poke DNR APIs from the UI.

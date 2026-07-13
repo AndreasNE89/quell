@@ -1,4 +1,4 @@
-/* Quell neutered stand-in for Google Analytics (analytics.js / ga.js / gtm.js).
+/* StampStack neutered stand-in for Google Analytics (analytics.js / ga.js / gtm.js).
    Implements the public surface pages call so nothing throws, but sends no beacons. */
 (function () {
   'use strict';

@@ -1,4 +1,4 @@
-// Quell scriptlet library entry (MAIN world).
+// StampStack scriptlet library entry (MAIN world).
 //
 // Loaded via chrome.scripting.executeScript from the service worker with the
 // enabled-list-filtered rule set. Exposes `__quellApplyScriptlets` for the injector

@@ -1,4 +1,4 @@
-# Quell architecture
+# StampStack architecture
 
 ## Pipeline
 
@@ -24,7 +24,7 @@ scripts/build.mjs (esbuild + copy)
 
 ### Service worker (`src/background/service-worker.ts`)
 
-Ephemeral process. Durable state in `chrome.storage.local` (`quell.settings`).
+Ephemeral process. Durable state in `chrome.storage.local` (`stampstack.settings`).
 
 On wake / settings change it:
 
@@ -35,14 +35,14 @@ On wake / settings change it:
 
 ### Network blocking
 
-Chrome evaluates static DNR rulesets. Quell does **not** reimplement a full network filter engine at runtime. Unsupported EasyList features are skipped at compile time (see coverage report from `compile-filters`).
+Chrome evaluates static DNR rulesets. StampStack does **not** reimplement a full network filter engine at runtime. Unsupported EasyList features are skipped at compile time (see coverage report from `compile-filters`).
 
 ### Cosmetics
 
 | Kind | Mechanism |
 |------|-----------|
 | Generic hide | `generated/generic-cosmetic.css` registered as content CSS |
-| Specific hide / unhide | Content script injects `<style data-quell>` |
+| Specific hide / unhide | Content script injects `<style data-StampStack>` |
 | Procedural | `src/engine/procedural.ts` + MutationObserver |
 
 ### Scriptlets

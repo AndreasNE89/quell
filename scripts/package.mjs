@@ -1,4 +1,4 @@
-// Zip dist/ into release/quell-<version>.zip for Chrome Web Store upload.
+// Zip dist/ into release/stampstack-<version>.zip for Chrome Web Store upload.
 //
 // Usage:
 //   npm run package              # update-lists + store build + zip
@@ -93,7 +93,7 @@ function validateDist() {
   return { man, rules };
 }
 
-console.log('== Quell store package ==');
+console.log('== StampStack store package ==');
 if (!skipLists) {
   console.log('\n[1/3] Updating filter lists…');
   run('npm', ['run', 'update-lists']);
@@ -109,7 +109,7 @@ const { man, rules } = validateDist();
 const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
 const version = man.version || pkg.version || '0.0.0';
 mkdirSync(OUT_DIR, { recursive: true });
-const zipPath = join(OUT_DIR, `quell-${version}.zip`);
+const zipPath = join(OUT_DIR, `stampstack-${version}.zip`);
 
 console.log('\n[3/3] Zipping…');
 const n = await zipDist(zipPath);

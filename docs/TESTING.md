@@ -1,4 +1,4 @@
-# Testing Quell
+# Testing StampStack
 
 ## Automated
 
@@ -27,5 +27,5 @@ Good unit-test targets:
 |--------|--------|
 | Filter parser / DNR emit | `npm run compile-filters` + skim skip reasons |
 | Service worker / settings | Reload extension; pause + allowlist round-trip |
-| Content / cosmetics | Hard-refresh tab; inspect `style[data-quell]` |
+| Content / cosmetics | Hard-refresh tab; inspect `style[data-StampStack]` |
 | Manifest / build | Confirm `dist/manifest.json` has `rule_resources` |

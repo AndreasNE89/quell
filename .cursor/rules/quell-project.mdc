@@ -1,11 +1,11 @@
 ---
-description: Quell project defaults for every agent session
+description: StampStack project defaults for every agent session
 alwaysApply: true
 ---
 
-# Quell project
+# StampStack project
 
-This repo is **Quell**, an MV3 Chromium ad blocker (`package.json` name `quell-adblock`).
+This repo is **StampStack**, an MV3 Chromium ad blocker (`package.json` name `stampstack-adblock`). The git folder/remote may still be named `quell`.
 
 ## Before coding
 

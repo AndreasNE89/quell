@@ -1,4 +1,4 @@
-/* Quell neutered stand-in for googlesyndication adsbygoogle.js.
+/* StampStack neutered stand-in for googlesyndication adsbygoogle.js.
    Provides the globals pages feature-detect so layouts don't break, but loads no ads. */
 (function () {
   'use strict';
