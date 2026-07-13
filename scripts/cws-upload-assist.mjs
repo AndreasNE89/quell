@@ -7,7 +7,7 @@
  *
  * Usage:
  *   node scripts/cws-upload-assist.mjs
- *   node scripts/cws-upload-assist.mjs --zip path\to\stampstack-1.1.0.zip
+ *   node scripts/cws-upload-assist.mjs --zip path\to\stampstack-1.1.1.zip
  *
  * If Google login appears, sign in in THAT Chrome window. Script waits; Chrome stays open.
  */
@@ -29,7 +29,7 @@ import { createInterface } from 'node:readline';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
 
-const ZIP_DEFAULT = join(ROOT, 'release', 'stampstack-1.1.0.zip');
+const ZIP_DEFAULT = join(ROOT, 'release', 'stampstack-1.1.1.zip');
 const PROMO = join(ROOT, 'store', 'promo-small.png');
 const ICON = join(ROOT, 'src', 'icons', 'icon-128.png');
 const CHROME_EXE = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
