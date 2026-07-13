@@ -1,0 +1,12 @@
+---
+description: Popup and options UI conventions
+globs: src/popup/**/*,src/options/**/*
+alwaysApply: false
+---
+
+# Quell UI
+
+- Match existing popup/options structure: plain HTML + CSS + small TS controller (no React).
+- Talk to the SW only through `Message` types; never poke DNR APIs from the UI.
+- Keep the UI dense and clear (product UI, not marketing). Reuse existing class names and spacing.
+- After UI TS/HTML/CSS changes, `npm run bundle` (or `watch`) and reload the extension to verify.

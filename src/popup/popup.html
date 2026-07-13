@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="popup.css" />
+    <title>Quell</title>
+  </head>
+  <body>
+    <header class="head">
+      <div class="brand">
+        <span class="dot" id="statusDot"></span>
+        <span class="name">Quell</span>
+      </div>
+      <button class="icon-btn" id="optionsBtn" title="Settings" aria-label="Settings">⚙</button>
+    </header>
+
+    <section class="site">
+      <div class="site-host" id="host">—</div>
+      <div class="site-sub" id="siteSub">Blocking on this site</div>
+    </section>
+
+    <label class="switch-row">
+      <span id="siteToggleLabel">Block on this site</span>
+      <span class="switch">
+        <input type="checkbox" id="siteToggle" />
+        <span class="slider"></span>
+      </span>
+    </label>
+
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-num" id="tabBlocked">0</div>
+        <div class="stat-label">blocked here</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num" id="totalBlocked">0</div>
+        <div class="stat-label">blocked total</div>
+      </div>
+    </div>
+
+    <label class="switch-row subtle">
+      <span>Pause Quell everywhere</span>
+      <span class="switch">
+        <input type="checkbox" id="pauseToggle" />
+        <span class="slider"></span>
+      </span>
+    </label>
+
+    <footer class="foot">
+      <button class="link" id="openOptions">Filter lists &amp; settings →</button>
+    </footer>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

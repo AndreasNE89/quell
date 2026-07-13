@@ -1,0 +1,15 @@
+---
+description: TypeScript conventions for Quell extension sources
+globs: src/**/*.ts
+alwaysApply: false
+---
+
+# Extension TypeScript
+
+- Target Chrome 120+, strict TS, ESM imports with `.js` extensions in relative imports where already used.
+- Service worker + popup + options → bundled as **ESM**; content + scriptlets entries → **IIFE** (see `scripts/build.mjs`).
+- Shared RPC: extend `Message` in `src/shared/types.ts` first; implement SW `onMessage` + callers together.
+- Settings key is `quell.settings` via `src/background/settings.ts` — keep defaults backward-compatible.
+- Prefer small modules; put hostname/cosmetic pure logic in `src/engine/` or `src/shared/` for testability.
+- Do not import Node or `scripts/` code into `src/` runtime.
+- Log SW failures with a `[quell]` prefix; avoid empty `catch` unless intentional (content script SW-unavailable path).

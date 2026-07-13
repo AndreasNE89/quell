@@ -1,0 +1,157 @@
+! Title: Quell Seed
+! Description: Compact, high-value built-in rules so Quell blocks ads/trackers offline,
+!   before the user fetches the full EasyList/uBO lists via `npm run update-lists`.
+! Syntax: Adblock Plus / EasyList (a subset). Comments start with '!'.
+! Expires: n/a (ships in-repo)
+
+! ==========================================================================
+! NETWORK — display/programmatic ad servers (block)
+! ==========================================================================
+||doubleclick.net^
+||googlesyndication.com^$third-party
+||googleadservices.com^
+||googletagservices.com^
+||adservice.google.com^
+||adservice.google.*^
+||2mdn.net^$third-party
+||3lift.com^
+||33across.com^
+||adnxs.com^
+||adnxs-simple.com^
+||amazon-adsystem.com^
+||adsystem.amazon.*^
+||criteo.com^
+||criteo.net^
+||taboola.com^
+||taboolasyndication.com^
+||outbrain.com^
+||pubmatic.com^
+||rubiconproject.com^
+||openx.net^
+||casalemedia.com^
+||adform.net^
+||media.net^
+||moatads.com^
+||adsafeprotected.com^
+||doubleverify.com^
+||serving-sys.com^
+||bidswitch.net^
+||smartadserver.com^
+||teads.tv^
+||sharethrough.com^
+||indexww.com^
+||yieldmo.com^
+||districtm.io^
+||zedo.com^
+||adroll.com^
+||contextweb.com^
+||gumgum.com^
+||spotxchange.com^
+||spotx.tv^
+||adcolony.com^
+||applovin.com^
+||inmobi.com^
+||smaato.net^
+||mopub.com^
+||servedbyadbutler.com^
+||adzerk.net^
+||adthrive.com^
+||ezoic.net^
+||ezodn.com^
+||mgid.com^
+||revcontent.com^
+||adsterra.com^
+||popads.net^
+||propellerads.com^
+||onclickads.net^
+||pagead2.googlesyndication.com^
+
+! ==========================================================================
+! NETWORK — analytics/trackers (privacy)
+! ==========================================================================
+||google-analytics.com^
+||ssl.google-analytics.com^
+||facebook.com/tr/
+||facebook.com/tr?
+||scorecardresearch.com^
+||quantserve.com^
+||quantcount.com^
+||hotjar.com^
+||hotjar.io^
+||mixpanel.com^$third-party
+||cdn.segment.com^
+||segment.io^
+||chartbeat.com^
+||chartbeat.net^
+||nr-data.net^
+||fullstory.com^
+||mouseflow.com^
+||crazyegg.com^
+||optimizely.com^$third-party
+||amplitude.com^$third-party
+||branch.io^$third-party
+||bugsnag.com^$third-party
+||bluekai.com^
+||demdex.net^
+||rlcdn.com^
+||agkn.com^
+||tapad.com^
+||crwdcntrl.net^
+||exelator.com^
+||mathtag.com^
+||rfihub.com^
+||adsrvr.org^
+||everesttech.net^
+||krxd.net^
+||sail-horizon.com^
+||yieldlab.net^
+
+! ==========================================================================
+! NETWORK — redirect the big first-party-embedded scripts to neutered stubs so
+!   pages that feature-detect them keep working (higher priority than block).
+! ==========================================================================
+||pagead2.googlesyndication.com/pagead/js/adsbygoogle.js$script,redirect=googlesyndication_adsbygoogle.js
+||google-analytics.com/analytics.js$script,redirect=google-analytics_analytics.js
+||ssl.google-analytics.com/ga.js$script,redirect=google-analytics_ga.js
+||googletagmanager.com/gtm.js$script,redirect=googletagmanager_gtm.js
+||googletagmanager.com/gtag/js$script,redirect=googletagmanager_gtm.js
+||googletagservices.com/tag/js/gpt.js$script,redirect=googletagservices_gpt.js
+
+! ==========================================================================
+! COSMETIC — generic element hiding (must be broadly safe; applied on all sites)
+! ==========================================================================
+##.adsbygoogle
+##ins.adsbygoogle
+##[id^="google_ads_iframe_"]
+##[id^="div-gpt-ad"]
+##[id^="google_ads_frame"]
+##[data-google-query-id]
+##.trc_related_container
+##.OUTBRAIN
+##.ob-widget
+##div[data-ad-slot]
+##.ad-slot
+##.advertisement
+##.advert-container
+
+! ==========================================================================
+! COSMETIC — site-specific examples (demonstrate per-domain hiding)
+! ==========================================================================
+forbes.com##.fbs-ad
+forbes.com##.article-sponsored
+businessinsider.com##.sponsor-post
+theguardian.com##.ad-slot-container
+weather.com##.ad-wrapper
+
+! ==========================================================================
+! COSMETIC — procedural (need the JS engine; :has / :matches-css / etc.)
+! ==========================================================================
+imgur.com##.Gallery-Sidebar-PostContainer:has(> a[href*="/ad/"])
+example.org##div.container:has(> .sponsored-label)
+
+! ==========================================================================
+! SCRIPTLETS — illustrative; real anti-adblock scriptlets arrive with uBO lists.
+!   Syntax: domain##+js(name, arg1, arg2)
+! ==========================================================================
+example.com##+js(set-constant, canRunAds, true)
+example.com##+js(abort-on-property-read, adblockDetector)

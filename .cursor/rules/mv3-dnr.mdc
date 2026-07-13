@@ -1,0 +1,16 @@
+---
+description: MV3 declarativeNetRequest and filter-compiler constraints
+globs: scripts/**/*.{mjs,js},filters/**/*,src/background/**/*.ts,src/shared/constants.ts
+alwaysApply: false
+---
+
+# MV3 / DNR
+
+- Network blocking is **compile-time DNR**, not a runtime EasyList engine.
+- Budgets and priorities live in `scripts/lib/limits.mjs` — update there, not as magic numbers elsewhere.
+- Regex rules share a **global** cap (`MAX_NUMBER_OF_REGEX_RULES`); skip when budget is exhausted.
+- Redirect priority must stay **above** block and **below** allow (see comments in `limits.mjs`).
+- Dynamic allowlist rules use ids ≥ `ALLOWLIST_ID_START` (`1_000_000`) and priority `ALLOWLIST_PRIORITY`.
+- Manifest `declarative_net_request.rule_resources` is empty in source; `scripts/build.mjs` fills it from `meta.json`.
+- After changing `parse-filter.mjs` / `to-dnr.mjs` / lists: run `npm run compile-filters` and check the coverage/skip report.
+- Scriptlets must remain **domain-scoped** in the compiler (no global MAIN-world injection).

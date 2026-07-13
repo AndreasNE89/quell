@@ -1,0 +1,11 @@
+﻿# Cursor indexing / context noise
+node_modules/
+dist/
+*.log
+.DS_Store
+package-lock.json
+
+# Large generated filter artifacts (rebuild with npm run compile-filters)
+src/generated/rulesets/
+src/generated/cosmetic.json
+src/generated/scriptlets.json

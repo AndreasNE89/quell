@@ -1,0 +1,10 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+.idea/
+# Generated artifacts (produced by `npm run build`)
+src/generated/
+# Personal agent overrides
+.claude.local.md
+.cursor/*.local.*

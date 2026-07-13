@@ -1,0 +1,25 @@
+---
+description: Quell project defaults for every agent session
+alwaysApply: true
+---
+
+# Quell project
+
+This repo is **Quell**, an MV3 Chromium ad blocker (`package.json` name `quell-adblock`).
+
+## Before coding
+
+- Read `AGENTS.md` for commands and hard rules.
+- Prefer `docs/ARCHITECTURE.md` when changing SW / DNR / cosmetics flow.
+
+## Do / don't
+
+- **Do** edit `src/` and `scripts/`; regenerate with `npm run build` or `compile-filters`.
+- **Don't** hand-edit `src/generated/` or `dist/`.
+- **Don't** commit secrets, `node_modules`, or generated artifacts.
+- **Do** keep `src/shared/types.ts` message union in sync with all handlers.
+- **Do** run `npm run typecheck` after TypeScript changes; after parser/DNR changes also compile filters.
+
+## Commit policy
+
+Only commit when the user explicitly asks.

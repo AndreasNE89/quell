@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="options.css" />
+    <title>Quell — Settings</title>
+  </head>
+  <body>
+    <main class="wrap">
+      <header class="page-head">
+        <h1><span class="dot"></span> Quell</h1>
+        <p class="tagline">Manifest V3 ad &amp; tracker blocker · uBO-parity within the rules</p>
+      </header>
+
+      <section class="cards">
+        <div class="card">
+          <div class="card-num" id="statTotal">0</div>
+          <div class="card-label">requests blocked</div>
+        </div>
+        <div class="card">
+          <div class="card-num" id="statRules">0</div>
+          <div class="card-label">network rules active</div>
+        </div>
+        <div class="card">
+          <div class="card-num" id="statRegex">0</div>
+          <div class="card-label">regex rules / 1000</div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Filter lists</h2>
+        <p class="hint">
+          Toggle lists on or off. Enabling a list turns on its compiled DNR ruleset.
+          To refresh list contents from upstream, run <code>npm run update-lists</code>
+          then <code>npm run build</code> and reload the extension.
+        </p>
+        <div id="lists" class="lists">Loading…</div>
+      </section>
+
+      <footer class="page-foot">
+        <span>Quell v<span id="ver">0.1.0</span></span>
+        <span>Loaded as an unpacked MV3 extension</span>
+      </footer>
+    </main>
+    <script type="module" src="options.js"></script>
+  </body>
+</html>

@@ -1,0 +1,53 @@
+{
+  "comment": "Registry of filter lists compiled into DNR rulesets. `file` is relative to filters/. Run `npm run update-lists` to populate the downloadable ones; quell-seed.txt ships in-repo so the extension blocks ads offline.",
+  "lists": [
+    {
+      "id": "quell-seed",
+      "title": "Quell Seed (built-in)",
+      "group": "ads",
+      "enabledByDefault": true,
+      "file": "quell-seed.txt",
+      "url": null
+    },
+    {
+      "id": "easylist",
+      "title": "EasyList",
+      "group": "ads",
+      "enabledByDefault": true,
+      "file": "easylist.txt",
+      "url": "https://easylist.to/easylist/easylist.txt"
+    },
+    {
+      "id": "easyprivacy",
+      "title": "EasyPrivacy",
+      "group": "privacy",
+      "enabledByDefault": true,
+      "file": "easyprivacy.txt",
+      "url": "https://easylist.to/easylist/easyprivacy.txt"
+    },
+    {
+      "id": "ubo-filters",
+      "title": "uBlock Origin — Ads/Privacy",
+      "group": "ads",
+      "enabledByDefault": true,
+      "file": "ubo-filters.txt",
+      "url": "https://ublockorigin.github.io/uAssetsCDN/filters/filters.min.txt"
+    },
+    {
+      "id": "ubo-badware",
+      "title": "uBlock Origin — Badware risks",
+      "group": "security",
+      "enabledByDefault": true,
+      "file": "ubo-badware.txt",
+      "url": "https://ublockorigin.github.io/uAssetsCDN/filters/badware.min.txt"
+    },
+    {
+      "id": "easylist-cookie",
+      "title": "EasyList Cookie (annoyances)",
+      "group": "annoyances",
+      "enabledByDefault": false,
+      "file": "easylist-cookie.txt",
+      "url": "https://secure.fanboy.co.nz/fanboy-cookiemonster.txt"
+    }
+  ]
+}
