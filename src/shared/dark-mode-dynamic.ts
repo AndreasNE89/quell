@@ -119,3 +119,13 @@ export function remapBorderColor(css: string): string | null {
   const l = 0.28;
   return rgbToCss(hslToRgb({ h: hsl.h, s: hsl.s * 0.7, l, a: rgb.a }));
 }
+
+/**
+ * Remap the color stops of a CSS gradient value (a computed `background-image` like
+ * `linear-gradient(rgb(255,255,255), rgb(240,240,240))`). Each rgb/rgba stop is run through the
+ * background remap (light → charcoal), non-color parts (angles, positions, stop %) are left
+ * intact, and dark/transparent stops are kept. Returns the value unchanged when nothing darkened.
+ */
+export function remapGradient(value: string): string {
+  return value.replace(/rgba?\([^)]*\)/gi, (m) => remapBackgroundColor(m) ?? m);
+}

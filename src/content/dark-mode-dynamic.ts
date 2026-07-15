@@ -13,6 +13,8 @@
 import {
   remapBackgroundColor,
   remapForegroundColor,
+  remapBorderColor,
+  remapGradient,
   ROOT_BG,
   ROOT_FG,
 } from '../shared/dark-mode-dynamic.js';
@@ -63,13 +65,33 @@ function processElement(el: HTMLElement): void {
   // one explicitly, so we recolor exactly those and let everything else inherit the light text.
   const bg = remapBackgroundColor(cs.backgroundColor);
   const fg = remapForegroundColor(cs.color);
-  if (!bg && !fg) {
+
+  // Gradient backgrounds (light hero/button/card gradients → dark). Skip actual images (url())
+  // so we never touch media; leave dark gradients alone.
+  const bgImg = cs.backgroundImage;
+  const grad =
+    bgImg && bgImg !== 'none' && bgImg.includes('gradient(') && !bgImg.includes('url(')
+      ? remapGradient(bgImg)
+      : null;
+  const gradChanged = grad != null && grad !== bgImg;
+
+  // Borders, but only where one is actually drawn (avoids overriding every element's default).
+  const hasBorder =
+    parseFloat(cs.borderTopWidth) > 0 ||
+    parseFloat(cs.borderRightWidth) > 0 ||
+    parseFloat(cs.borderBottomWidth) > 0 ||
+    parseFloat(cs.borderLeftWidth) > 0;
+  const bc = hasBorder && cs.borderColor ? remapBorderColor(cs.borderColor) : null;
+
+  if (!bg && !fg && !gradChanged && !bc) {
     el.setAttribute(MARK, '');
     return;
   }
   const saves: SavedProp[] = [];
   if (bg) override(el, saves, 'background-color', bg);
   if (fg) override(el, saves, 'color', fg);
+  if (gradChanged) override(el, saves, 'background-image', grad!);
+  if (bc) override(el, saves, 'border-color', bc);
   saved.set(el, saves);
   el.setAttribute(MARK, '');
 }
