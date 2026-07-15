@@ -175,10 +175,15 @@ export function isConfidentlyAlreadyDark(signals: DarkPageSignals): AlreadyDarkV
   return { dark: false, confidence: 'none', reason: 'looks light' };
 }
 
-const MEDIA_REINVERT = `img, video, picture, canvas, svg, iframe, embed, object,
+/** Selector for elements the page-wide invert must NOT touch (media + inline bg images).
+ *  Exported so the content script can re-apply the same re-invert inside shadow roots. */
+export const MEDIA_REINVERT = `img, video, picture, canvas, svg, iframe, embed, object,
 [style*="background-image"],
 [style*="background:url"],
 [style*="background: url"]`;
+
+/** The rule that re-inverts media so it cancels back to natural under the page filter. */
+export const MEDIA_REINVERT_RULE = `${MEDIA_REINVERT} { filter: invert(1) hue-rotate(180deg) !important; }`;
 
 /**
  * Build a smart dark stylesheet for a light page.
