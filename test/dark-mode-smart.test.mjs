@@ -118,23 +118,8 @@ test('should keep borderline dark at low confidence', () => {
   assert.equal(v.confidence, 'low');
 });
 
-test('should use matte contrast, pulling toward neutral only for weak-contrast pages', () => {
-  // Weak source contrast (washed gray-on-gray) → pull back toward neutral for legibility.
-  const weak = mod.buildSmartDarkCss({
-    htmlBgLuminance: 0.6,
-    bodyBgLuminance: 0.6,
-    htmlTextLuminance: 0.45,
-    bodyTextLuminance: 0.45,
-    htmlColorScheme: '',
-    bodyColorScheme: '',
-    metaThemeLuminance: null,
-  });
-  assert.match(weak, /contrast\(0\.95\)/);
-  assert.match(weak, /color-scheme: dark/);
-  assert.match(weak, /invert\(1\) hue-rotate\(180deg\)/);
-
-  // Strong source contrast → full matte (soft charcoal bg, eased white text).
-  const strong = mod.buildSmartDarkCss({
+test('smart CSS is a clean symmetric invert (no contrast/bg/color-scheme that would touch images)', () => {
+  const css = mod.buildSmartDarkCss({
     htmlBgLuminance: 0.97,
     bodyBgLuminance: 0.97,
     htmlTextLuminance: 0.05,
@@ -143,9 +128,12 @@ test('should use matte contrast, pulling toward neutral only for weak-contrast p
     bodyColorScheme: '',
     metaThemeLuminance: null,
   });
-  assert.match(strong, /contrast\(0\.82\)/);
-  // Media gets the compensating contrast so photos/video stay natural (net ≈ 1.0).
-  assert.match(strong, /contrast\(1\.22\)/);
+  assert.match(css, /invert\(1\) hue-rotate\(180deg\)/);
+  // The media re-invert must be the exact inverse of the html filter so images cancel to
+  // natural — i.e. NO contrast (a >1 contrast clamps and distorts them), NO forced bg/scheme.
+  assert.doesNotMatch(css, /contrast/);
+  assert.doesNotMatch(css, /color-scheme/);
+  assert.doesNotMatch(css, /background-color/);
 });
 
 test('should emit reset CSS that clears invert', () => {

@@ -185,67 +185,28 @@ const MEDIA_REINVERT = `img, video, picture, canvas, svg, iframe, embed, object,
  * Uses a controlled invert stack (pre-light bg → consistent dark) + contrast bump when needed.
  * Injected with `data-stampstack="dark-smart"` and overrides FOUC registered invert.
  */
-export function buildSmartDarkCss(signals: DarkPageSignals): string {
-  const bgCandidates = [signals.htmlBgLuminance, signals.bodyBgLuminance].filter(
-    (n): n is number => n != null,
-  );
-  const bg = bgCandidates.length ? Math.min(...bgCandidates) : 0.95;
-  const textCandidates = [signals.htmlTextLuminance, signals.bodyTextLuminance].filter(
-    (n): n is number => n != null,
-  );
-  const text = textCandidates.length ? Math.max(...textCandidates) : 0.15;
-
-  // Pre-invert html background: slightly off-white so invert lands near charcoal, not pure black.
-  let preBg = '#f0f0f0';
-  if (bg > 0.9) preBg = '#ececec';
-  else if (bg > 0.7) preBg = '#e4e4e4';
-  else preBg = '#dedede';
-
-  // Matte contrast: <1 lifts inverted-white backgrounds off pure #000 to a soft charcoal and
-  // eases white text — a gentler dark than a straight invert. Pull back toward neutral only
-  // for pages whose own text/bg contrast is already weak (washed gray-on-gray), where extra
-  // softening would hurt legibility.
-  let contrast = 0.82;
-  if (text != null && bg != null) {
-    const c = contrastRatio(text, bg);
-    if (c < 4.5) contrast = 0.95;
-    else if (c < 7) contrast = 0.9;
-  }
-
-  // Compensate media contrast so photos/video stay natural under the matte html layer
-  // (net ≈ 1.0). Kept in sync with the html contrast above.
-  const mediaContrast = (1 / contrast).toFixed(2);
-
-  return `/* StampStack smart dark — matte controlled invert */
+export function buildSmartDarkCss(_signals: DarkPageSignals): string {
+  // Symmetric clean invert so media cancels to its natural appearance (see dark-mode.css).
+  // No contrast: an ancestor contrast also hits media and clamps, visibly distorting images.
+  // No forced background-color / color-scheme: forcing background would pollute the content
+  // script's already-dark re-sample, and color-scheme:dark under invert mis-paints controls.
+  return `/* StampStack smart dark — clean invert */
 html {
-  filter: invert(1) hue-rotate(180deg) contrast(${contrast}) !important;
-  background-color: ${preBg} !important;
-  color-scheme: dark !important;
-}
-body {
-  background-color: transparent !important;
-  color-scheme: dark !important;
+  filter: invert(1) hue-rotate(180deg) !important;
 }
 ${MEDIA_REINVERT} {
-  filter: invert(1) hue-rotate(180deg) contrast(${mediaContrast}) !important;
-}
-input, textarea, select, button {
-  color-scheme: dark;
+  filter: invert(1) hue-rotate(180deg) !important;
 }
 `;
 }
 
-/** CSS that cancels registered invert (already-dark / auto-skip).
- * The FOUC sheet (dark-mode.css) forces filter, background-color AND color-scheme with
- * !important — so the reset must neutralize all three, or an already-dark page keeps a
- * light-gray html background (bleeds through overscroll / body margins) and forced
- * color-scheme:dark. */
+/** CSS that cancels registered invert (already-dark / auto-skip). Only the filter needs
+ * neutralizing — the FOUC sheet no longer forces background-color or color-scheme, so the
+ * site's own colors and color-scheme show through untouched. */
 export function buildDarkResetCss(): string {
   return `/* StampStack dark reset — site already dark */
 html {
   filter: none !important;
-  background-color: transparent !important;
-  color-scheme: revert !important;
 }
 ${MEDIA_REINVERT} {
   filter: none !important;
