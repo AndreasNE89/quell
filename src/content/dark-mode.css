@@ -1,0 +1,23 @@
+/* StampStack paid dark mode — FOUC invert at document_start.
+ * Content script may upgrade to smart CSS or reset when the page is already dark.
+ * Re-invert media so images/video stay roughly natural. */
+
+html {
+  filter: invert(1) hue-rotate(180deg) contrast(1.02) !important;
+  background-color: #f0f0f0 !important;
+  color-scheme: dark !important;
+}
+
+img,
+video,
+picture,
+canvas,
+svg,
+iframe,
+embed,
+object,
+[style*='background-image'],
+[style*='background:url'],
+[style*="background: url"] {
+  filter: invert(1) hue-rotate(180deg) !important;
+}

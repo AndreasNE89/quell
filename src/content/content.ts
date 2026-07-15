@@ -13,9 +13,15 @@ import type {
 import { STORAGE_KEY } from '../shared/constants.js';
 import { queryProcedural } from '../engine/procedural.js';
 import { applyYoutubeFeatures, watchYoutubeSpa } from './youtube-ui.js';
+import { startDarkModeSmart } from './dark-mode-smart.js';
 
 if (location.protocol === 'http:' || location.protocol === 'https:' || location.protocol === 'about:') {
   void start();
+}
+
+// Paid dark mode: already-dark detect + smart CSS (independent of pause/allowlist).
+if (location.protocol === 'http:' || location.protocol === 'https:') {
+  startDarkModeSmart();
 }
 
 let youtubeOpts: YoutubeOptionsData | null = null;

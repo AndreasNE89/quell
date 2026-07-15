@@ -17,5 +17,7 @@ docs/youtube-features-audit.json
 # Personal agent overrides
 .claude.local.md
 .cursor/*.local.*
+# Local ExtensionPay id (copy from extpay-config.local.example.ts)
+src/shared/extpay-config.local.ts
 # Chrome Web Store upload assist (Playwright persistent profile — keeps Google login)
 .cws-chrome-profile/

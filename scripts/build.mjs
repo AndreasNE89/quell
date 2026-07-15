@@ -44,6 +44,7 @@ const ENTRIES = [
   ['content/content.ts', 'content.js', 'iife'],
   ['content/scriptlets-main.ts', 'scriptlets.js', 'iife'],
   ['content/scriptlets-youtube.ts', 'scriptlets-youtube.js', 'iife'],
+  ['content/extpay-bridge.ts', 'extpay-bridge.js', 'iife'],
   ['popup/popup.ts', 'popup.js', 'esm'],
   ['options/options.ts', 'options.js', 'esm'],
 ];
@@ -52,6 +53,19 @@ function assertGenerated() {
   if (!existsSync(join(GEN, 'meta.json'))) {
     console.error('Missing src/generated/. Run `npm run compile-filters` first.');
     process.exit(1);
+  }
+}
+
+/** Ensure gitignored local ExtPay override exists so imports resolve. */
+function ensureExtPayLocalConfig() {
+  const local = join(SRC, 'shared', 'extpay-config.local.ts');
+  const example = join(SRC, 'shared', 'extpay-config.local.example.ts');
+  if (!existsSync(local)) {
+    if (!existsSync(example)) {
+      console.error('Missing extpay-config.local.example.ts');
+      process.exit(1);
+    }
+    cpSync(example, local);
   }
 }
 
@@ -91,6 +105,7 @@ function copyStatic() {
   ]) {
     for (const f of files) cpSync(join(SRC, dir, f), join(DIST, f));
   }
+  cpSync(join(SRC, 'content', 'dark-mode.css'), join(DIST, 'dark-mode.css'));
   cpSync(join(SRC, 'icons'), join(DIST, 'icons'), { recursive: true });
   cpSync(join(SRC, 'redirects'), join(DIST, 'redirects'), { recursive: true });
 
@@ -116,6 +131,7 @@ function copyStatic() {
 
 async function run() {
   assertGenerated();
+  ensureExtPayLocalConfig();
   rmSync(DIST, { recursive: true, force: true });
   mkdirSync(DIST, { recursive: true });
 

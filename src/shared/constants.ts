@@ -25,11 +25,32 @@ export const YOUTUBE_SCRIPTLETS_SCRIPT_ID = 'quell-scriptlets-youtube';
 /** Legacy id — unregistered on sync so older builds don't double-inject. */
 export const SCRIPTLETS_SCRIPT_ID = 'quell-scriptlets';
 
+/**
+ * Paid dark-mode CSS registration ids — `quell-*` for upgrade safety
+ * (same convention as generic cosmetics / YouTube scriptlets).
+ */
+export const DARK_MODE_SCRIPT_ID = 'quell-dark-mode';
+
+/** Force-on hosts when global dark mode is off. */
+export const DARK_MODE_FORCE_ON_SCRIPT_ID = 'quell-dark-mode-force';
+
 /** Path (relative to extension root) of the combined generic cosmetic stylesheet. */
 export const GENERIC_CSS_PATH = 'generated/generic-cosmetic.css';
 
+/** Path of the invert dark-mode stylesheet (copied to dist root). */
+export const DARK_MODE_CSS_PATH = 'dark-mode.css';
+
 /** Current settings blob in chrome.storage.local. */
 export const STORAGE_KEY = 'stampstack.settings';
+
+/** Cached ExtensionPay / license state (sibling to settings). */
+export const LICENSE_STORAGE_KEY = 'stampstack.license';
+
+/** Offline grace: honor cached `paid: true` for this long after last verify. */
+export const LICENSE_GRACE_MS = 14 * 24 * 60 * 60 * 1000;
+
+/** User-facing price for dark mode (matches ExtensionPay plan). */
+export const DARK_MODE_PRICE_LABEL = '$2';
 
 /**
  * Pre-rebrand settings keys — migrated once into STORAGE_KEY then removed.

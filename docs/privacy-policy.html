@@ -52,35 +52,43 @@
 <body>
   <main>
     <h1>StampStack Privacy Policy</h1>
-    <p class="meta">Effective date: July 13, 2026 · Last updated: July 13, 2026</p>
+    <p class="meta">Effective date: July 13, 2026 · Last updated: July 15, 2026</p>
 
     <div class="box">
       <strong>Short version:</strong> StampStack does not collect, sell, or transmit your browsing history.
       Filtering runs on your device. Settings stay in your browser’s local storage.
+      An optional one-time purchase for dark mode is processed by ExtensionPay (Stripe);
+      browsing history is not sent as part of payment.
     </div>
 
     <h2>Who we are</h2>
     <p>
       StampStack is a browser extension that blocks ads and trackers using
       Declarative Net Request (Manifest V3) and local cosmetic/scriptlet filters.
+      An optional paid add-on can darken ordinary web pages.
     </p>
 
     <h2>Data we collect</h2>
-    <p><strong>We do not collect personal data.</strong> StampStack does not operate analytics, crash reporting, advertising identifiers, or remote logging.</p>
+    <p>
+      <strong>We do not collect personal data on StampStack servers.</strong>
+      StampStack does not operate analytics, crash reporting, advertising identifiers,
+      or remote logging of browsing activity.
+    </p>
     <ul>
       <li><strong>Browsing activity:</strong> Not sent to us. Network blocking is applied by Chrome’s Declarative Net Request engine using rules shipped in the extension package (and optional updates you enable).</li>
       <li><strong>Settings &amp; allowlist:</strong> Stored locally via <code>chrome.storage</code> on your device. Not uploaded.</li>
       <li><strong>Statistics:</strong> Any on-device counters (e.g. badge hints) stay local when available. StampStack does not sync them to a server.</li>
+      <li><strong>Optional purchase:</strong> If you buy dark mode, ExtensionPay / Stripe process payment and may collect an email for receipt and restore. StampStack caches a local paid flag; <strong>browsing history and allowlist are not sent</strong> to the payment provider.</li>
     </ul>
 
     <h2>Permissions</h2>
-    <p>StampStack requests only what is needed to block ads/trackers:</p>
+    <p>StampStack requests only what is needed to block ads/trackers (and optional dark mode):</p>
     <ul>
       <li><code>declarativeNetRequest</code> — apply filter rules without reading page content on the network path.</li>
-      <li><code>scripting</code> — inject cosmetic filters and approved scriptlets on pages you visit.</li>
-      <li><code>storage</code> — save your preferences and site allowlist.</li>
+      <li><code>scripting</code> — inject cosmetic filters, approved scriptlets, and optional dark-mode CSS.</li>
+      <li><code>storage</code> — save preferences, site allowlist, and license cache.</li>
       <li><code>webNavigation</code> — know when navigations occur so filters can be applied consistently.</li>
-      <li><code>&lt;all_urls&gt;</code> host access — required so blocking and cosmetics can work on websites generally (the purpose of an ad blocker).</li>
+      <li><code>&lt;all_urls&gt;</code> host access — required so blocking, cosmetics, and optional page darkening can work on websites generally.</li>
     </ul>
 
     <h2>Third parties</h2>
@@ -89,7 +97,12 @@
       publishers when you update lists. Those downloads are list files only; StampStack does not
       send your browsing history to list publishers as part of filtering.
     </p>
-    <p>We do not sell or share user data with third parties because we do not collect it.</p>
+    <p>
+      <strong>Optional payments:</strong> Dark mode unlock uses
+      <a href="https://extensionpay.com" rel="noopener">ExtensionPay</a> (Stripe under the hood).
+      Contacting ExtensionPay happens only when you open checkout, restore a purchase, or the
+      extension refreshes license status. We do not sell or share browsing data.
+    </p>
 
     <h2>Children</h2>
     <p>StampStack is not directed at children under 13 and does not knowingly collect children’s data.</p>

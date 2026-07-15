@@ -43,6 +43,11 @@
       "all_frames": true,
       "match_about_blank": true,
       "world": "ISOLATED"
+    },
+    {
+      "matches": ["https://extensionpay.com/*"],
+      "js": ["extpay-bridge.js"],
+      "run_at": "document_start"
     }
   ],
   "web_accessible_resources": [

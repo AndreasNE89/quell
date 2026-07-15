@@ -21,6 +21,9 @@ export interface GeneratedMeta {
   regexRulesUsed: number;
 }
 
+/** Per-site dark mode override; absent key = follow global. */
+export type DarkModeSiteOverride = 'on' | 'off';
+
 /** Persisted settings (chrome.storage.local). */
 export interface Settings {
   /** Master switch. When true, no blocking happens anywhere. */
@@ -35,6 +38,25 @@ export interface Settings {
   youtubeBlockSponsored: boolean;
   /** Hide YouTube Shorts shelves/entries and leave /shorts/ pages. */
   youtubeBlockShorts: boolean;
+  /** Global paid dark-mode preference (gated by license). */
+  darkModeEnabled: boolean;
+  /** Hostname → force on/off; missing key follows `darkModeEnabled`. */
+  darkModeSiteOverrides: Record<string, DarkModeSiteOverride>;
+  /**
+   * Hosts auto force-off because the page looked already dark.
+   * Cleared when the user changes that host’s override.
+   */
+  darkModeAutoOff: Record<string, boolean>;
+}
+
+/** Cached license / purchase state (`stampstack.license`). */
+export interface LicenseState {
+  paid: boolean;
+  provider: 'extensionpay' | 'none';
+  /** Epoch ms of last successful online verify (or local unlock). */
+  verifiedAt: number | null;
+  /** Receipt email from provider when available. */
+  email?: string;
 }
 
 /** Procedural cosmetic rule: a raw uBO/ABP-style selector the JS engine evaluates. */
@@ -97,7 +119,22 @@ export type Message =
   | { type: 'youtube:getOptions'; hostname: string }
   | { type: 'lists:get' }
   | { type: 'lists:setEnabled'; id: string; enabled: boolean }
-  | { type: 'stats:get' };
+  | { type: 'stats:get' }
+  | { type: 'darkmode:get'; hostname?: string | null }
+  | { type: 'darkmode:setEnabled'; enabled: boolean }
+  | {
+      type: 'darkmode:setSiteOverride';
+      hostname: string;
+      override: DarkModeSiteOverride | null;
+    }
+  /** Content script: page looks already dark — persist force-off if allowed. */
+  | { type: 'darkmode:autoSkip'; hostname: string; reason?: string }
+  | { type: 'license:get' }
+  | { type: 'license:openCheckout' }
+  | { type: 'license:openRestore' }
+  | { type: 'license:refresh' }
+  /** Unpacked installs only — unlocks paid gate for local QA. */
+  | { type: 'license:devUnlock' };
 
 export interface CosmeticResponse {
   allowlisted: boolean;
@@ -148,4 +185,33 @@ export interface StatsData {
   lists: (ListMeta & { enabled: boolean })[];
   regexRulesUsed: number;
   statsReliable: boolean;
+}
+
+export interface LicenseData {
+  paid: boolean;
+  /** True when paid only because of offline grace (stale verify). */
+  grace: boolean;
+  verifiedAt: number | null;
+  email?: string;
+  provider: LicenseState['provider'];
+  /** ExtensionPay id is configured (not placeholder). */
+  configured: boolean;
+  /** Unpacked install — `license:devUnlock` available. */
+  unpacked: boolean;
+  priceLabel: string;
+}
+
+export interface DarkModeData {
+  paid: boolean;
+  enabled: boolean;
+  /** Effective apply for the requested hostname (if any). */
+  apply: boolean;
+  hostname: string | null;
+  override: DarkModeSiteOverride | null;
+  /** True when this host’s force-off was auto-detected (site looked dark). */
+  autoOff: boolean;
+  /** All hosts marked auto-off (for options list labels). */
+  autoOffHosts: Record<string, boolean>;
+  siteOverrides: Record<string, DarkModeSiteOverride>;
+  license: LicenseData;
 }

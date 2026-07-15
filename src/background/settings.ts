@@ -12,6 +12,9 @@ export function defaultSettings(): Settings {
     blockedTotal: 0,
     youtubeBlockSponsored: true,
     youtubeBlockShorts: false,
+    darkModeEnabled: false,
+    darkModeSiteOverrides: {},
+    darkModeAutoOff: {},
   };
 }
 

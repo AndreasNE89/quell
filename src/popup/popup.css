@@ -126,6 +126,72 @@ body {
   color: var(--fg);
 }
 
+.dark-upsell {
+  padding: 4px 2px 8px;
+}
+.dark-upsell-text {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.btn-buy {
+  display: block;
+  width: 100%;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-buy:hover {
+  filter: brightness(1.05);
+}
+.btn-buy:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.btn-buy.btn-dev {
+  margin-top: 6px;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  font-weight: 500;
+}
+.btn-buy.btn-dev:hover {
+  filter: none;
+  color: var(--fg);
+  border-color: var(--muted);
+}
+.dark-hint {
+  margin: 6px 2px 0;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+.dark-override {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 2px 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.dark-override select {
+  flex: 1;
+  max-width: 140px;
+  font: inherit;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 6px;
+}
+
 .switch {
   position: relative;
   width: 40px;

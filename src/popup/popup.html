@@ -65,6 +65,37 @@
       </label>
     </section>
 
+    <section class="feature-block" id="darkModeBlock">
+      <div class="feature-title">Dark mode</div>
+      <label class="switch-row subtle" id="darkModeRow">
+        <span id="darkModeLabel">Dark mode</span>
+        <span class="switch">
+          <input type="checkbox" id="darkModeToggle" aria-label="Dark mode" />
+          <span class="slider"></span>
+        </span>
+      </label>
+      <div class="dark-upsell" id="darkUpsell" hidden>
+        <p class="dark-upsell-text">
+          Darken any page with a smart invert theme. One-time
+          <span id="darkPrice">$2</span> unlock — separate from ad blocking.
+        </p>
+        <button type="button" class="btn-buy" id="darkBuyBtn">Buy dark mode</button>
+        <button type="button" class="btn-buy btn-dev" id="darkDevUnlockBtn" hidden>
+          Dev unlock (unpacked)
+        </button>
+        <p class="dark-hint" id="darkHint" hidden></p>
+      </div>
+      <label class="dark-override" id="darkOverrideWrap" hidden>
+        <span>This site</span>
+        <select id="darkOverride" aria-label="Dark mode for this site">
+          <option value="">Follow global</option>
+          <option value="on">Force on</option>
+          <option value="off">Force off</option>
+        </select>
+      </label>
+      <p class="dark-hint" id="darkAutoNote" hidden>Auto-disabled (site looks dark)</p>
+    </section>
+
     <footer class="foot">
       <button class="link" id="openOptions">Filter lists &amp; settings →</button>
     </footer>

@@ -23,6 +23,10 @@ import type {
   ScriptletRule,
   GeneratedMeta,
   YoutubeOptionsData,
+  DarkModeData,
+  DarkModeSiteOverride,
+  LicenseData,
+  LicenseState,
 } from '../shared/types.js';
 import {
   ALLOWLIST_ID_START,
@@ -31,8 +35,30 @@ import {
   GENERIC_CSS_SCRIPT_ID,
   SCRIPTLETS_SCRIPT_ID,
   YOUTUBE_SCRIPTLETS_SCRIPT_ID,
+  DARK_MODE_SCRIPT_ID,
+  DARK_MODE_FORCE_ON_SCRIPT_ID,
+  DARK_MODE_CSS_PATH,
 } from '../shared/constants.js';
 import { loadSettings, saveSettings, isListEnabled } from './settings.js';
+import {
+  defaultLicense,
+  initLicense,
+  loadLicense,
+  refreshLicense,
+  openCheckout,
+  openRestore,
+  devUnlock,
+  ensureUnpackedTestLicense,
+  isUnpackedInstall,
+  toLicenseData,
+} from './license.js';
+import {
+  isLicenseEffectivelyPaid,
+  resolveDarkModeForHost,
+  hostsWithForceOff,
+  hostsWithForceOn,
+  isHttpOrHttpsUrl,
+} from '../shared/dark-mode.js';
 import { matchCosmetic, matchScriptlets } from '../engine/cosmetic-match.js';
 import {
   normalizeHostname,
@@ -203,11 +229,122 @@ async function syncOneRegisteredScript(
   }
 }
 
-async function applyAll(settings: Settings): Promise<void> {
+/**
+ * Paid dark mode — independent of pause/allowlist cosmetics.
+ * Global on → register with force-off excludes; global off → force-on matches only.
+ */
+async function syncDarkModeScripts(
+  settings: Settings,
+  license: LicenseState = defaultLicense(),
+): Promise<void> {
+  const paid = isLicenseEffectivelyPaid(license);
+  const forceOffExclude = [
+    ...new Set(
+      hostsWithForceOff(settings.darkModeSiteOverrides)
+        .filter(isValidMatchPatternHost)
+        .flatMap(allowlistPatterns),
+    ),
+  ];
+  const forceOnMatches = [
+    ...new Set(
+      hostsWithForceOn(settings.darkModeSiteOverrides)
+        .filter(isValidMatchPatternHost)
+        .flatMap(allowlistPatterns),
+    ),
+  ];
+
+  const globalScript: chrome.scripting.RegisteredContentScript = {
+    id: DARK_MODE_SCRIPT_ID,
+    css: [DARK_MODE_CSS_PATH],
+    matches: ['http://*/*', 'https://*/*'],
+    excludeMatches: forceOffExclude.length ? forceOffExclude : undefined,
+    runAt: 'document_start',
+    allFrames: true,
+    persistAcrossSessions: true,
+  };
+
+  const forceOnScript: chrome.scripting.RegisteredContentScript = {
+    id: DARK_MODE_FORCE_ON_SCRIPT_ID,
+    css: [DARK_MODE_CSS_PATH],
+    matches: forceOnMatches.length ? forceOnMatches : ['http://*/*'],
+    runAt: 'document_start',
+    allFrames: true,
+    persistAcrossSessions: true,
+  };
+
+  try {
+    const globalOn = paid && settings.darkModeEnabled;
+    await syncOneRegisteredScript(globalScript, globalOn);
+    // When global is on, force-on hosts are already covered; only need force script when global off.
+    await syncOneRegisteredScript(
+      forceOnScript,
+      paid && !settings.darkModeEnabled && forceOnMatches.length > 0,
+    );
+  } catch (e) {
+    console.error('[StampStack] syncDarkModeScripts failed', e);
+  }
+}
+
+/**
+ * Apply dark mode to the current http(s) tab without waiting for navigation.
+ * Prefer insertCSS when turning on; reload when turning off (registered CSS can't be peeled off).
+ * Skips chrome:// and other non-web tabs.
+ */
+async function refreshActiveTabDarkMode(
+  settings: Settings,
+  license: LicenseState,
+): Promise<void> {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (tab?.id == null || !isHttpOrHttpsUrl(tab.url)) return;
+
+  let hostname: string | null = null;
+  try {
+    hostname = normalizeHostname(new URL(tab.url!).hostname);
+  } catch {
+    return;
+  }
+
+  const apply = resolveDarkModeForHost({
+    paid: isLicenseEffectivelyPaid(license),
+    enabled: settings.darkModeEnabled,
+    overrides: settings.darkModeSiteOverrides,
+    hostname,
+  }).apply;
+
+  if (apply) {
+    try {
+      await chrome.scripting.insertCSS({
+        target: { tabId: tab.id, allFrames: true },
+        files: [DARK_MODE_CSS_PATH],
+      });
+      return;
+    } catch (e) {
+      console.warn('[StampStack] dark mode insertCSS failed; reloading tab', e);
+    }
+  }
+
+  try {
+    await chrome.tabs.reload(tab.id);
+  } catch (e) {
+    console.warn('[StampStack] dark mode tab reload failed', e);
+  }
+}
+
+async function syncDarkModeAndActiveTab(
+  settings: Settings,
+  license: LicenseState,
+): Promise<void> {
+  await syncDarkModeScripts(settings, license);
+  await refreshActiveTabDarkMode(settings, license);
+}
+
+async function applyAll(settings: Settings, license?: LicenseState): Promise<void> {
+  const lic = license ?? (await loadLicense());
   await Promise.all([
     syncRulesets(settings),
     syncAllowlist(settings),
     syncRegisteredScripts(settings),
+    syncDarkModeScripts(settings, lic),
   ]);
 }
 
@@ -239,13 +376,33 @@ function withSettings<T>(fn: (s: Settings) => Promise<T>): Promise<T> {
 
 async function init(): Promise<void> {
   await withSettings(async (settings) => {
-    await applyAll(settings);
+    // Unpacked: auto-grant test license so dark mode is usable without ExtPay.
+    await ensureUnpackedTestLicense();
+    let license = await refreshLicense();
+    if (isUnpackedInstall() && isLicenseEffectivelyPaid(license) && !settings.darkModeEnabled) {
+      settings = await mutateSettings((s) => {
+        s.darkModeEnabled = true;
+      });
+      license = await loadLicense();
+    }
+    await applyAll(settings, license);
     await chrome.action.setBadgeBackgroundColor({ color: '#2f6f4f' });
   });
 }
 
+/** After purchase / restore: cache is paid — auto-enable dark mode once. */
+async function onLicenseUnlocked(_license: LicenseState): Promise<void> {
+  const settings = await mutateSettings((s) => {
+    s.darkModeEnabled = true;
+  });
+  await syncDarkModeAndActiveTab(settings, _license);
+}
+
+initLicense(onLicenseUnlocked);
+
 chrome.runtime.onInstalled.addListener(() => void init());
 chrome.runtime.onStartup.addListener(() => void init());
+void init();
 
 // ---------------------------------------------------------------------------
 // Blocked-request counting + badge (fires only for unpacked/dev builds)
@@ -337,6 +494,33 @@ async function handleMessage(msg: Message, sender: chrome.runtime.MessageSender)
 
     case 'stats:get':
       return handleStatsGet();
+
+    case 'darkmode:get':
+      return handleDarkModeGet(msg.hostname);
+
+    case 'darkmode:setEnabled':
+      return handleDarkModeSetEnabled(msg.enabled);
+
+    case 'darkmode:setSiteOverride':
+      return handleDarkModeSetSiteOverride(msg.hostname, msg.override);
+
+    case 'darkmode:autoSkip':
+      return handleDarkModeAutoSkip(msg.hostname, msg.reason);
+
+    case 'license:get':
+      return handleLicenseGet();
+
+    case 'license:openCheckout':
+      return openCheckout();
+
+    case 'license:openRestore':
+      return openRestore();
+
+    case 'license:refresh':
+      return handleLicenseRefresh();
+
+    case 'license:devUnlock':
+      return handleLicenseDevUnlock();
 
     default:
       void (msg satisfies never);
@@ -512,4 +696,143 @@ async function handleStatsGet(): Promise<StatsData> {
     regexRulesUsed: META.regexRulesUsed,
     statsReliable: STATS_RELIABLE,
   };
+}
+
+async function buildDarkModeData(
+  settings: Settings,
+  license: LicenseState,
+  hostname: string | null | undefined,
+): Promise<DarkModeData> {
+  const licenseData = toLicenseData(license);
+  const host = hostname ? normalizeHostname(hostname) : null;
+  const resolved = resolveDarkModeForHost({
+    paid: licenseData.paid,
+    enabled: settings.darkModeEnabled,
+    overrides: settings.darkModeSiteOverrides,
+    hostname: host,
+  });
+  return {
+    paid: licenseData.paid,
+    enabled: settings.darkModeEnabled,
+    apply: resolved.apply,
+    hostname: host,
+    override: resolved.override,
+    autoOff: !!(host && settings.darkModeAutoOff?.[host]),
+    autoOffHosts: { ...(settings.darkModeAutoOff ?? {}) },
+    siteOverrides: { ...settings.darkModeSiteOverrides },
+    license: licenseData,
+  };
+}
+
+async function handleDarkModeGet(hostname?: string | null): Promise<DarkModeData> {
+  const settings = await loadSettings();
+  let host = hostname ?? null;
+  if (host === undefined || host === null) {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab?.url) {
+      try {
+        host = new URL(tab.url).hostname;
+      } catch {
+        host = null;
+      }
+    }
+  }
+  const license = await loadLicense();
+  return buildDarkModeData(settings, license, host);
+}
+
+async function handleDarkModeSetEnabled(enabled: boolean): Promise<DarkModeData> {
+  const license = await loadLicense();
+  if (!isLicenseEffectivelyPaid(license)) {
+    const settings = await loadSettings();
+    return buildDarkModeData(settings, license, null);
+  }
+  const settings = await mutateSettings((s) => {
+    s.darkModeEnabled = enabled;
+  });
+  await syncDarkModeAndActiveTab(settings, license);
+  return handleDarkModeGet();
+}
+
+async function handleDarkModeSetSiteOverride(
+  hostname: string,
+  override: DarkModeSiteOverride | null,
+): Promise<DarkModeData> {
+  const host = normalizeHostname(hostname);
+  const license = await loadLicense();
+  if (!isLicenseEffectivelyPaid(license) || !host) {
+    const settings = await loadSettings();
+    return buildDarkModeData(settings, license, host || null);
+  }
+  const settings = await mutateSettings((s) => {
+    if (!s.darkModeAutoOff) s.darkModeAutoOff = {};
+    if (override == null) {
+      delete s.darkModeSiteOverrides[host];
+      delete s.darkModeAutoOff[host];
+    } else {
+      s.darkModeSiteOverrides[host] = override;
+      // User choice replaces any auto-off marker.
+      delete s.darkModeAutoOff[host];
+    }
+  });
+  await syncDarkModeAndActiveTab(settings, license);
+  return handleDarkModeGet(host);
+}
+
+/**
+ * Content script detected a confidently already-dark page.
+ * Persist force-off (exclude from registered invert) unless user Force on.
+ */
+async function handleDarkModeAutoSkip(
+  hostname: string,
+  _reason?: string,
+): Promise<{ ok: boolean; skipped: boolean }> {
+  const host = normalizeHostname(hostname);
+  if (!host) return { ok: false, skipped: false };
+
+  const license = await loadLicense();
+  if (!isLicenseEffectivelyPaid(license)) return { ok: true, skipped: false };
+
+  let skipped = false;
+  const settings = await mutateSettings((s) => {
+    if (!s.darkModeAutoOff) s.darkModeAutoOff = {};
+    // Force on always wins — never auto-skip.
+    if (s.darkModeSiteOverrides[host] === 'on') return;
+    // Already force-off (user or prior auto) — keep; refresh auto marker only if unset user intent.
+    if (s.darkModeSiteOverrides[host] === 'off') {
+      skipped = true;
+      return;
+    }
+    s.darkModeSiteOverrides[host] = 'off';
+    s.darkModeAutoOff[host] = true;
+    skipped = true;
+  });
+
+  if (skipped) {
+    // Update registration excludes; content script already reset invert on this page.
+    await syncDarkModeScripts(settings, license);
+  }
+  return { ok: true, skipped };
+}
+
+async function handleLicenseGet(): Promise<LicenseData> {
+  const license = await loadLicense();
+  return toLicenseData(license);
+}
+
+async function handleLicenseRefresh(): Promise<LicenseData> {
+  const license = await refreshLicense();
+  const settings = await loadSettings();
+  await syncDarkModeAndActiveTab(settings, license);
+  return toLicenseData(license);
+}
+
+async function handleLicenseDevUnlock(): Promise<{ ok: boolean; error?: string; darkMode?: DarkModeData }> {
+  const result = await devUnlock();
+  if (!result.ok || !result.license) return { ok: false, error: result.error };
+  const settings = await mutateSettings((s) => {
+    s.darkModeEnabled = true;
+  });
+  await syncDarkModeAndActiveTab(settings, result.license);
+  return { ok: true, darkMode: await handleDarkModeGet() };
 }

@@ -1,6 +1,6 @@
 // Popup controller: shows the active tab's status and wires the per-site + master toggles.
 
-import type { Message, PopupData } from '../shared/types.js';
+import type { DarkModeData, Message, PopupData } from '../shared/types.js';
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -17,6 +17,16 @@ const el = {
   totalBlocked: $('totalBlocked'),
   optionsBtn: $('optionsBtn'),
   openOptions: $('openOptions'),
+  darkModeToggle: $<HTMLInputElement>('darkModeToggle'),
+  darkModeLabel: $('darkModeLabel'),
+  darkUpsell: $('darkUpsell'),
+  darkPrice: $('darkPrice'),
+  darkBuyBtn: $<HTMLButtonElement>('darkBuyBtn'),
+  darkDevUnlockBtn: $<HTMLButtonElement>('darkDevUnlockBtn'),
+  darkHint: $('darkHint'),
+  darkOverrideWrap: $('darkOverrideWrap'),
+  darkOverride: $<HTMLSelectElement>('darkOverride'),
+  darkAutoNote: $('darkAutoNote'),
 };
 
 function send(msg: Message): Promise<unknown> {
@@ -54,11 +64,52 @@ function render(data: PopupData): void {
   document.body.classList.toggle('allowlisted', data.allowlisted);
 }
 
+function renderDarkMode(data: DarkModeData): void {
+  darkCurrent = data;
+  el.darkPrice.textContent = data.license.priceLabel;
+  el.darkAutoNote.hidden = !(data.paid && data.autoOff && data.override === 'off');
+
+  if (!data.paid) {
+    el.darkModeLabel.textContent = `Dark mode — ${data.license.priceLabel}`;
+    el.darkModeToggle.checked = false;
+    el.darkModeToggle.disabled = true;
+    el.darkUpsell.hidden = false;
+    el.darkOverrideWrap.hidden = true;
+    el.darkBuyBtn.disabled = false;
+    el.darkDevUnlockBtn.hidden = !data.license.unpacked;
+    if (!data.license.configured && data.license.unpacked) {
+      el.darkHint.hidden = false;
+      el.darkHint.textContent =
+        'ExtensionPay not configured — use Dev unlock here, or Options.';
+    } else if (!data.license.configured) {
+      el.darkHint.hidden = false;
+      el.darkHint.textContent = 'Set ExtensionPay id in Options / extpay-config before buying.';
+    } else {
+      el.darkHint.hidden = true;
+    }
+    return;
+  }
+  el.darkModeLabel.textContent = 'Dark mode';
+  el.darkModeToggle.checked = data.enabled;
+  el.darkModeToggle.disabled = false;
+  el.darkUpsell.hidden = true;
+  el.darkDevUnlockBtn.hidden = true;
+  el.darkHint.hidden = true;
+  el.darkOverrideWrap.hidden = !data.hostname;
+  el.darkOverride.value = data.override ?? '';
+}
+
 let current: PopupData | null = null;
+let darkCurrent: DarkModeData | null = null;
 
 async function refresh(): Promise<void> {
   current = (await send({ type: 'popup:get' })) as PopupData;
   render(current);
+  const dark = (await send({
+    type: 'darkmode:get',
+    hostname: current.hostname,
+  })) as DarkModeData;
+  renderDarkMode(dark);
 }
 
 el.siteToggle.addEventListener('change', async () => {
@@ -93,6 +144,63 @@ el.ytSponsoredToggle.addEventListener('change', () => {
 });
 el.ytShortsToggle.addEventListener('change', () => {
   void saveYoutubeOptions();
+});
+
+el.darkModeToggle.addEventListener('change', async () => {
+  if (!darkCurrent?.paid) {
+    el.darkModeToggle.checked = false;
+    el.darkUpsell.hidden = false;
+    return;
+  }
+  const data = (await send({
+    type: 'darkmode:setEnabled',
+    enabled: el.darkModeToggle.checked,
+  })) as DarkModeData;
+  renderDarkMode(data);
+});
+
+el.darkBuyBtn.addEventListener('click', async () => {
+  el.darkBuyBtn.disabled = true;
+  const r = (await send({ type: 'license:openCheckout' })) as { ok: boolean; error?: string };
+  if (!r?.ok) {
+    el.darkHint.hidden = false;
+    el.darkHint.textContent =
+      r?.error ??
+      (darkCurrent?.license.unpacked
+        ? 'Checkout unavailable — use Dev unlock or set ExtensionPay id in Options.'
+        : 'Checkout unavailable. Configure ExtensionPay in Options.');
+  }
+  el.darkBuyBtn.disabled = false;
+  void refresh();
+});
+
+el.darkDevUnlockBtn.addEventListener('click', async () => {
+  el.darkDevUnlockBtn.disabled = true;
+  const r = (await send({ type: 'license:devUnlock' })) as {
+    ok: boolean;
+    error?: string;
+    darkMode?: DarkModeData;
+  };
+  el.darkDevUnlockBtn.disabled = false;
+  if (!r?.ok) {
+    el.darkHint.hidden = false;
+    el.darkHint.textContent = r?.error ?? 'Dev unlock failed';
+    return;
+  }
+  if (r.darkMode) renderDarkMode(r.darkMode);
+  else void refresh();
+});
+
+el.darkOverride.addEventListener('change', async () => {
+  if (!darkCurrent?.hostname || !darkCurrent.paid) return;
+  const raw = el.darkOverride.value;
+  const override = raw === 'on' || raw === 'off' ? raw : null;
+  const data = (await send({
+    type: 'darkmode:setSiteOverride',
+    hostname: darkCurrent.hostname,
+    override,
+  })) as DarkModeData;
+  renderDarkMode(data);
 });
 
 function openOptions(): void {

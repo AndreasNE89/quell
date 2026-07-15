@@ -60,6 +60,53 @@
       </section>
 
       <section>
+        <h2>Dark mode (paid)</h2>
+        <p class="hint">
+          Optional one-time unlock that darkens ordinary web pages (smart invert).
+          Sites that already look dark are auto-disabled. Independent of pause and
+          the site allowlist — ad blocking stays free.
+        </p>
+        <div class="lists">
+          <div class="list-item">
+            <div class="list-info">
+              <div class="list-title">Enable dark mode</div>
+              <div class="list-meta" id="darkLicenseStatus">Checking license…</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="darkModeEnabled" aria-label="Enable dark mode" />
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+        <div class="dark-actions" id="darkActions">
+          <button type="button" class="btn" id="darkBuy">Buy dark mode ($2)</button>
+          <button type="button" class="btn btn-secondary" id="darkRestore">Restore purchase</button>
+          <button type="button" class="btn btn-secondary" id="darkRefresh">Refresh license</button>
+          <button type="button" class="btn btn-secondary" id="darkDevUnlock" hidden>
+            Dev unlock (unpacked)
+          </button>
+        </div>
+        <p class="hint" id="darkActionHint"></p>
+        <h3 class="subhead">Per-site overrides</h3>
+        <p class="hint">Force on or off for specific hostnames. Clear an entry to follow the global toggle.</p>
+        <div id="darkOverrides" class="lists">None yet.</div>
+        <form class="override-form" id="darkOverrideForm">
+          <input
+            type="text"
+            id="darkOverrideHost"
+            placeholder="example.com"
+            aria-label="Hostname for dark mode override"
+            autocomplete="off"
+          />
+          <select id="darkOverrideValue" aria-label="Override value">
+            <option value="on">Force on</option>
+            <option value="off">Force off</option>
+          </select>
+          <button type="submit" class="btn btn-secondary">Add</button>
+        </form>
+      </section>
+
+      <section>
         <h2>Filter lists</h2>
         <p class="hint">
           Toggle lists on or off. This enables or disables each list’s network rules,
