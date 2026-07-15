@@ -7,12 +7,14 @@ import {
   buildSmartDarkCss,
   isConfidentlyAlreadyDark,
   luminanceOfCssColor,
+  MEDIA_REINVERT_RULE,
   type DarkPageSignals,
 } from '../shared/dark-mode-smart.js';
 import { isExtensionRestrictedHostname } from '../shared/dark-mode.js';
 
 const STYLE_SMART = 'dark-smart';
 const STYLE_RESET = 'dark-reset';
+const SHADOW_MEDIA_ATTR = 'data-stampstack-shadow-media';
 
 export function startDarkModeSmart(): void {
   if (location.protocol !== 'http:' && location.protocol !== 'https:') return;
@@ -54,6 +56,7 @@ async function run(initial = false): Promise<void> {
     if (!initial) {
       injectStyle(STYLE_RESET, buildDarkResetCss());
       removeStyle(STYLE_SMART);
+      stopShadowMediaReinvert();
     }
     return;
   }
@@ -62,6 +65,7 @@ async function run(initial = false): Promise<void> {
   if (!data.apply) {
     injectStyle(STYLE_RESET, buildDarkResetCss());
     removeStyle(STYLE_SMART);
+    stopShadowMediaReinvert();
     return;
   }
 
@@ -92,6 +96,7 @@ function sampleAndApply(host: string, data: DarkModeData): boolean {
   if (verdict.dark && verdict.confidence === 'high') {
     injectStyle(STYLE_RESET, buildDarkResetCss());
     removeStyle(STYLE_SMART);
+    stopShadowMediaReinvert();
     if (data.override == null) {
       void send({ type: 'darkmode:autoSkip', hostname: host, reason: verdict.reason }).catch(() => {
         /* SW may be waking */
@@ -103,7 +108,78 @@ function sampleAndApply(host: string, data: DarkModeData): boolean {
   // Light page: apply the matte smart invert.
   injectStyle(STYLE_SMART, buildSmartDarkCss(signals));
   removeStyle(STYLE_RESET);
+  startShadowMediaReinvert();
   return false;
+}
+
+// ---------------------------------------------------------------------------
+// Shadow-DOM media re-invert
+//
+// The page-wide `filter: invert` reaches into shadow DOM, but our media re-invert CSS lives in
+// the light DOM and can't cross the shadow boundary — so media inside web components (e.g. a
+// hover-play <video> preview, or a GIF widget) comes out inverted with nothing to cancel it.
+// Fix: inject the same media re-invert rule INTO each open shadow root. We catch roots present
+// at load, ones added later (MutationObserver), and ones attached on hover (mouseover) — the
+// common case for hover-play previews. Closed shadow roots remain unreachable (rare).
+// ---------------------------------------------------------------------------
+
+let shadowActive = false;
+let shadowObserver: MutationObserver | null = null;
+let lastHoverWalk = 0;
+
+/** Give every open shadow root under `node` (inclusive) the media re-invert rule. */
+function treatShadowRoots(node: ParentNode | Element): void {
+  const scan = (el: Element): void => {
+    const sr = el.shadowRoot;
+    if (!sr) return;
+    if (!sr.querySelector(`style[${SHADOW_MEDIA_ATTR}]`)) {
+      const style = document.createElement('style');
+      style.setAttribute(SHADOW_MEDIA_ATTR, '');
+      style.textContent = MEDIA_REINVERT_RULE;
+      sr.appendChild(style);
+    }
+    treatShadowRoots(sr); // nested shadow roots
+  };
+  if (node instanceof Element) scan(node);
+  for (const el of node.querySelectorAll('*')) scan(el);
+}
+
+function onShadowHover(e: Event): void {
+  const now = Date.now();
+  if (now - lastHoverWalk < 250) return; // throttle
+  lastHoverWalk = now;
+  if (e.target instanceof Element) treatShadowRoots(e.target);
+}
+
+function startShadowMediaReinvert(): void {
+  if (shadowActive) return;
+  shadowActive = true;
+  treatShadowRoots(document);
+  shadowObserver = new MutationObserver((muts) => {
+    for (const m of muts) {
+      for (const n of m.addedNodes) if (n instanceof Element) treatShadowRoots(n);
+    }
+  });
+  const root = document.documentElement;
+  if (root) shadowObserver.observe(root, { childList: true, subtree: true });
+  document.addEventListener('mouseover', onShadowHover, true);
+}
+
+function stopShadowMediaReinvert(): void {
+  if (!shadowActive) return;
+  shadowActive = false;
+  shadowObserver?.disconnect();
+  shadowObserver = null;
+  document.removeEventListener('mouseover', onShadowHover, true);
+  const clear = (node: ParentNode): void => {
+    for (const el of node.querySelectorAll('*')) {
+      const sr = el.shadowRoot;
+      if (!sr) continue;
+      sr.querySelector(`style[${SHADOW_MEDIA_ATTR}]`)?.remove();
+      clear(sr);
+    }
+  };
+  clear(document);
 }
 
 /** Re-check once after load for sites that turn dark via JS after our initial light verdict. */
