@@ -36,6 +36,9 @@ const COMMON = {
   legalComments: 'none',
   minify: store,
   sourcemap: false,
+  // Compile-time dev flag (src/shared/build-flags.ts). Store builds → false, so the
+  // dev-unlock / test-license paths can never fire in a packaged extension.
+  define: { __STAMPSTACK_DEV__: store ? 'false' : 'true' },
 };
 
 /** Entry points: [srcFile, outFile, format]. */
@@ -69,6 +72,33 @@ function ensureExtPayLocalConfig() {
   }
 }
 
+/**
+ * A store build with an unconfigured / truncated ExtensionPay id would ship an
+ * unpurchasable paid dark mode (checkout opens a non-existent project). Refuse to build
+ * unless a plausible id is set. Override with ALLOW_UNCONFIGURED_EXTPAY=1 for local testing.
+ */
+function assertExtPayConfiguredForStore() {
+  if (process.env.ALLOW_UNCONFIGURED_EXTPAY === '1') return;
+  const local = join(SRC, 'shared', 'extpay-config.local.ts');
+  let id = null;
+  if (existsSync(local)) {
+    const m = readFileSync(local, 'utf8').match(
+      /EXTPAY_EXTENSION_ID_OVERRIDE\s*:[^=]*=\s*(['"])([^'"]*)\1/,
+    );
+    if (m) id = m[2];
+  }
+  const valid =
+    typeof id === 'string' && id.length >= 4 && id !== 'YOUR_EXTENSIONPAY_ID' && !id.endsWith('-');
+  if (!valid) {
+    console.error(
+      `\n[--store] ExtensionPay id is not configured (got ${JSON.stringify(id)}). Paid dark mode ` +
+        `would be unpurchasable.\nSet a real id in src/shared/extpay-config.local.ts, or set ` +
+        `ALLOW_UNCONFIGURED_EXTPAY=1 to build anyway for testing.`,
+    );
+    process.exit(1);
+  }
+}
+
 function buildManifest() {
   const manifest = JSON.parse(readFileSync(join(SRC, 'manifest.json'), 'utf8'));
   const meta = JSON.parse(readFileSync(join(GEN, 'meta.json'), 'utf8'));
@@ -78,9 +108,11 @@ function buildManifest() {
   if (pkg.version) manifest.version = pkg.version;
 
   // Dev-only: optional feedback for badge counts when loading unpacked with --dev-feedback.
+  // webNavigation only resets the badge counter, which is itself dev-only — so it ships
+  // only alongside the feedback permission, never in a store build.
   if (process.argv.includes('--dev-feedback')) {
-    if (!manifest.permissions.includes('declarativeNetRequestFeedback')) {
-      manifest.permissions.push('declarativeNetRequestFeedback');
+    for (const perm of ['declarativeNetRequestFeedback', 'webNavigation']) {
+      if (!manifest.permissions.includes(perm)) manifest.permissions.push(perm);
     }
   }
 
@@ -132,6 +164,7 @@ function copyStatic() {
 async function run() {
   assertGenerated();
   ensureExtPayLocalConfig();
+  if (store) assertExtPayConfiguredForStore();
   rmSync(DIST, { recursive: true, force: true });
   mkdirSync(DIST, { recursive: true });
 

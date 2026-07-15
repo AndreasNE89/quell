@@ -118,7 +118,8 @@ test('should keep borderline dark at low confidence', () => {
   assert.equal(v.confidence, 'low');
 });
 
-test('should bump contrast in smart CSS when sampled contrast is weak', () => {
+test('should use matte contrast, pulling toward neutral only for weak-contrast pages', () => {
+  // Weak source contrast (washed gray-on-gray) → pull back toward neutral for legibility.
   const weak = mod.buildSmartDarkCss({
     htmlBgLuminance: 0.6,
     bodyBgLuminance: 0.6,
@@ -128,10 +129,11 @@ test('should bump contrast in smart CSS when sampled contrast is weak', () => {
     bodyColorScheme: '',
     metaThemeLuminance: null,
   });
-  assert.match(weak, /contrast\(1\.08\)/);
+  assert.match(weak, /contrast\(0\.95\)/);
   assert.match(weak, /color-scheme: dark/);
   assert.match(weak, /invert\(1\) hue-rotate\(180deg\)/);
 
+  // Strong source contrast → full matte (soft charcoal bg, eased white text).
   const strong = mod.buildSmartDarkCss({
     htmlBgLuminance: 0.97,
     bodyBgLuminance: 0.97,
@@ -141,7 +143,9 @@ test('should bump contrast in smart CSS when sampled contrast is weak', () => {
     bodyColorScheme: '',
     metaThemeLuminance: null,
   });
-  assert.match(strong, /contrast\(1\.02\)/);
+  assert.match(strong, /contrast\(0\.82\)/);
+  // Media gets the compensating contrast so photos/video stay natural (net ≈ 1.0).
+  assert.match(strong, /contrast\(1\.22\)/);
 });
 
 test('should emit reset CSS that clears invert', () => {

@@ -5,7 +5,8 @@ import ExtPay from 'extpay';
 import type { LicenseData, LicenseState } from '../shared/types.js';
 import { DARK_MODE_PRICE_LABEL, LICENSE_STORAGE_KEY } from '../shared/constants.js';
 import { EXTPAY_EXTENSION_ID, isExtPayConfigured } from '../shared/extpay-config.js';
-import { isLicenseEffectivelyPaid } from '../shared/dark-mode.js';
+import { isLicenseEffectivelyPaid, isDevUnlockLicense } from '../shared/dark-mode.js';
+import { DEV_BUILD } from '../shared/build-flags.js';
 
 export type LicensePaidListener = (license: LicenseState) => void | Promise<void>;
 
@@ -31,9 +32,18 @@ export async function saveLicense(license: LicenseState): Promise<void> {
   await chrome.storage.local.set({ [LICENSE_STORAGE_KEY]: license });
 }
 
-/** Packaged CWS builds include `update_url`; unpacked / sideload do not. */
+/**
+ * Dev / unpacked build (not a `--store` Chrome Web Store build).
+ *
+ * Uses the compile-time DEV_BUILD flag rather than `chrome.runtime.getManifest().update_url`:
+ * whether getManifest() exposes `update_url` for store installs is undocumented and has been
+ * reported inconsistent across Chromium versions (w3c/webextensions#400). A compile-time
+ * constant is unambiguous — the dev-unlock / test-license paths simply do not evaluate to
+ * true in a packaged store build, regardless of runtime browser behavior. Name kept for
+ * call-site stability.
+ */
 export function isUnpackedInstall(): boolean {
-  return !('update_url' in chrome.runtime.getManifest());
+  return DEV_BUILD;
 }
 
 function getExtPay() {
@@ -88,6 +98,17 @@ export function toLicenseData(license: LicenseState, nowMs: number = Date.now())
  */
 export async function refreshLicense(): Promise<LicenseState> {
   const cached = await loadLicense();
+
+  // Unpacked QA: don't let ExtensionPay getUser() wipe a dev-unlock license.
+  if (isUnpackedInstall() && isDevUnlockLicense(cached)) {
+    if (!isLicenseEffectivelyPaid(cached)) {
+      const expired = { ...cached, paid: false };
+      await saveLicense(expired);
+      return expired;
+    }
+    return cached;
+  }
+
   if (!isExtPayConfigured()) {
     // Still re-evaluate grace expiry for cached / dev unlocks.
     if (cached.paid && !isLicenseEffectivelyPaid(cached)) {
@@ -153,7 +174,7 @@ export async function openRestore(): Promise<{ ok: boolean; error?: string }> {
 }
 
 /**
- * Dev-only unlock for unpacked installs (`!update_url`).
+ * Dev-only unlock for unpacked (non-store) builds.
  * Sets paid cache so dark-mode registration can be tested without ExtensionPay.
  */
 export async function devUnlock(): Promise<{ ok: boolean; error?: string; license?: LicenseState }> {

@@ -15,6 +15,11 @@ export function isLicenseEffectivelyPaid(
   return nowMs - license.verifiedAt <= LICENSE_GRACE_MS;
 }
 
+/** Local dev unlock on unpacked installs (`license:devUnlock` / auto-grant). */
+export function isDevUnlockLicense(license: Pick<LicenseState, 'paid' | 'provider' | 'verifiedAt'>): boolean {
+  return license.paid && license.provider === 'none' && license.verifiedAt != null;
+}
+
 export interface DarkModeResolveInput {
   paid: boolean;
   enabled: boolean;
@@ -61,6 +66,30 @@ export function isHttpOrHttpsUrl(url: string | undefined | null): boolean {
   try {
     const protocol = new URL(url).protocol;
     return protocol === 'http:' || protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Hosts where Chromium blocks extension CSS/script injection (hardcoded in the browser).
+ * Includes Chrome Web Store + developer dashboard (chrome.google.com).
+ */
+const RESTRICTED_INJECTION_HOSTS = new Set([
+  'chrome.google.com',
+  'chromewebstore.google.com',
+]);
+
+export function isExtensionRestrictedHostname(hostname: string | null | undefined): boolean {
+  if (!hostname) return false;
+  return RESTRICTED_INJECTION_HOSTS.has(normalizeHostname(hostname));
+}
+
+/** Whether paid dark mode can inject CSS on this tab URL. */
+export function isDarkModeInjectibleUrl(url: string | undefined | null): boolean {
+  if (!isHttpOrHttpsUrl(url)) return false;
+  try {
+    return !isExtensionRestrictedHostname(new URL(url!).hostname);
   } catch {
     return false;
   }

@@ -77,10 +77,11 @@ function renderDarkMode(data: DarkModeData): void {
     el.darkOverrideWrap.hidden = true;
     el.darkBuyBtn.disabled = false;
     el.darkDevUnlockBtn.hidden = !data.license.unpacked;
-    if (!data.license.configured && data.license.unpacked) {
+    if (data.license.unpacked) {
       el.darkHint.hidden = false;
-      el.darkHint.textContent =
-        'ExtensionPay not configured — use Dev unlock here, or Options.';
+      el.darkHint.textContent = data.license.configured
+        ? 'Unpacked dev: use Dev unlock to test dark mode without paying.'
+        : 'ExtensionPay not configured — use Dev unlock here, or Options.';
     } else if (!data.license.configured) {
       el.darkHint.hidden = false;
       el.darkHint.textContent = 'Set ExtensionPay id in Options / extpay-config before buying.';
@@ -94,6 +95,14 @@ function renderDarkMode(data: DarkModeData): void {
   el.darkModeToggle.disabled = false;
   el.darkUpsell.hidden = true;
   el.darkDevUnlockBtn.hidden = true;
+  if (data.restricted) {
+    el.darkHint.hidden = false;
+    el.darkHint.textContent =
+      'Not available on Chrome Web Store pages — Chrome blocks extensions from modifying these sites.';
+    el.darkOverrideWrap.hidden = true;
+    el.darkAutoNote.hidden = true;
+    return;
+  }
   el.darkHint.hidden = true;
   el.darkOverrideWrap.hidden = !data.hostname;
   el.darkOverride.value = data.override ?? '';
@@ -103,13 +112,19 @@ let current: PopupData | null = null;
 let darkCurrent: DarkModeData | null = null;
 
 async function refresh(): Promise<void> {
-  current = (await send({ type: 'popup:get' })) as PopupData;
-  render(current);
-  const dark = (await send({
-    type: 'darkmode:get',
-    hostname: current.hostname,
-  })) as DarkModeData;
-  renderDarkMode(dark);
+  try {
+    const data = (await send({ type: 'popup:get' })) as PopupData | null;
+    if (!data) return;
+    current = data;
+    render(data);
+    const dark = (await send({
+      type: 'darkmode:get',
+      hostname: data.hostname,
+    })) as DarkModeData | null;
+    if (dark) renderDarkMode(dark);
+  } catch (e) {
+    console.warn('[StampStack] popup refresh failed', e);
+  }
 }
 
 el.siteToggle.addEventListener('change', async () => {

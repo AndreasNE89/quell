@@ -129,6 +129,8 @@ export type Message =
     }
   /** Content script: page looks already dark — persist force-off if allowed. */
   | { type: 'darkmode:autoSkip'; hostname: string; reason?: string }
+  /** SW → content: re-apply or remove dark styles without reloading the tab. */
+  | { type: 'darkmode:refresh' }
   | { type: 'license:get' }
   | { type: 'license:openCheckout' }
   | { type: 'license:openRestore' }
@@ -208,6 +210,8 @@ export interface DarkModeData {
   apply: boolean;
   hostname: string | null;
   override: DarkModeSiteOverride | null;
+  /** Chrome blocks injection on Web Store / gallery hosts — dark mode cannot apply. */
+  restricted?: boolean;
   /** True when this host’s force-off was auto-detected (site looked dark). */
   autoOff: boolean;
   /** All hosts marked auto-off (for options list labels). */
