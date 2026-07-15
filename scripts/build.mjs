@@ -73,9 +73,10 @@ function ensureExtPayLocalConfig() {
 }
 
 /**
- * A store build with an unconfigured / truncated ExtensionPay id would ship an
- * unpurchasable paid dark mode (checkout opens a non-existent project). Refuse to build
- * unless a plausible id is set. Override with ALLOW_UNCONFIGURED_EXTPAY=1 for local testing.
+ * A store build with an unconfigured ExtensionPay id would ship an unpurchasable paid dark
+ * mode (checkout opens a non-existent project). Refuse to build unless an id is set (anything
+ * other than the placeholder — ExtensionPay ids are developer-chosen slugs and may end with
+ * '-'). Override with ALLOW_UNCONFIGURED_EXTPAY=1 for local testing.
  */
 function assertExtPayConfiguredForStore() {
   if (process.env.ALLOW_UNCONFIGURED_EXTPAY === '1') return;
@@ -87,12 +88,11 @@ function assertExtPayConfiguredForStore() {
     );
     if (m) id = m[2];
   }
-  const valid =
-    typeof id === 'string' && id.length >= 4 && id !== 'YOUR_EXTENSIONPAY_ID' && !id.endsWith('-');
+  const valid = typeof id === 'string' && id.length > 0 && id !== 'YOUR_EXTENSIONPAY_ID';
   if (!valid) {
     console.error(
       `\n[--store] ExtensionPay id is not configured (got ${JSON.stringify(id)}). Paid dark mode ` +
-        `would be unpurchasable.\nSet a real id in src/shared/extpay-config.local.ts, or set ` +
+        `would be unpurchasable.\nSet your id in src/shared/extpay-config.local.ts, or set ` +
         `ALLOW_UNCONFIGURED_EXTPAY=1 to build anyway for testing.`,
     );
     process.exit(1);
