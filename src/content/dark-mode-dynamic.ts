@@ -103,12 +103,48 @@ function injectShell(): void {
 body { color: ${ROOT_FG} !important; }`;
 }
 
+/** Collect every element under `root`, descending into open shadow roots. */
+function collectElements(root: ParentNode, out: HTMLElement[]): void {
+  for (const el of root.querySelectorAll('*')) {
+    if (el instanceof HTMLElement) out.push(el);
+    const sr = el.shadowRoot;
+    if (sr) collectElements(sr, out);
+  }
+}
+
+/** Process the whole document in rAF-sized batches so a large page doesn't freeze on apply.
+ *  The dark shell is already up, so this just refines colors progressively. Aborts if stopped. */
+function scanChunked(root: ParentNode): void {
+  const els: HTMLElement[] = [];
+  if (root instanceof HTMLElement) els.push(root);
+  collectElements(root, els);
+  let i = 0;
+  const step = (): void => {
+    if (!active) return;
+    const end = Math.min(i + 1500, els.length);
+    for (; i < end; i++) processElement(els[i]);
+    if (i < els.length) requestAnimationFrame(step);
+  };
+  step();
+}
+
+let lastHover = 0;
+function onHover(e: Event): void {
+  // Catch shadow roots attached after load (hover-play widgets, lazy components) — the
+  // childList observer never sees an attachShadow on an existing host. Throttled; scan() is
+  // idempotent (already-processed elements are skipped) and descends into shadow roots.
+  const now = Date.now();
+  if (now - lastHover < 250) return;
+  lastHover = now;
+  if (e.target instanceof Element) scan(e.target);
+}
+
 /** Turn the dynamic dark engine on for this page. Idempotent. */
 export function applyDynamicDark(): void {
   if (active) return;
   active = true;
   injectShell();
-  scan(document);
+  scanChunked(document);
   observer = new MutationObserver((mutations) => {
     for (const m of mutations) {
       for (const node of m.addedNodes) if (node instanceof HTMLElement) scan(node);
@@ -116,6 +152,7 @@ export function applyDynamicDark(): void {
   });
   const root = document.documentElement;
   if (root) observer.observe(root, { childList: true, subtree: true });
+  document.addEventListener('mouseover', onHover, true);
 }
 
 /** Turn it off and fully restore the page's original inline colors (incl. shadow DOM). Idempotent. */
@@ -124,6 +161,7 @@ export function stopDynamicDark(): void {
   active = false;
   observer?.disconnect();
   observer = null;
+  document.removeEventListener('mouseover', onHover, true);
   document.querySelector(`style[data-stampstack="${SHELL_STYLE}"]`)?.remove();
   restoreIn(document);
 }
