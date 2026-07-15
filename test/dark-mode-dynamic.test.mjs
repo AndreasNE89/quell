@@ -15,7 +15,7 @@ before(async () => {
     stdin: {
       contents: `export {
   rgbToHsl, hslToRgb, rgbToCss,
-  remapBackgroundColor, remapForegroundColor, remapBorderColor,
+  remapBackgroundColor, remapForegroundColor, remapBorderColor, remapGradient,
 } from './src/shared/dark-mode-dynamic.js';`,
       resolveDir: ROOT,
       loader: 'ts',
@@ -71,6 +71,14 @@ test('hue is preserved when remapping (a light blue bg stays blue-ish)', () => {
 test('alpha is preserved through a remap', () => {
   const r = mod.remapBackgroundColor('rgba(255,255,255,0.6)');
   assert.match(r, /rgba\(.*0\.6\)/);
+});
+
+test('gradient: light stops darken, dark stops kept, structure intact', () => {
+  const light = mod.remapGradient('linear-gradient(90deg, rgb(255, 255, 255), rgb(240, 240, 240))');
+  assert.match(light, /^linear-gradient\(90deg, rgb\(/, 'keeps direction + shape');
+  assert.doesNotMatch(light, /rgb\(255, 255, 255\)/, 'white stop darkened');
+  const dark = mod.remapGradient('linear-gradient(rgb(13, 17, 23), rgb(20, 20, 20))');
+  assert.equal(dark, 'linear-gradient(rgb(13, 17, 23), rgb(20, 20, 20))', 'dark gradient unchanged');
 });
 
 // helper: parse an rgb()/rgba() string back to {r,g,b,a} for assertions
