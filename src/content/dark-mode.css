@@ -1,9 +1,13 @@
 /* StampStack paid dark mode — FOUC invert at document_start.
  * Content script may upgrade to smart CSS or reset when the page is already dark.
- * Re-invert media so images/video stay roughly natural. */
+ *
+ * Matte, not harsh: contrast(0.82) lifts inverted-white backgrounds off pure #000 to a
+ * soft charcoal (~#171717) and eases white text to ~#e8e8e8, instead of the eye-searing
+ * pure black/white a straight invert produces. Media re-inverts with a compensating
+ * contrast(1.22) so photos/video keep their natural contrast under the matte html layer. */
 
 html {
-  filter: invert(1) hue-rotate(180deg) contrast(1.02) !important;
+  filter: invert(1) hue-rotate(180deg) contrast(0.82) !important;
   background-color: #f0f0f0 !important;
   color-scheme: dark !important;
 }
@@ -19,5 +23,5 @@ object,
 [style*='background-image'],
 [style*='background:url'],
 [style*="background: url"] {
-  filter: invert(1) hue-rotate(180deg) !important;
+  filter: invert(1) hue-rotate(180deg) contrast(1.22) !important;
 }

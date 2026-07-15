@@ -8,9 +8,17 @@
 
 export const DNR = {
   // Rules across enabled static rulesets that are guaranteed to be honored per extension.
-  // (There is also a larger global pool shared across all installed extensions, but we
-  // only rely on the guaranteed minimum.)
+  // Rules beyond this draw from a larger global pool shared across all installed extensions
+  // (opaque; query getAvailableStaticRuleCount() at runtime). We ship past the guaranteed
+  // minimum for coverage, and the service worker enables rulesets with graceful degradation
+  // so a tight pool never leaves the user with zero blocking.
   GUARANTEED_MINIMUM_STATIC_RULES: 30000,
+
+  // Max rules compiled into a single ruleset file. Decoupled from the guaranteed minimum:
+  // the 30k guarantee is across ALL enabled rulesets, not per list, so capping each list at
+  // 30k needlessly truncated EasyList/EasyPrivacy (~48k rules dropped). Large lists are still
+  // bounded so one file can't dominate the global pool alone.
+  MAX_STATIC_RULES_PER_LIST: 75000,
 
   // How many static rulesets may ship, and how many may be enabled at once.
   MAX_NUMBER_OF_STATIC_RULESETS: 100,

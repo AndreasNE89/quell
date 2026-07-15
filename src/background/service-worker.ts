@@ -57,7 +57,8 @@ import {
   resolveDarkModeForHost,
   hostsWithForceOff,
   hostsWithForceOn,
-  isHttpOrHttpsUrl,
+  isExtensionRestrictedHostname,
+  isDarkModeInjectibleUrl,
 } from '../shared/dark-mode.js';
 import { matchCosmetic, matchScriptlets } from '../engine/cosmetic-match.js';
 import {
@@ -96,13 +97,40 @@ async function syncRulesets(settings: Settings): Promise<void> {
     const on = !settings.paused && isListEnabled(settings, list.id, list.enabledByDefault);
     (on ? enable : disable).push(list.id);
   }
-  try {
-    await chrome.declarativeNetRequest.updateEnabledRulesets({
-      enableRulesetIds: enable,
-      disableRulesetIds: disable,
-    });
-  } catch (e) {
-    console.error('[StampStack] updateEnabledRulesets failed', e);
+
+  // Disable unwanted rulesets first — always succeeds and frees global-pool budget.
+  if (disable.length) {
+    try {
+      await chrome.declarativeNetRequest.updateEnabledRulesets({ disableRulesetIds: disable });
+    } catch (e) {
+      console.error('[StampStack] disable rulesets failed', e);
+    }
+  }
+
+  // Enable wanted rulesets. We ship well past the 30k guaranteed minimum, so the extra rules
+  // draw from a global pool shared with every other installed extension. If that pool is
+  // exhausted, enabling the full set THROWS and would leave the user with zero blocking.
+  // Degrade gracefully: drop the largest ruleset and retry (the built-in seed is never
+  // dropped), so a tight pool costs coverage rather than all protection. Self-heals — every
+  // sync retries the full set, so dropped lists re-enable once the pool frees up.
+  const ruleCount = (id: string): number => META.lists.find((l) => l.id === id)?.ruleCount ?? 0;
+  let toEnable = [...enable];
+  while (toEnable.length) {
+    try {
+      await chrome.declarativeNetRequest.updateEnabledRulesets({ enableRulesetIds: toEnable });
+      return;
+    } catch (e) {
+      const droppable = toEnable.filter((id) => id !== 'quell-seed');
+      if (!droppable.length) {
+        console.error('[StampStack] updateEnabledRulesets failed for the minimal set', e);
+        return;
+      }
+      const largest = droppable.reduce((a, b) => (ruleCount(b) > ruleCount(a) ? b : a));
+      console.warn(
+        `[StampStack] static rule pool tight — dropping "${largest}" (${ruleCount(largest)} rules) and retrying`,
+      );
+      toEnable = toEnable.filter((id) => id !== largest);
+    }
   }
 }
 
@@ -154,8 +182,24 @@ async function syncAllowlist(settings: Settings): Promise<void> {
  */
 async function syncRegisteredScripts(settings: Settings): Promise<void> {
   const shouldExist = !settings.paused;
-  const excludeMatches = settings.allowlist.flatMap(allowlistPatterns);
-  const exclude = excludeMatches.length ? excludeMatches : undefined;
+  const allowlistMatches = [...new Set(settings.allowlist.flatMap(allowlistPatterns))];
+  const allowlistExclude = allowlistMatches.length ? allowlistMatches : undefined;
+
+  // Generic cosmetic CSS is additionally excluded on hosts with a $generichide/$elemhide
+  // network exception, so those hosts never receive the sheet (and need no per-page revert
+  // of the whole generic set). matchCosmetic mirrors this: it only emits the revert for
+  // entity-domain (example.*) exceptions, which can't be expressed as a match pattern here.
+  const cosmeticMatches = [
+    ...new Set(
+      [
+        ...settings.allowlist,
+        ...COSMETIC.networkExceptions.generichide,
+        ...COSMETIC.networkExceptions.elemhide,
+      ].flatMap(allowlistPatterns),
+    ),
+  ];
+  const cosmeticExclude = cosmeticMatches.length ? cosmeticMatches : undefined;
+
   const ids = enabledListIds(settings);
   const cssFiles = ids
     .map((id) => META.lists.find((l) => l.id === id)?.genericCssFile)
@@ -166,7 +210,7 @@ async function syncRegisteredScripts(settings: Settings): Promise<void> {
     id: GENERIC_CSS_SCRIPT_ID,
     css: cssFiles.length ? cssFiles : undefined,
     matches: ['<all_urls>'],
-    excludeMatches: exclude,
+    excludeMatches: cosmeticExclude,
     runAt: 'document_start',
     allFrames: true,
     persistAcrossSessions: true,
@@ -181,7 +225,7 @@ async function syncRegisteredScripts(settings: Settings): Promise<void> {
       '*://youtu.be/*',
       '*://*.youtubekids.com/*',
     ],
-    excludeMatches: exclude,
+    excludeMatches: allowlistExclude,
     runAt: 'document_start',
     allFrames: true,
     world: 'MAIN',
@@ -286,48 +330,52 @@ async function syncDarkModeScripts(
 }
 
 /**
- * Apply dark mode to the current http(s) tab without waiting for navigation.
- * Prefer insertCSS when turning on; reload when turning off (registered CSS can't be peeled off).
- * Skips chrome:// and other non-web tabs.
+ * Live-update open tabs after a toggle — insert/remove invert CSS and tell the
+ * content script to upgrade or reset smart styles. Avoids full page reload.
  */
-async function refreshActiveTabDarkMode(
+async function applyDarkModeToOpenTabs(
   settings: Settings,
   license: LicenseState,
 ): Promise<void> {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tab?.id == null || !isHttpOrHttpsUrl(tab.url)) return;
+  if (!isLicenseEffectivelyPaid(license)) return;
 
-  let hostname: string | null = null;
-  try {
-    hostname = normalizeHostname(new URL(tab.url!).hostname);
-  } catch {
-    return;
-  }
+  const tabs = await chrome.tabs.query({ url: ['http://*/*', 'https://*/*'] });
+  await Promise.all(
+    tabs.map(async (tab) => {
+      if (tab.id == null || !isDarkModeInjectibleUrl(tab.url)) return;
 
-  const apply = resolveDarkModeForHost({
-    paid: isLicenseEffectivelyPaid(license),
-    enabled: settings.darkModeEnabled,
-    overrides: settings.darkModeSiteOverrides,
-    hostname,
-  }).apply;
+      let hostname: string | null = null;
+      try {
+        hostname = tab.url ? normalizeHostname(new URL(tab.url).hostname) : null;
+      } catch {
+        return;
+      }
 
-  if (apply) {
-    try {
-      await chrome.scripting.insertCSS({
-        target: { tabId: tab.id, allFrames: true },
-        files: [DARK_MODE_CSS_PATH],
+      const resolved = resolveDarkModeForHost({
+        paid: true,
+        enabled: settings.darkModeEnabled,
+        overrides: settings.darkModeSiteOverrides,
+        hostname,
       });
-      return;
-    } catch (e) {
-      console.warn('[StampStack] dark mode insertCSS failed; reloading tab', e);
-    }
-  }
 
-  try {
-    await chrome.tabs.reload(tab.id);
-  } catch (e) {
-    console.warn('[StampStack] dark mode tab reload failed', e);
-  }
+      const target = { tabId: tab.id, allFrames: true };
+
+      try {
+        if (resolved.apply) {
+          await chrome.scripting.insertCSS({ target, files: [DARK_MODE_CSS_PATH] });
+        } else {
+          try {
+            await chrome.scripting.removeCSS({ target, files: [DARK_MODE_CSS_PATH] });
+          } catch {
+            /* Tab may only have registered CSS — content script reset handles that. */
+          }
+        }
+        await chrome.tabs.sendMessage(tab.id, { type: 'darkmode:refresh' } satisfies Message);
+      } catch {
+        /* Discarded tab or content script not ready — next navigation picks up registration. */
+      }
+    }),
+  );
 }
 
 async function syncDarkModeAndActiveTab(
@@ -335,7 +383,7 @@ async function syncDarkModeAndActiveTab(
   license: LicenseState,
 ): Promise<void> {
   await syncDarkModeScripts(settings, license);
-  await refreshActiveTabDarkMode(settings, license);
+  await applyDarkModeToOpenTabs(settings, license);
 }
 
 async function applyAll(settings: Settings, license?: LicenseState): Promise<void> {
@@ -351,7 +399,9 @@ async function applyAll(settings: Settings, license?: LicenseState): Promise<voi
 // Serialize read-modify-write of the single settings blob. Message handlers and the
 // blocked-count flush run concurrently; without this, two `loadSettings → mutate →
 // saveSettings` cycles interleave and the second clobbers the first's field change.
-let settingsChain: Promise<Settings> = loadSettings();
+// Every step must `await loadSettings()` itself — never pass a stale chain value into
+// nested mutateSettings (that deadlocks: mutate waits for the outer job that awaits it).
+let settingsChain: Promise<unknown> = Promise.resolve();
 function mutateSettings(mutator: (s: Settings) => void): Promise<Settings> {
   const next = settingsChain.then(async () => {
     const s = await loadSettings();
@@ -359,14 +409,17 @@ function mutateSettings(mutator: (s: Settings) => void): Promise<Settings> {
     await saveSettings(s);
     return s;
   });
-  settingsChain = next.catch(() => loadSettings());
+  settingsChain = next.catch(() => undefined);
   return next;
 }
 
-/** Run work after the current settings chain (and extend the chain so init can't race). */
+/** Run exclusive settings-aware work; always reloads settings after prior chain jobs. */
 function withSettings<T>(fn: (s: Settings) => Promise<T>): Promise<T> {
-  const next = settingsChain.then(async (s) => fn(s));
-  settingsChain = next.then(() => loadSettings()).catch(() => loadSettings());
+  const next = settingsChain.then(async () => {
+    const s = await loadSettings();
+    return fn(s);
+  });
+  settingsChain = next.catch(() => undefined);
   return next;
 }
 
@@ -375,19 +428,47 @@ function withSettings<T>(fn: (s: Settings) => Promise<T>): Promise<T> {
 // ---------------------------------------------------------------------------
 
 async function init(): Promise<void> {
-  await withSettings(async (settings) => {
-    // Unpacked: auto-grant test license so dark mode is usable without ExtPay.
-    await ensureUnpackedTestLicense();
-    let license = await refreshLicense();
-    if (isUnpackedInstall() && isLicenseEffectivelyPaid(license) && !settings.darkModeEnabled) {
-      settings = await mutateSettings((s) => {
-        s.darkModeEnabled = true;
+  // Refresh provider state first; then ensure unpacked dev license (ExtPay may report unpaid).
+  let license = await refreshLicense();
+  license = await ensureUnpackedTestLicense();
+
+  // One-shot: clear auto-off overrides written while sampling under invert (false dark).
+  await clearBuggyAutoOffOverrides();
+
+  if (isUnpackedInstall() && isLicenseEffectivelyPaid(license)) {
+    // One-shot on first unpacked run. init() re-runs on every SW cold-start, so without
+    // this persisted flag a dev who later turns dark mode OFF would have it flipped back on.
+    const flag = await chrome.storage.local.get(DARK_AUTO_ENABLE_KEY);
+    if (!flag[DARK_AUTO_ENABLE_KEY]) {
+      await mutateSettings((s) => {
+        if (!s.darkModeEnabled) s.darkModeEnabled = true;
       });
+      await chrome.storage.local.set({ [DARK_AUTO_ENABLE_KEY]: true });
       license = await loadLicense();
     }
+  }
+
+  await withSettings(async (settings) => {
     await applyAll(settings, license);
     await chrome.action.setBadgeBackgroundColor({ color: '#2f6f4f' });
   });
+}
+
+const AUTO_OFF_RESET_KEY = 'stampstack.darkAutoOffReset.v1';
+const DARK_AUTO_ENABLE_KEY = 'stampstack.darkAutoEnable.v1';
+
+/** Remove force-off entries that were auto-persisted under the invert false-positive bug. */
+async function clearBuggyAutoOffOverrides(): Promise<void> {
+  const flag = await chrome.storage.local.get(AUTO_OFF_RESET_KEY);
+  if (flag[AUTO_OFF_RESET_KEY]) return;
+  await mutateSettings((s) => {
+    if (!s.darkModeAutoOff) s.darkModeAutoOff = {};
+    for (const host of Object.keys(s.darkModeAutoOff)) {
+      if (s.darkModeSiteOverrides[host] === 'off') delete s.darkModeSiteOverrides[host];
+      delete s.darkModeAutoOff[host];
+    }
+  });
+  await chrome.storage.local.set({ [AUTO_OFF_RESET_KEY]: true });
 }
 
 /** After purchase / restore: cache is paid — auto-enable dark mode once. */
@@ -421,6 +502,15 @@ if (debug) {
     void chrome.action.setBadgeText({ tabId, text: next > 999 ? '999+' : String(next) });
     void bumpTotal();
   });
+
+  // Reset the per-tab badge counter on top-frame navigation. Only meaningful alongside
+  // onRuleMatchedDebug (dev/--dev-feedback builds), so it lives here — the `webNavigation`
+  // permission is added only for those builds (scripts/build.mjs) and never ships to store.
+  chrome.webNavigation?.onBeforeNavigate.addListener((d) => {
+    if (d.frameId !== 0) return;
+    tabBlocked.set(d.tabId, 0);
+    void chrome.action.setBadgeText({ tabId: d.tabId, text: '' });
+  });
 }
 
 let pendingTotal = 0;
@@ -437,12 +527,6 @@ async function bumpTotal(): Promise<void> {
     });
   }, 5000);
 }
-
-chrome.webNavigation?.onBeforeNavigate.addListener((d) => {
-  if (d.frameId !== 0) return;
-  tabBlocked.set(d.tabId, 0);
-  void chrome.action.setBadgeText({ tabId: d.tabId, text: '' });
-});
 
 chrome.tabs.onRemoved.addListener((tabId) => tabBlocked.delete(tabId));
 
@@ -505,7 +589,11 @@ async function handleMessage(msg: Message, sender: chrome.runtime.MessageSender)
       return handleDarkModeSetSiteOverride(msg.hostname, msg.override);
 
     case 'darkmode:autoSkip':
-      return handleDarkModeAutoSkip(msg.hostname, msg.reason);
+      return handleDarkModeAutoSkip(msg.hostname, sender.frameId, msg.reason);
+
+    case 'darkmode:refresh':
+      // SW → content only; tabs should not message the SW with this type.
+      return null;
 
     case 'license:get':
       return handleLicenseGet();
@@ -705,6 +793,7 @@ async function buildDarkModeData(
 ): Promise<DarkModeData> {
   const licenseData = toLicenseData(license);
   const host = hostname ? normalizeHostname(hostname) : null;
+  const restricted = !!(host && isExtensionRestrictedHostname(host));
   const resolved = resolveDarkModeForHost({
     paid: licenseData.paid,
     enabled: settings.darkModeEnabled,
@@ -714,9 +803,10 @@ async function buildDarkModeData(
   return {
     paid: licenseData.paid,
     enabled: settings.darkModeEnabled,
-    apply: resolved.apply,
+    apply: restricted ? false : resolved.apply,
     hostname: host,
     override: resolved.override,
+    restricted,
     autoOff: !!(host && settings.darkModeAutoOff?.[host]),
     autoOffHosts: { ...(settings.darkModeAutoOff ?? {}) },
     siteOverrides: { ...settings.darkModeSiteOverrides },
@@ -785,8 +875,15 @@ async function handleDarkModeSetSiteOverride(
  */
 async function handleDarkModeAutoSkip(
   hostname: string,
+  frameId: number | undefined,
   _reason?: string,
 ): Promise<{ ok: boolean; skipped: boolean }> {
+  // Only the top frame may persist a per-host force-off. Without this, a dark-themed
+  // cross-origin embed (YouTube/Vimeo/Disqus/CodePen) would auto-skip for its OWN host and
+  // silently disable dark mode when that host is later visited directly. The content script
+  // already guards this (top-frame only), but keep a defense-in-depth check on the SW side.
+  if (frameId != null && frameId !== 0) return { ok: true, skipped: false };
+
   const host = normalizeHostname(hostname);
   if (!host) return { ok: false, skipped: false };
 

@@ -189,6 +189,7 @@ function parseNetwork(line) {
     excludedInitiatorDomains: [],
     requestDomains: [],
     excludedRequestDomains: [],
+    removeParams: [], // $removeparam=<name> — exact query-param names to strip
     thirdParty: null, // true | false | null
     matchCase: false,
     important: false,
@@ -279,9 +280,26 @@ function parseNetwork(line) {
           redirect = value.trim();
           break;
         case 'generichide':
+        case 'ghide':
+          cosmeticException = 'generichide';
+          break;
         case 'elemhide':
+        case 'ehide':
+          cosmeticException = 'elemhide';
+          break;
         case 'specifichide':
-          cosmeticException = name;
+        case 'shide':
+          cosmeticException = 'specifichide';
+          break;
+        case 'removeparam':
+        case 'queryprune':
+          // DNR queryTransform.removeParams accepts exact param NAMES only. Skip regex
+          // (/.../), negation (~keep), and the bare form (strip-all) — not expressible here.
+          if (value && !value.startsWith('/') && !value.startsWith('~') && !value.endsWith('/')) {
+            options.removeParams.push(value);
+          } else {
+            unsupported.push(token);
+          }
           break;
         default:
           unsupported.push(token);

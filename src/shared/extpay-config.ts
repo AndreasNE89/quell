@@ -23,13 +23,16 @@ const fromLocal =
     : null;
 
 /** Resolved ExtensionPay id (local override wins when set). */
-export const EXTPAY_EXTENSION_ID = fromLocal ?? PLACEHOLDER;
+export const EXTPAY_EXTENSION_ID: string = fromLocal ?? PLACEHOLDER;
 
 /** True when a real ExtensionPay id has been pasted in (tracked or local). */
 export function isExtPayConfigured(): boolean {
   return (
     typeof EXTPAY_EXTENSION_ID === 'string' &&
-    EXTPAY_EXTENSION_ID.length > 0 &&
-    EXTPAY_EXTENSION_ID !== PLACEHOLDER
+    // Reject the placeholder and obviously-truncated ids (e.g. 'stampstack-') so a
+    // partial value can't be treated as configured and open a broken checkout page.
+    EXTPAY_EXTENSION_ID.length >= 4 &&
+    EXTPAY_EXTENSION_ID !== PLACEHOLDER &&
+    !EXTPAY_EXTENSION_ID.endsWith('-')
   );
 }

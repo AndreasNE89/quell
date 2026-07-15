@@ -19,6 +19,8 @@ before(async () => {
   hostsWithForceOff,
   hostsWithForceOn,
   isHttpOrHttpsUrl,
+  isExtensionRestrictedHostname,
+  isDarkModeInjectibleUrl,
 } from './src/shared/dark-mode.js';
 export { LICENSE_GRACE_MS } from './src/shared/constants.js';`,
       resolveDir: ROOT,
@@ -131,4 +133,18 @@ test('should accept http(s) tab urls only', () => {
   assert.equal(mod.isHttpOrHttpsUrl('chrome://extensions'), false);
   assert.equal(mod.isHttpOrHttpsUrl('about:blank'), false);
   assert.equal(mod.isHttpOrHttpsUrl(null), false);
+});
+
+test('should mark Chrome Web Store hosts as restricted', () => {
+  assert.equal(mod.isExtensionRestrictedHostname('chrome.google.com'), true);
+  assert.equal(mod.isExtensionRestrictedHostname('chromewebstore.google.com'), true);
+  assert.equal(mod.isExtensionRestrictedHostname('example.com'), false);
+});
+
+test('should not inject dark mode on restricted https urls', () => {
+  const devconsole =
+    'https://chrome.google.com/u/1/webstore/devconsole/1f8d61af-6eca-4c07-8551-2613a81caae5';
+  assert.equal(mod.isDarkModeInjectibleUrl(devconsole), false);
+  assert.equal(mod.isDarkModeInjectibleUrl('https://news.ycombinator.com/'), true);
+  assert.equal(mod.isDarkModeInjectibleUrl('chrome://extensions'), false);
 });

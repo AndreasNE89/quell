@@ -14,6 +14,8 @@ import {
   domainSpecMatches,
   matchesExceptionHost,
   entityDomainKeys,
+  normalizeHostname,
+  isValidMatchPatternHost,
 } from '../shared/hostname.js';
 
 export interface CosmeticMatch {
@@ -70,6 +72,11 @@ export function mergeCosmeticLists(
   return merged;
 }
 
+/** Exception hosts that can be expressed as Chrome match patterns (concrete, non-entity). */
+function concreteExceptionHosts(hosts: string[]): string[] {
+  return hosts.filter((h) => isValidMatchPatternHost(normalizeHostname(h)));
+}
+
 export function matchCosmetic(
   hostname: string,
   data: CosmeticData,
@@ -82,10 +89,18 @@ export function matchCosmetic(
   const disableAll = matchesExceptionHost(hostname, data.networkExceptions.elemhide);
   const disableSpecific = matchesExceptionHost(hostname, data.networkExceptions.specifichide);
 
+  // The registered generic stylesheet is excluded (syncRegisteredScripts) for hosts matching
+  // a *concrete* (match-patternable) generichide/elemhide entry, so those need no per-page
+  // revert. Only entity-domain (example.*) exceptions — which can't be a match pattern —
+  // still receive the sheet and require the content-script revert below.
+  const genericExcludedAtRegistration =
+    matchesExceptionHost(hostname, concreteExceptionHosts(data.networkExceptions.generichide)) ||
+    matchesExceptionHost(hostname, concreteExceptionHosts(data.networkExceptions.elemhide));
+
   if (disableAll) {
     return {
       hide: [],
-      unhide: [...merged.hideGeneric],
+      unhide: genericExcludedAtRegistration ? [] : [...merged.hideGeneric],
       procedural: [],
       disableGeneric: true,
       disableSpecific: true,
@@ -116,8 +131,11 @@ export function matchCosmetic(
   // A specific unhide cancels a specific hide for the same hostname.
   for (const s of unhide) hide.delete(s);
 
-  // generichide: cancel generic CSS by reverting those selectors in the content script.
-  if (disableGeneric) {
+  // generichide: cancel generic CSS by reverting those selectors in the content script —
+  // but only when the sheet is still injected (entity-domain match). Concrete generichide
+  // hosts are excluded at registration, so no revert payload is needed (avoids shipping the
+  // whole generic set as a per-page unhide + a large revert stylesheet).
+  if (disableGeneric && !genericExcludedAtRegistration) {
     for (const s of merged.hideGeneric) unhide.add(s);
   }
 

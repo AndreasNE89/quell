@@ -201,15 +201,22 @@ export function buildSmartDarkCss(signals: DarkPageSignals): string {
   else if (bg > 0.7) preBg = '#e4e4e4';
   else preBg = '#dedede';
 
-  // Contrast bump when sampled text/bg contrast is weak (washed gray-on-gray pages).
-  let contrast = 1.02;
+  // Matte contrast: <1 lifts inverted-white backgrounds off pure #000 to a soft charcoal and
+  // eases white text — a gentler dark than a straight invert. Pull back toward neutral only
+  // for pages whose own text/bg contrast is already weak (washed gray-on-gray), where extra
+  // softening would hurt legibility.
+  let contrast = 0.82;
   if (text != null && bg != null) {
     const c = contrastRatio(text, bg);
-    if (c < 4.5) contrast = 1.08;
-    else if (c < 7) contrast = 1.05;
+    if (c < 4.5) contrast = 0.95;
+    else if (c < 7) contrast = 0.9;
   }
 
-  return `/* StampStack smart dark — controlled invert + contrast */
+  // Compensate media contrast so photos/video stay natural under the matte html layer
+  // (net ≈ 1.0). Kept in sync with the html contrast above.
+  const mediaContrast = (1 / contrast).toFixed(2);
+
+  return `/* StampStack smart dark — matte controlled invert */
 html {
   filter: invert(1) hue-rotate(180deg) contrast(${contrast}) !important;
   background-color: ${preBg} !important;
@@ -220,7 +227,7 @@ body {
   color-scheme: dark !important;
 }
 ${MEDIA_REINVERT} {
-  filter: invert(1) hue-rotate(180deg) !important;
+  filter: invert(1) hue-rotate(180deg) contrast(${mediaContrast}) !important;
 }
 input, textarea, select, button {
   color-scheme: dark;
@@ -228,11 +235,17 @@ input, textarea, select, button {
 `;
 }
 
-/** CSS that cancels registered invert (already-dark / auto-skip). */
+/** CSS that cancels registered invert (already-dark / auto-skip).
+ * The FOUC sheet (dark-mode.css) forces filter, background-color AND color-scheme with
+ * !important — so the reset must neutralize all three, or an already-dark page keeps a
+ * light-gray html background (bleeds through overscroll / body margins) and forced
+ * color-scheme:dark. */
 export function buildDarkResetCss(): string {
   return `/* StampStack dark reset — site already dark */
 html {
   filter: none !important;
+  background-color: transparent !important;
+  color-scheme: revert !important;
 }
 ${MEDIA_REINVERT} {
   filter: none !important;

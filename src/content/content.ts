@@ -9,10 +9,16 @@ import type {
   CosmeticResponse,
   ScriptletsResponse,
   YoutubeOptionsData,
+  Settings,
 } from '../shared/types.js';
 import { STORAGE_KEY } from '../shared/constants.js';
 import { queryProcedural } from '../engine/procedural.js';
-import { applyYoutubeFeatures, watchYoutubeSpa } from './youtube-ui.js';
+import {
+  applyYoutubeFeatures,
+  watchYoutubeSpa,
+  youtubeOptsFromSettings,
+  isYoutubeHost,
+} from './youtube-ui.js';
 import { startDarkModeSmart } from './dark-mode-smart.js';
 
 if (location.protocol === 'http:' || location.protocol === 'https:' || location.protocol === 'about:') {
@@ -26,62 +32,86 @@ if (location.protocol === 'http:' || location.protocol === 'https:') {
 
 let youtubeOpts: YoutubeOptionsData | null = null;
 
+function onYoutubeStorageChanged(host: string): void {
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local' || !changes[STORAGE_KEY]) return;
+    void refreshYoutubeOpts(host);
+  });
+}
+
+async function refreshYoutubeOpts(host: string): Promise<void> {
+  try {
+    const raw = await send({ type: 'youtube:getOptions', hostname: host });
+    youtubeOpts = raw as YoutubeOptionsData | null;
+    if (youtubeOpts) applyYoutubeFeatures(youtubeOpts);
+  } catch {
+    /* SW may be asleep; storage bootstrap already applied */
+  }
+}
+
+/** Shorts redirect + hide must start before cosmetic:get (can take hundreds of ms). */
+function bootstrapYoutube(host: string): void {
+  if (!isYoutubeHost(host)) return;
+  watchYoutubeSpa(() => youtubeOpts);
+  onYoutubeStorageChanged(host);
+  void chrome.storage.local.get(STORAGE_KEY).then((stored) => {
+    const partial = stored[STORAGE_KEY] as Partial<Settings> | undefined;
+    if (!partial) return;
+    youtubeOpts = youtubeOptsFromSettings(partial, host);
+    applyYoutubeFeatures(youtubeOpts);
+  });
+  void refreshYoutubeOpts(host);
+}
+
 async function start(): Promise<void> {
   const host = location.hostname;
 
+  bootstrapYoutube(host);
+
   // Kick scriptlets immediately — do not wait on cosmetics. YouTube/player
-  // pages need MAIN-world hooks as early as the SW round-trip allows.
-  const scriptletsP = send({ type: 'scriptlets:get', hostname: host }).then((raw) => {
-    const s = raw as ScriptletsResponse | null;
+  // pages need MAIN-world hooks as early as the SW round-trip allows. Use the same
+  // SW-wake retry as cosmetics: a bare send() that races SW cold-start would otherwise
+  // silently drop scriptlets (anti-adblock defusers) for that page load with no retry.
+  const scriptletsP = sendWithRetry<ScriptletsResponse>({
+    type: 'scriptlets:get',
+    hostname: host,
+  }).then((s) => {
     if (!s || s.allowlisted || !s.scriptlets.length) return;
     return send({ type: 'scriptlets:inject', scriptlets: s.scriptlets });
   });
 
-  const ytOptsP = send({ type: 'youtube:getOptions', hostname: host }).then((raw) => {
-    youtubeOpts = raw as YoutubeOptionsData | null;
-    if (youtubeOpts) applyYoutubeFeatures(youtubeOpts);
-  });
+  const ytOptsP = refreshYoutubeOpts(host);
 
-  const resp = await sendWithRetry({ type: 'cosmetic:get', hostname: host });
-  if (resp?.allowlisted) {
-    await Promise.all([scriptletsP.catch(() => {}), ytOptsP.catch(() => {})]);
-    return;
-  }
+  const resp = await sendWithRetry<CosmeticResponse>({ type: 'cosmetic:get', hostname: host });
+  const allowlisted = !!resp?.allowlisted;
 
-  if (resp) {
+  if (!allowlisted && resp) {
     injectSpecificCss(resp.hide, resp.unhide);
     if (resp.procedural.length) {
       const exprs = resp.procedural.map((p) => p.expr);
+      // attributes:true wakes the observer on every class/style change page-wide; only
+      // the attribute/style-sensitive ops actually need it, so scope it to those.
+      const watchAttributes = exprs.some((e) => /:(?:watch-attr|matches-attr|matches-css)/.test(e));
       runProcedural(exprs);
-      observe(() => runProcedural(exprs));
+      observe(() => runProcedural(exprs), watchAttributes);
     }
   }
 
   await Promise.all([scriptletsP.catch(() => {}), ytOptsP.catch(() => {})]);
-  watchYoutubeSpa(() => youtubeOpts);
-
-  // Live-update when the user flips YouTube toggles in the popup/options.
-  chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'local' || !changes[STORAGE_KEY]) return;
-    void send({ type: 'youtube:getOptions', hostname: host }).then((raw) => {
-      youtubeOpts = raw as YoutubeOptionsData | null;
-      if (youtubeOpts) applyYoutubeFeatures(youtubeOpts);
-    });
-  });
 }
 
-async function sendWithRetry(msg: Message, attempts = 5): Promise<CosmeticResponse | null> {
+async function sendWithRetry<T>(msg: Message, attempts = 5): Promise<T | null> {
   let lastErr: unknown;
   for (let i = 0; i < attempts; i++) {
     try {
-      const resp = (await send(msg)) as CosmeticResponse | null;
+      const resp = (await send(msg)) as T | null;
       if (resp) return resp;
     } catch (e) {
       lastErr = e;
     }
     await sleep(50 * (i + 1));
   }
-  if (lastErr) console.warn('[StampStack] cosmetic:get failed after retries', lastErr);
+  if (lastErr) console.warn('[StampStack] sendMessage failed after retries', msg.type, lastErr);
   return null;
 }
 
@@ -140,7 +170,7 @@ function runProcedural(exprs: string[]): void {
 }
 
 /** Re-run procedural matching as the page mutates, throttled to once per frame. */
-function observe(run: () => void): void {
+function observe(run: () => void, watchAttributes: boolean): void {
   let scheduled = false;
   const schedule = (): void => {
     if (scheduled) return;
@@ -155,7 +185,7 @@ function observe(run: () => void): void {
     obs.observe(document.documentElement, {
       childList: true,
       subtree: true,
-      attributes: true,
+      attributes: watchAttributes,
     });
   if (document.documentElement) attach();
   else document.addEventListener('DOMContentLoaded', attach, { once: true });
