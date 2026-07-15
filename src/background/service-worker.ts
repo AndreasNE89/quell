@@ -59,6 +59,7 @@ import {
   hostsWithForceOn,
   isExtensionRestrictedHostname,
   isDarkModeInjectibleUrl,
+  isHttpOrHttpsUrl,
 } from '../shared/dark-mode.js';
 import { matchCosmetic, matchScriptlets } from '../engine/cosmetic-match.js';
 import {
@@ -140,6 +141,18 @@ function allowlistPatterns(host: string): string[] {
   // chrome.scripting registration for cosmetics + YouTube hooks.
   if (!isValidMatchPatternHost(h)) return [];
   return [`*://${h}/*`, `*://*.${h}/*`, `*://www.${h}/*`];
+}
+
+/**
+ * Exact-host match patterns for dark-mode registration — no `*://*.h/*` subdomain wildcard.
+ * resolveDarkModeForHost resolves per-site overrides by EXACT (www-stripped) host, so the
+ * registered FOUC scope must match that, or a force-off/on on example.com would wrongly
+ * exclude/include sub.example.com and diverge from what the content script applies.
+ */
+function darkModeHostPatterns(host: string): string[] {
+  const h = normalizeHostname(host);
+  if (!isValidMatchPatternHost(h)) return [];
+  return [`*://${h}/*`, `*://www.${h}/*`];
 }
 
 async function syncAllowlist(settings: Settings): Promise<void> {
@@ -283,18 +296,10 @@ async function syncDarkModeScripts(
 ): Promise<void> {
   const paid = isLicenseEffectivelyPaid(license);
   const forceOffExclude = [
-    ...new Set(
-      hostsWithForceOff(settings.darkModeSiteOverrides)
-        .filter(isValidMatchPatternHost)
-        .flatMap(allowlistPatterns),
-    ),
+    ...new Set(hostsWithForceOff(settings.darkModeSiteOverrides).flatMap(darkModeHostPatterns)),
   ];
   const forceOnMatches = [
-    ...new Set(
-      hostsWithForceOn(settings.darkModeSiteOverrides)
-        .filter(isValidMatchPatternHost)
-        .flatMap(allowlistPatterns),
-    ),
+    ...new Set(hostsWithForceOn(settings.darkModeSiteOverrides).flatMap(darkModeHostPatterns)),
   ];
 
   const globalScript: chrome.scripting.RegisteredContentScript = {
@@ -330,46 +335,31 @@ async function syncDarkModeScripts(
 }
 
 /**
- * Live-update open tabs after a toggle — insert/remove invert CSS and tell the
- * content script to upgrade or reset smart styles. Avoids full page reload.
+ * Live-update open tabs after a toggle, instantly and without a reload. The content script
+ * re-evaluates and applies the correct visual itself: the matte smart invert on a light page,
+ * or a no-op reset on an already-dark page.
+ *
+ * We deliberately do NOT insertCSS the invert here. Doing so applied it to every tab whose
+ * host resolves to "on" — including already-dark pages, which would flash to light for a frame
+ * before the content script cancelled it. Letting the content script decide keeps the toggle
+ * both instant and flash-free.
  */
 async function applyDarkModeToOpenTabs(
-  settings: Settings,
-  license: LicenseState,
+  _settings: Settings,
+  _license: LicenseState,
 ): Promise<void> {
-  if (!isLicenseEffectivelyPaid(license)) return;
-
+  // No paid gate here: on a paid→unpaid transition we still need to reach open tabs so the
+  // content script can cancel any lingering invert (it resets itself when darkmode:get reports
+  // unpaid). The content script is the authority on what to apply.
   const tabs = await chrome.tabs.query({ url: ['http://*/*', 'https://*/*'] });
   await Promise.all(
     tabs.map(async (tab) => {
       if (tab.id == null || !isDarkModeInjectibleUrl(tab.url)) return;
-
-      let hostname: string | null = null;
       try {
-        hostname = tab.url ? normalizeHostname(new URL(tab.url).hostname) : null;
-      } catch {
-        return;
-      }
-
-      const resolved = resolveDarkModeForHost({
-        paid: true,
-        enabled: settings.darkModeEnabled,
-        overrides: settings.darkModeSiteOverrides,
-        hostname,
-      });
-
-      const target = { tabId: tab.id, allFrames: true };
-
-      try {
-        if (resolved.apply) {
-          await chrome.scripting.insertCSS({ target, files: [DARK_MODE_CSS_PATH] });
-        } else {
-          try {
-            await chrome.scripting.removeCSS({ target, files: [DARK_MODE_CSS_PATH] });
-          } catch {
-            /* Tab may only have registered CSS — content script reset handles that. */
-          }
-        }
+        // Clean up any invert sheet an older build inserted via insertCSS (harmless if none).
+        await chrome.scripting
+          .removeCSS({ target: { tabId: tab.id, allFrames: true }, files: [DARK_MODE_CSS_PATH] })
+          .catch(() => {});
         await chrome.tabs.sendMessage(tab.id, { type: 'darkmode:refresh' } satisfies Message);
       } catch {
         /* Discarded tab or content script not ready — next navigation picks up registration. */
@@ -690,7 +680,9 @@ async function handlePopupGet(): Promise<PopupData> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   let hostname: string | null = null;
   const url = tab?.url ?? null;
-  if (url) {
+  // Only real web pages get a host — chrome://, about:, file:, view-source: etc. can't be
+  // acted on, so leaving hostname null disables the per-site controls there.
+  if (url && isHttpOrHttpsUrl(url)) {
     try {
       hostname = new URL(url).hostname;
     } catch {
@@ -819,7 +811,7 @@ async function handleDarkModeGet(hostname?: string | null): Promise<DarkModeData
   let host = hostname ?? null;
   if (host === undefined || host === null) {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (tab?.url) {
+    if (tab?.url && isHttpOrHttpsUrl(tab.url)) {
       try {
         host = new URL(tab.url).hostname;
       } catch {

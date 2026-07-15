@@ -17,15 +17,19 @@ const el = {
   totalBlocked: $('totalBlocked'),
   optionsBtn: $('optionsBtn'),
   openOptions: $('openOptions'),
+  darkModeRow: $('darkModeRow'),
   darkModeToggle: $<HTMLInputElement>('darkModeToggle'),
   darkModeLabel: $('darkModeLabel'),
+  darkSiteRow: $('darkSiteRow'),
+  darkSiteToggle: $<HTMLInputElement>('darkSiteToggle'),
+  darkSiteLabel: $('darkSiteLabel'),
+  darkSiteHost: $('darkSiteHost'),
+  darkResetBtn: $<HTMLButtonElement>('darkResetBtn'),
   darkUpsell: $('darkUpsell'),
   darkPrice: $('darkPrice'),
   darkBuyBtn: $<HTMLButtonElement>('darkBuyBtn'),
   darkDevUnlockBtn: $<HTMLButtonElement>('darkDevUnlockBtn'),
   darkHint: $('darkHint'),
-  darkOverrideWrap: $('darkOverrideWrap'),
-  darkOverride: $<HTMLSelectElement>('darkOverride'),
   darkAutoNote: $('darkAutoNote'),
 };
 
@@ -67,14 +71,15 @@ function render(data: PopupData): void {
 function renderDarkMode(data: DarkModeData): void {
   darkCurrent = data;
   el.darkPrice.textContent = data.license.priceLabel;
-  el.darkAutoNote.hidden = !(data.paid && data.autoOff && data.override === 'off');
+  const host = data.hostname;
 
   if (!data.paid) {
-    el.darkModeLabel.textContent = `Dark mode — ${data.license.priceLabel}`;
-    el.darkModeToggle.checked = false;
-    el.darkModeToggle.disabled = true;
+    // Locked: only the upsell + config hint. Hide the toggles.
+    el.darkSiteRow.hidden = true;
+    el.darkResetBtn.hidden = true;
+    el.darkModeRow.hidden = true;
+    el.darkAutoNote.hidden = true;
     el.darkUpsell.hidden = false;
-    el.darkOverrideWrap.hidden = true;
     el.darkBuyBtn.disabled = false;
     el.darkDevUnlockBtn.hidden = !data.license.unpacked;
     if (data.license.unpacked) {
@@ -90,22 +95,37 @@ function renderDarkMode(data: DarkModeData): void {
     }
     return;
   }
-  el.darkModeLabel.textContent = 'Dark mode';
-  el.darkModeToggle.checked = data.enabled;
-  el.darkModeToggle.disabled = false;
+
+  // Paid: global (all-sites) default toggle is always shown.
   el.darkUpsell.hidden = true;
   el.darkDevUnlockBtn.hidden = true;
+  el.darkModeRow.hidden = false;
+  el.darkModeToggle.checked = data.enabled;
+  el.darkModeToggle.disabled = false;
+
   if (data.restricted) {
+    el.darkSiteRow.hidden = true;
+    el.darkResetBtn.hidden = true;
+    el.darkAutoNote.hidden = true;
     el.darkHint.hidden = false;
     el.darkHint.textContent =
-      'Not available on Chrome Web Store pages — Chrome blocks extensions from modifying these sites.';
-    el.darkOverrideWrap.hidden = true;
-    el.darkAutoNote.hidden = true;
+      'Not available on Chrome Web Store pages — Chrome blocks extensions from modifying these.';
     return;
   }
   el.darkHint.hidden = true;
-  el.darkOverrideWrap.hidden = !data.hostname;
-  el.darkOverride.value = data.override ?? '';
+
+  // Primary quick toggle for the current page.
+  const hasHost = !!host;
+  el.darkSiteRow.hidden = !hasHost;
+  if (hasHost) {
+    el.darkSiteToggle.checked = data.apply;
+    el.darkSiteToggle.disabled = false;
+    el.darkSiteLabel.textContent = data.apply ? 'Dark mode is on here' : 'Dark mode is off here';
+    el.darkSiteHost.textContent = host!;
+  }
+  // Show the reset link only when this page overrides the global default.
+  el.darkResetBtn.hidden = !(hasHost && data.override != null);
+  el.darkAutoNote.hidden = !(hasHost && data.autoOff && data.override === 'off');
 }
 
 let current: PopupData | null = null;
@@ -206,14 +226,26 @@ el.darkDevUnlockBtn.addEventListener('click', async () => {
   else void refresh();
 });
 
-el.darkOverride.addEventListener('change', async () => {
+// Quick per-page toggle: pin an explicit on/off override for this site. The "Reset to
+// global default" link clears it. Explicit (rather than clearing when it matches global)
+// so a Force-on sticks on sites the smart detector would otherwise auto-skip as already-dark.
+el.darkSiteToggle.addEventListener('change', async () => {
   if (!darkCurrent?.hostname || !darkCurrent.paid) return;
-  const raw = el.darkOverride.value;
-  const override = raw === 'on' || raw === 'off' ? raw : null;
+  const override: 'on' | 'off' = el.darkSiteToggle.checked ? 'on' : 'off';
   const data = (await send({
     type: 'darkmode:setSiteOverride',
     hostname: darkCurrent.hostname,
     override,
+  })) as DarkModeData;
+  renderDarkMode(data);
+});
+
+el.darkResetBtn.addEventListener('click', async () => {
+  if (!darkCurrent?.hostname || !darkCurrent.paid) return;
+  const data = (await send({
+    type: 'darkmode:setSiteOverride',
+    hostname: darkCurrent.hostname,
+    override: null,
   })) as DarkModeData;
   renderDarkMode(data);
 });

@@ -32,7 +32,14 @@ export function startDarkModeSmart(): void {
   void run(true);
 }
 
+let runGeneration = 0;
+
 async function run(initial = false): Promise<void> {
+  // Each run supersedes older ones. A manual toggle arrives as darkmode:refresh → run(), which
+  // bumps the generation so any pending re-sample from the initial page load bails out instead
+  // of re-applying stale state (e.g. re-darkening a page the user just turned off).
+  const gen = ++runGeneration;
+
   const host = location.hostname;
   let data: DarkModeData | null = null;
   try {
@@ -40,9 +47,18 @@ async function run(initial = false): Promise<void> {
   } catch {
     return;
   }
-  if (!data?.paid) return;
+  if (gen !== runGeneration) return;
+  if (!data?.paid) {
+    // License lapsed while this tab was open — cancel any invert so the page isn't stuck dark.
+    // Skip on the initial load: an unpaid page never had our CSS registered, nothing to cancel.
+    if (!initial) {
+      injectStyle(STYLE_RESET, buildDarkResetCss());
+      removeStyle(STYLE_SMART);
+    }
+    return;
+  }
 
-  // Force off (user, global off, or prior auto) — cancel invert + clear smart CSS.
+  // Dark mode off for this page (global off, or per-site off) — cancel invert + clear smart CSS.
   if (!data.apply) {
     injectStyle(STYLE_RESET, buildDarkResetCss());
     removeStyle(STYLE_SMART);
@@ -50,49 +66,54 @@ async function run(initial = false): Promise<void> {
   }
 
   await waitForBody(800);
+  if (gen !== runGeneration) return;
 
   const settledDark = sampleAndApply(host, data);
   // Some sites apply their dark theme via JS after body exists (saved preference / matchMedia
   // on DOMContentLoaded), so a single early sample sees light and inverts a page that then
   // turns dark → washed-out. On the initial page load, re-check after load / a short delay.
-  if (initial && !settledDark) scheduleReSample(host, data);
+  if (initial && !settledDark) scheduleReSample(host, data, gen);
 }
 
 /**
  * Sample the page without our FOUC invert and apply the right treatment.
- * Returns true if it settled as already-dark (reset + auto-skip); false if it applied the
- * smart invert for a light page (or Force on).
+ * Returns true if it settled as already-dark (leave it dark); false if it applied the smart
+ * invert for a light page.
  */
 function sampleAndApply(host: string, data: DarkModeData): boolean {
   const signals = samplePageWithoutInvert(document);
   const verdict = isConfidentlyAlreadyDark(signals);
 
-  // User Force on always wins — never auto-skip.
-  if (verdict.dark && verdict.confidence === 'high' && data.override !== 'on') {
+  // Never invert a confidently already-dark page: inverting a dark page produces a LIGHT
+  // page — the opposite of "dark mode". This holds even when the site is Force-on, because
+  // the goal (a dark page) is already met; we just cancel our FOUC invert and leave the site
+  // as-is. Persist "off" only when the host follows the global default (override == null), so
+  // already-dark pages default to off without overwriting an explicit user on/off choice.
+  if (verdict.dark && verdict.confidence === 'high') {
     injectStyle(STYLE_RESET, buildDarkResetCss());
     removeStyle(STYLE_SMART);
-    void send({ type: 'darkmode:autoSkip', hostname: host, reason: verdict.reason }).catch(() => {
-      /* SW may be waking */
-    });
+    if (data.override == null) {
+      void send({ type: 'darkmode:autoSkip', hostname: host, reason: verdict.reason }).catch(() => {
+        /* SW may be waking */
+      });
+    }
     return true;
   }
 
-  // Light page (or Force on): upgrade FOUC invert → smarter stylesheet.
+  // Light page: apply the matte smart invert.
   injectStyle(STYLE_SMART, buildSmartDarkCss(signals));
   removeStyle(STYLE_RESET);
   return false;
 }
 
-let reSampleScheduled = false;
 /** Re-check once after load for sites that turn dark via JS after our initial light verdict. */
-function scheduleReSample(host: string, data: DarkModeData): void {
-  if (reSampleScheduled) return;
-  reSampleScheduled = true;
-  let settled = false;
+function scheduleReSample(host: string, data: DarkModeData, gen: number): void {
   const recheck = (): void => {
-    if (settled) return;
-    // Only flips to reset if the page is NOW confidently dark; never un-darks a light page.
-    if (sampleAndApply(host, data)) settled = true;
+    // Bail if a newer run (e.g. a manual toggle) has superseded this one.
+    if (gen !== runGeneration) return;
+    // Re-apply the correct visual for the current page: reset if it's now confidently dark,
+    // else keep the smart invert. Never un-darks a light page.
+    sampleAndApply(host, data);
   };
   if (document.readyState !== 'complete') {
     window.addEventListener('load', () => setTimeout(recheck, 0), { once: true });

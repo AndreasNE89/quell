@@ -67,33 +67,47 @@
 
     <section class="feature-block" id="darkModeBlock">
       <div class="feature-title">Dark mode</div>
-      <label class="switch-row subtle" id="darkModeRow">
-        <span id="darkModeLabel">Dark mode</span>
+
+      <!-- Primary: one-click dark mode for the current page -->
+      <label class="switch-row dark-site-row" id="darkSiteRow" hidden>
+        <span class="dark-site-text">
+          <span id="darkSiteLabel">Dark mode on this page</span>
+          <span class="dark-site-host" id="darkSiteHost"></span>
+        </span>
         <span class="switch">
-          <input type="checkbox" id="darkModeToggle" aria-label="Dark mode" />
+          <input type="checkbox" id="darkSiteToggle" aria-label="Dark mode on this page" />
           <span class="slider"></span>
         </span>
       </label>
+      <button type="button" class="dark-reset-link" id="darkResetBtn" hidden>
+        ↺ Reset to global default
+      </button>
+
+      <!-- Secondary: default for every site -->
+      <label class="switch-row subtle" id="darkModeRow" hidden>
+        <span id="darkModeLabel">Enable on all sites</span>
+        <span class="switch">
+          <input type="checkbox" id="darkModeToggle" aria-label="Dark mode on all sites" />
+          <span class="slider"></span>
+        </span>
+      </label>
+
       <div class="dark-upsell" id="darkUpsell" hidden>
         <p class="dark-upsell-text">
-          Darken any page with a smart invert theme. One-time
+          Darken any page with a smart, matte dark theme. One-time
           <span id="darkPrice">$2</span> unlock — separate from ad blocking.
         </p>
         <button type="button" class="btn-buy" id="darkBuyBtn">Buy dark mode</button>
         <button type="button" class="btn-buy btn-dev" id="darkDevUnlockBtn" hidden>
           Dev unlock (unpacked)
         </button>
-        <p class="dark-hint" id="darkHint" hidden></p>
       </div>
-      <label class="dark-override" id="darkOverrideWrap" hidden>
-        <span>This site</span>
-        <select id="darkOverride" aria-label="Dark mode for this site">
-          <option value="">Follow global</option>
-          <option value="on">Force on</option>
-          <option value="off">Force off</option>
-        </select>
-      </label>
-      <p class="dark-hint" id="darkAutoNote" hidden>Auto-disabled (site looks dark)</p>
+
+      <p class="dark-hint" id="darkAutoNote" hidden>
+        This site already looks dark, so dark mode stays off here — inverting it would make
+        it light.
+      </p>
+      <p class="dark-hint" id="darkHint" hidden></p>
     </section>
 
     <footer class="foot">
