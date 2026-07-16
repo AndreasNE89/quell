@@ -2,10 +2,13 @@
  *
  * The dynamic engine (dark-mode-dynamic.ts) recolors each element's own background/text onto a
  * dark palette and never touches media. This registered sheet only paints an immediate dark
- * canvas so there's no white flash before the engine runs; the engine refines everything else.
- * No invert — images/video/GIFs are left untouched. */
+ * canvas in the TOP frame (registered allFrames:false) so there's no white flash before the
+ * engine runs; the engine refines everything else. No invert — images/video/GIFs untouched.
+ * Screen-only so printing keeps the site's light output. */
 
-html {
-  background-color: #1c1c1e !important;
-  color-scheme: dark !important;
+@media screen {
+  html {
+    background-color: #1c1c1e !important;
+    color-scheme: dark !important;
+  }
 }
