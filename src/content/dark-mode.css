@@ -4,10 +4,16 @@
  * dark palette and never touches media. This registered sheet only paints an immediate dark
  * canvas in the TOP frame (registered allFrames:false) so there's no white flash before the
  * engine runs; the engine refines everything else. No invert — images/video/GIFs untouched.
- * Screen-only so printing keeps the site's light output. */
+ * Screen-only so printing keeps the site's light output.
+ *
+ * The :where(:not([data-stampstack-off])) guard is the live-tab OFF switch: registered CSS
+ * cannot be removed from an already-loaded document, and countering it with another !important
+ * value (e.g. transparent) would stomp the site's OWN html background — turning natively-dark
+ * sites white on toggle-off. Setting the attribute makes this rule simply stop matching, so
+ * the site's true styles return untouched. :where() keeps specificity at plain `html`. */
 
 @media screen {
-  html {
+  html:where(:not([data-stampstack-off])) {
     background-color: #1c1c1e !important;
     color-scheme: dark !important;
   }

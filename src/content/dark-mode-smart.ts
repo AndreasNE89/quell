@@ -13,7 +13,6 @@ import type { DarkModeData, Message } from '../shared/types.js';
 import { isExtensionRestrictedHostname } from '../shared/dark-mode.js';
 import { applyDynamicDark, stopDynamicDark } from './dark-mode-dynamic.js';
 
-const STYLE_RESET = 'dark-reset';
 let runGeneration = 0;
 
 function isTopFrame(): boolean {
@@ -56,22 +55,22 @@ async function run(initial: boolean): Promise<void> {
 
   if (!data?.paid || !data.apply) {
     stopDynamicDark();
-    // Cancel the registered document_start shell — but only where one can exist: top frame
-    // (registration is top-frame-only) and only after a state CHANGE (on a fresh load with
-    // dark off, registration didn't match this document; injecting the reset anyway would
-    // clobber the site's own html background/color-scheme on every page).
-    if (!initial && isTopFrame()) injectStyle(STYLE_RESET, RESET_CSS);
+    // Disarm the registered document_start shell — its :where(:not([data-stampstack-off]))
+    // guard stops matching, so the site's OWN html background/color-scheme return exactly
+    // (an !important counter-value would stomp them — natively-dark sites went white).
+    // Top frame only (registration is top-frame-only); skip on fresh loads where the shell
+    // never matched this document.
+    if (!initial && isTopFrame()) {
+      document.documentElement?.setAttribute('data-stampstack-off', '');
+    }
     return;
   }
 
-  removeStyle(STYLE_RESET);
+  document.documentElement?.removeAttribute('data-stampstack-off');
   await waitForBody(2000);
   if (gen !== runGeneration) return;
   applyDynamicDark(isTopFrame());
 }
-
-// Cancels the registered document_start dark shell (dark-mode.css) for a tab toggling off.
-const RESET_CSS = `html { background-color: transparent !important; color-scheme: revert !important; }`;
 
 async function waitForBody(maxMs: number): Promise<void> {
   if (document.body) return;
@@ -79,22 +78,6 @@ async function waitForBody(maxMs: number): Promise<void> {
   while (!document.body && Date.now() - start < maxMs) {
     await sleep(40);
   }
-}
-
-function injectStyle(kind: string, css: string): void {
-  const root = document.head || document.documentElement;
-  if (!root) return;
-  let el = document.querySelector(`style[data-stampstack="${kind}"]`) as HTMLStyleElement | null;
-  if (!el) {
-    el = document.createElement('style');
-    el.setAttribute('data-stampstack', kind);
-    root.appendChild(el);
-  }
-  el.textContent = css;
-}
-
-function removeStyle(kind: string): void {
-  document.querySelector(`style[data-stampstack="${kind}"]`)?.remove();
 }
 
 function send(msg: Message): Promise<unknown> {
