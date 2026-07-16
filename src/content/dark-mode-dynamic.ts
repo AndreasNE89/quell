@@ -56,6 +56,9 @@ const marked = { set: new WeakSet<Element>() }; // wrapper so stop() can swap in
 const saved = new WeakMap<Element, SavedProp[]>();
 const registry = new Set<WeakRef<Element>>(); // every element we actually overrode
 const cleanup = new FinalizationRegistry<WeakRef<Element>>((ref) => registry.delete(ref));
+// Elements whose colors may have changed (class/style flipped on them or an ancestor) and must
+// be rolled back + recomputed. Rollback happens lazily inside the drain, never in the observer.
+const needsReprocess = new WeakSet<Element>();
 
 const pending = new Set<Element>();
 let drainScheduled = false;
@@ -113,8 +116,10 @@ function isDarkBackdrop(
 function computePlan(el: Element, batchBg: Map<Element, boolean>): Plan | null {
   if (marked.set.has(el)) return null;
 
-  // Minimal inline-SVG treatment: lighten dark, desaturated (grayscale-icon) root fills so
-  // monochrome icons stay visible; never touch colorful artwork or svg internals.
+  // Minimal inline-SVG treatment: lighten near-dark, low-chroma root fills (monochrome icons
+  // and navy brand wordmarks like Stripe's #031323) so they stay visible on darkened surfaces;
+  // never touch vivid artwork or svg internals. The luminance gate (<0.15) already protects
+  // colorful brand marks — vivid colors are rarely near-black.
   if (el instanceof SVGSVGElement) {
     marked.set.add(el);
     let cs: CSSStyleDeclaration;
@@ -132,7 +137,7 @@ function computePlan(el: Element, batchBg: Map<Element, boolean>): Plan | null {
       if (relativeLuminance(rgb.r, rgb.g, rgb.b) >= 0.15) continue;
       const max = Math.max(rgb.r, rgb.g, rgb.b);
       const min = Math.min(rgb.r, rgb.g, rgb.b);
-      if (max - min > 40) continue; // saturated → likely artwork, keep
+      if (max - min > 90) continue; // strongly saturated → likely artwork, keep
       const light = remapForegroundColor(v);
       if (light) props.push([prop, light]);
     }
@@ -227,6 +232,24 @@ function collect(root: ParentNode, out: Element[]): void {
   }
 }
 
+/** Like collect(), but includes already-marked elements and flags each for reprocess —
+ *  used when an attribute flip may have changed computed colors across a subtree. */
+function collectForReprocess(root: Element, out: Element[]): void {
+  needsReprocess.add(root);
+  out.push(root);
+  const walk = (scope: ParentNode): void => {
+    for (const el of scope.querySelectorAll('*')) {
+      if (el instanceof SVGSVGElement || el instanceof HTMLElement) {
+        needsReprocess.add(el);
+        out.push(el);
+      }
+      const sr = (el as HTMLElement).shadowRoot;
+      if (sr) walk(sr);
+    }
+  };
+  walk(root);
+}
+
 function enqueue(els: Iterable<Element>): void {
   for (const el of els) pending.add(el);
   scheduleDrain();
@@ -252,6 +275,16 @@ function drain(): void {
     batch.push(el);
     pending.delete(el);
     if (batch.length >= BATCH_SIZE) break;
+  }
+
+  // ROLLBACK phase — elements flagged after a class/style flip get our overrides removed and
+  // their mark cleared, so the read phase below sees the site's fresh colors.
+  for (const el of batch) {
+    if (needsReprocess.has(el)) {
+      needsReprocess.delete(el);
+      restoreElement(el);
+      marked.set.delete(el);
+    }
   }
 
   // READ phase — all computed-style access, zero writes (no recalc thrash)…
@@ -348,11 +381,21 @@ function onMutations(records: MutationRecord[]): void {
       const el = r.target;
       if (!(el instanceof HTMLElement)) continue;
       if (r.attributeName === 'style' && isOurStyleWrite(el)) continue; // our own write
-      // Class/style changed under us: the colors may be different now. Roll back our
-      // override, unmark, and re-process from the element's fresh computed colors.
-      restoreElement(el);
-      marked.set.delete(el);
-      added.push(el);
+      // Colors may be different now. Class flips (and root-level style writes) often drive
+      // CSS variables / descendant selectors, changing computed colors across the whole
+      // subtree with no mutation on the descendants (Stripe's header theme does exactly
+      // this) — reprocess the subtree. Leaf style writes (transform animations etc.) only
+      // affect the element itself unless they set variables.
+      const subtree =
+        r.attributeName === 'class' ||
+        el === document.documentElement ||
+        el === document.body ||
+        (r.attributeName === 'style' && el.getAttribute('style')?.includes('--') === true);
+      if (subtree) collectForReprocess(el, added);
+      else {
+        needsReprocess.add(el);
+        added.push(el);
+      }
     }
   }
   if (added.length) enqueue(added);
