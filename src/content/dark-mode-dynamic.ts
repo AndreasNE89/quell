@@ -436,14 +436,38 @@ function hookPrint(): void {
 // Public API
 // ---------------------------------------------------------------------------
 
+/** The site's OWN canvas color, read with the registered shell disarmed via the same
+ *  data-stampstack-off attribute its selector guards on. Lets us skip our canvas entirely on
+ *  natively-dark sites — their exact background (e.g. GitHub #0d1117) stays, and toggle-off
+ *  has nothing to undo. */
+function siteCanvasIsDark(): boolean {
+  const html = document.documentElement;
+  if (!html) return false;
+  const hadOff = html.hasAttribute('data-stampstack-off');
+  if (!hadOff) html.setAttribute('data-stampstack-off', '');
+  try {
+    const hb = parseCssColor(getComputedStyle(html).backgroundColor);
+    if (hb && hb.a >= 0.5) return relativeLuminance(hb.r, hb.g, hb.b) < 0.15;
+    const body = document.body;
+    if (body) {
+      const bb = parseCssColor(getComputedStyle(body).backgroundColor);
+      if (bb && bb.a >= 0.5) return relativeLuminance(bb.r, bb.g, bb.b) < 0.15;
+    }
+    return false;
+  } finally {
+    if (!hadOff) html.removeAttribute('data-stampstack-off');
+  }
+}
+
 /** Turn the dynamic dark engine on for this frame. Idempotent.
  *  `shell` paints the charcoal canvas — top frame only; subframes must keep transparent
- *  backgrounds transparent (overlay iframes would otherwise become opaque dark slabs). */
+ *  backgrounds transparent (overlay iframes would otherwise become opaque dark slabs).
+ *  Natively-dark sites keep their own canvas (no shell). */
 export function applyDynamicDark(shell: boolean): void {
   if (active) return;
   active = true;
   engineGen++;
-  withShell = shell;
+  withShell = shell && !siteCanvasIsDark();
   initialStormDone = false;
   injectShell();
   hookPrint();
