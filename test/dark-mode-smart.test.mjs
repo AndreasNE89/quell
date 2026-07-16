@@ -53,7 +53,39 @@ test('should parse hex and rgb colors', () => {
   assert.equal(rgb.g, 20);
   assert.equal(rgb.b, 30);
   assert.equal(mod.parseCssColor('transparent').a, 0);
-  assert.equal(mod.parseCssColor('lab(50% 0 0)'), null);
+  assert.equal(mod.parseCssColor('color(rec2020 1 0 0)'), null, 'unknown space → null (kept)');
+});
+
+test('should parse CSS Color 4 functions with correct conversion', () => {
+  const near = (got, want, tol, label) =>
+    assert.ok(Math.abs(got - want) <= tol, `${label}: got ${got}, want ~${want}`);
+
+  // display-p3 shares the D65 white point → white maps to white, black to black.
+  const w = mod.parseCssColor('color(display-p3 1 1 1)');
+  near(w.r, 255, 1.5, 'p3 white r'); near(w.g, 255, 1.5, 'p3 white g'); near(w.b, 255, 1.5, 'p3 white b');
+  const blk = mod.parseCssColor('color(display-p3 0 0 0)');
+  near(blk.r, 0, 0.5, 'p3 black');
+
+  // The exact color VG.no's headlines use — must parse to a very dark red.
+  const vg = mod.parseCssColor('color(display-p3 0.09696 0.00495 0.00255)');
+  assert.ok(vg, 'VG display-p3 dark red parses');
+  near(vg.r, 28, 3, 'vg r'); near(vg.g, 0, 2, 'vg g'); near(vg.b, 0, 2, 'vg b');
+
+  // oklch of pure sRGB red (L=0.628 C=0.2577 H=29.23) → rgb(255,0,0)-ish.
+  const red = mod.parseCssColor('oklch(0.628 0.2577 29.23)');
+  near(red.r, 255, 4, 'oklch red r'); near(red.g, 0, 5, 'oklch red g'); near(red.b, 0, 5, 'oklch red b');
+
+  // CIELAB neutral gray: L*=53.585 → Y≈0.2159 → rgb(128,128,128) (Bradford keeps neutrals).
+  const gray = mod.parseCssColor('lab(53.585 0 0)');
+  near(gray.r, 128, 2, 'lab gray r'); near(gray.g, 128, 2, 'lab gray g'); near(gray.b, 128, 2, 'lab gray b');
+
+  // hsl / hwb basics + alpha forms.
+  const green = mod.parseCssColor('hsl(120 100% 25%)');
+  near(green.g, 127.5, 1, 'hsl green g'); near(green.r, 0, 0.5, 'hsl green r');
+  const hwbRed = mod.parseCssColor('hwb(0 0% 0%)');
+  near(hwbRed.r, 255, 0.5, 'hwb red');
+  assert.equal(mod.parseCssColor('color(display-p3 1 0 0 / 0.5)').a, 0.5);
+  assert.equal(mod.parseCssColor('oklch(0.5 0.1 30 / 50%)').a, 0.5);
 });
 
 test('should treat transparent as missing luminance', () => {
