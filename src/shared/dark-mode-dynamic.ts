@@ -4,8 +4,12 @@
 // element's OWN colors and remaps them onto a dark palette: light backgrounds → soft charcoal,
 // dark text → gentle off-white, hues preserved. Media (img/video/canvas/…) is never remapped.
 // No chrome.* / DOM here — unit-tested.
+//
+// Keep/remap decisions use WCAG relative luminance, not HSL lightness: HSL "l" badly misjudges
+// saturated hues (a teal #00a0a0 has l≈0.31 but reads mid-light; saturated blue #6666ff has
+// l=0.7 but is dim on charcoal). Remap targets still use HSL so hue/saturation are preserved.
 
-import { parseCssColor, type Rgb } from './dark-mode-smart.js';
+import { parseCssColor, relativeLuminance, type Rgb } from './dark-mode-smart.js';
 
 export interface Hsl {
   h: number; // 0–360
@@ -48,7 +52,7 @@ function hue2rgb(p: number, q: number, t: number): number {
 }
 
 export function hslToRgb(hsl: Hsl): Rgb {
-  const h = ((((hsl.h % 360) + 360) % 360) / 360);
+  const h = (((hsl.h % 360) + 360) % 360) / 360;
   const s = clamp01(hsl.s);
   const l = clamp01(hsl.l);
   let r: number;
@@ -75,23 +79,31 @@ export function rgbToCss(rgb: Rgb): string {
 }
 
 // Palette / tuning knobs (iterate on these for taste).
-const BG_LIGHT_THRESHOLD = 0.35; // backgrounds lighter than this get darkened
-const FG_DARK_THRESHOLD = 0.6; // text darker than this gets lightened
+const BG_KEEP_LUMINANCE = 0.15; // backgrounds dimmer than this are kept (already dark)
+const FG_KEEP_LUMINANCE = 0.45; // text brighter than this is kept (already light enough)
+const BORDER_KEEP_LUMINANCE = 0.18;
 
 /** Root canvas + default text for the dark shell. */
 export const ROOT_BG = 'rgb(28, 28, 30)'; // #1c1c1e — matte charcoal
 export const ROOT_FG = 'rgb(232, 232, 232)'; // #e8e8e8 — gentle off-white
 
+function lumOf(rgb: Rgb): number {
+  return relativeLuminance(rgb.r, rgb.g, rgb.b);
+}
+
 /**
- * Remap a background color: light → charcoal (hue preserved), keep already-dark backgrounds.
- * Returns a CSS color string, or null when there's nothing to do (transparent → let it inherit,
- * or already dark enough → keep the site's own dark surface).
+ * Remap a background color: light → charcoal (hue preserved). Returns null when there's
+ * nothing to do: transparent (inherit), already-dark (keep the site's own dark surface), or a
+ * translucent light overlay (glass/elevation layers read correctly over the darkened page —
+ * darkening them flattens dark-surface elevation into mud).
  */
 export function remapBackgroundColor(css: string): string | null {
   const rgb = parseCssColor(css);
   if (!rgb || rgb.a < 0.1) return null;
+  const lum = lumOf(rgb);
+  if (rgb.a < 0.5 && lum > 0.5) return null;
+  if (lum < BG_KEEP_LUMINANCE) return null;
   const hsl = rgbToHsl(rgb);
-  if (hsl.l < BG_LIGHT_THRESHOLD) return null;
   // Map lightness into a charcoal band; damp very-saturated light panels so they don't glow.
   const l = 0.1 + (1 - hsl.l) * 0.16; // white → 0.10, mid → ~0.18
   const s = hsl.s > 0.5 ? hsl.s * 0.55 : hsl.s;
@@ -99,13 +111,14 @@ export function remapBackgroundColor(css: string): string | null {
 }
 
 /**
- * Remap a foreground/text color: dark → soft off-white (hue preserved), keep already-light text.
+ * Remap a foreground/text color: dark → soft off-white (hue preserved), keep already-light
+ * text. Luminance-gated so dim saturated colors (blues) get lifted too.
  */
 export function remapForegroundColor(css: string): string | null {
   const rgb = parseCssColor(css);
   if (!rgb || rgb.a < 0.1) return null;
+  if (lumOf(rgb) > FG_KEEP_LUMINANCE) return null;
   const hsl = rgbToHsl(rgb);
-  if (hsl.l > FG_DARK_THRESHOLD) return null;
   const l = 0.92 - hsl.l * 0.22; // black → 0.92, mid → ~0.81
   return rgbToCss(hslToRgb({ h: hsl.h, s: hsl.s, l, a: rgb.a }));
 }
@@ -114,24 +127,61 @@ export function remapForegroundColor(css: string): string | null {
 export function remapBorderColor(css: string): string | null {
   const rgb = parseCssColor(css);
   if (!rgb || rgb.a < 0.1) return null;
+  if (lumOf(rgb) < BORDER_KEEP_LUMINANCE) return null;
   const hsl = rgbToHsl(rgb);
-  if (hsl.l <= 0.34) return null;
   const l = 0.28;
   return rgbToCss(hslToRgb({ h: hsl.h, s: hsl.s * 0.7, l, a: rgb.a }));
 }
 
 /**
- * Remap the color stops of a CSS gradient value (a computed `background-image` like
- * `linear-gradient(rgb(255,255,255), rgb(240,240,240))`). Each rgb/rgba stop is run through the
- * background remap (light → charcoal), non-color parts (angles, positions, stop %) are left
- * intact, and dark/transparent stops are kept. Returns the value unchanged when nothing darkened.
+ * Remap the color stops of a CSS gradient value. kind 'bg' darkens light stops (normal
+ * background gradients); kind 'fg' lightens dark stops (background-clip:text gradient
+ * headlines, where the gradient IS the text paint — darkening it makes headlines invisible).
+ * Non-color parts (angles, positions) are untouched; unchanged when nothing remaps.
  */
-export function remapGradient(value: string): string {
-  // Matches every flat color function a computed gradient can contain — legacy rgb()/rgba()
-  // plus the CSS Color 4 forms (color(display-p3 …), oklch(), lab(), …). None of these nest
-  // parentheses, so [^()]* is safe and url(...) segments never match.
+export function remapGradient(value: string, kind: 'bg' | 'fg' = 'bg'): string {
+  const remap = kind === 'fg' ? remapForegroundColor : remapBackgroundColor;
   return value.replace(
     /(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\([^()]*\)/gi,
-    (m) => remapBackgroundColor(m) ?? m,
+    (m) => remap(m) ?? m,
   );
+}
+
+/** Split a computed multi-background value on top-level commas (parens-aware, so commas
+ *  inside gradient(...) / url("data:...,...") never split). */
+export function splitBackgroundLayers(value: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let cur = '';
+  for (const ch of value) {
+    if (ch === '(') depth++;
+    else if (ch === ')') depth--;
+    if (ch === ',' && depth === 0) {
+      out.push(cur.trim());
+      cur = '';
+      continue;
+    }
+    cur += ch;
+  }
+  if (cur.trim()) out.push(cur.trim());
+  return out;
+}
+
+/**
+ * Remap a computed background-image: gradient layers get their stops remapped, url()/image
+ * layers pass through untouched (never touch media). Handles composites like
+ * `linear-gradient(...), url("hero.jpg")` — the white scrim darkens, the photo doesn't.
+ * Returns null when nothing changed.
+ */
+export function remapBackgroundImage(value: string, kind: 'bg' | 'fg' = 'bg'): string | null {
+  if (!value || value === 'none' || !value.includes('gradient(')) return null;
+  const layers = splitBackgroundLayers(value);
+  let changed = false;
+  const out = layers.map((layer) => {
+    if (!layer.includes('gradient(') || layer.includes('url(')) return layer;
+    const remapped = remapGradient(layer, kind);
+    if (remapped !== layer) changed = true;
+    return remapped;
+  });
+  return changed ? out.join(', ') : null;
 }

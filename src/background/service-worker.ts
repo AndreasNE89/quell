@@ -302,13 +302,18 @@ async function syncDarkModeScripts(
     ...new Set(hostsWithForceOn(settings.darkModeSiteOverrides).flatMap(darkModeHostPatterns)),
   ];
 
+  // Top frame ONLY (allFrames: false): the FOUC shell forces an opaque charcoal canvas, which
+  // must never hit iframes — transparent-by-design embeds (Stripe fields, sign-in buttons,
+  // overlay widgets) would become opaque dark slabs with un-recolored text. Subframes are
+  // darkened by the engine itself (runs in every frame, gated on the TOP host via sender.tab),
+  // which keeps transparent backgrounds transparent.
   const globalScript: chrome.scripting.RegisteredContentScript = {
     id: DARK_MODE_SCRIPT_ID,
     css: [DARK_MODE_CSS_PATH],
     matches: ['http://*/*', 'https://*/*'],
     excludeMatches: forceOffExclude.length ? forceOffExclude : undefined,
     runAt: 'document_start',
-    allFrames: true,
+    allFrames: false,
     persistAcrossSessions: true,
   };
 
@@ -317,7 +322,7 @@ async function syncDarkModeScripts(
     css: [DARK_MODE_CSS_PATH],
     matches: forceOnMatches.length ? forceOnMatches : ['http://*/*'],
     runAt: 'document_start',
-    allFrames: true,
+    allFrames: false,
     persistAcrossSessions: true,
   };
 
@@ -570,6 +575,17 @@ async function handleMessage(msg: Message, sender: chrome.runtime.MessageSender)
       return handleStatsGet();
 
     case 'darkmode:get':
+      // Content-script callers (incl. subframes) resolve against the TOP document's host so
+      // every frame in a tab follows the top site's setting — a Stripe iframe on example.com
+      // follows example.com's toggle, not stripe.com's. Popup/options callers have no sender
+      // tab and use the hostname they pass (or the active tab).
+      if (sender.tab?.url && isHttpOrHttpsUrl(sender.tab.url)) {
+        try {
+          return handleDarkModeGet(new URL(sender.tab.url).hostname);
+        } catch {
+          /* fall through to msg.hostname */
+        }
+      }
       return handleDarkModeGet(msg.hostname);
 
     case 'darkmode:setEnabled':
