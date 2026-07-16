@@ -73,6 +73,26 @@ test('alpha is preserved through a remap', () => {
   assert.match(r, /rgba\(.*0\.6\)/);
 });
 
+test('VG.no regression: display-p3 colors remap (dark text lightens, red bar darkens)', () => {
+  // Chrome serializes VG's computed colors as color(display-p3 …); the parser must convert
+  // them or the engine marks elements processed while changing nothing (the reported bug).
+  const fg = mod.remapForegroundColor('color(display-p3 0.09696 0.00495 0.00255)');
+  assert.ok(fg, 'display-p3 dark red headline text must remap');
+  const fgHsl = mod.rgbToHsl(parse(fg));
+  assert.ok(fgHsl.l > 0.8, `lightened for readability, got l=${fgHsl.l}`);
+
+  const bg = mod.remapBackgroundColor('color(display-p3 0.86 0.12 0.11)'); // brand-red bar
+  assert.ok(bg, 'bright display-p3 red background must darken');
+  const bgHsl = mod.rgbToHsl(parse(bg));
+  assert.ok(bgHsl.l < 0.25, `darkened to charcoal band, got l=${bgHsl.l}`);
+});
+
+test('gradient with modern color stops darkens too', () => {
+  const g = mod.remapGradient('linear-gradient(color(display-p3 1 1 1), rgb(255, 255, 255))');
+  assert.doesNotMatch(g, /display-p3 1 1 1/, 'p3 white stop replaced');
+  assert.doesNotMatch(g, /rgb\(255, 255, 255\)/, 'rgb white stop replaced');
+});
+
 test('gradient: light stops darken, dark stops kept, structure intact', () => {
   const light = mod.remapGradient('linear-gradient(90deg, rgb(255, 255, 255), rgb(240, 240, 240))');
   assert.match(light, /^linear-gradient\(90deg, rgb\(/, 'keeps direction + shape');

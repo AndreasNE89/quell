@@ -127,5 +127,11 @@ export function remapBorderColor(css: string): string | null {
  * intact, and dark/transparent stops are kept. Returns the value unchanged when nothing darkened.
  */
 export function remapGradient(value: string): string {
-  return value.replace(/rgba?\([^)]*\)/gi, (m) => remapBackgroundColor(m) ?? m);
+  // Matches every flat color function a computed gradient can contain — legacy rgb()/rgba()
+  // plus the CSS Color 4 forms (color(display-p3 …), oklch(), lab(), …). None of these nest
+  // parentheses, so [^()]* is safe and url(...) segments never match.
+  return value.replace(
+    /(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\([^()]*\)/gi,
+    (m) => remapBackgroundColor(m) ?? m,
+  );
 }
