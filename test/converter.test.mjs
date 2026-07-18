@@ -163,6 +163,99 @@ test('path-anchored filter with options is not treated as full regex', () => {
   assert.ok(!String(dnr.rule.condition.urlFilter).includes('$'));
 });
 
+test('should keep literal $ in URL path (Azure $web) and still parse $doc options', () => {
+  // ubo-badware: ||blob.core.windows.net/$web/*index.html$doc
+  // Splitting at the first `$` dropped this phishing rule as unsupported:web/*index.html$doc.
+  const { parsed, dnr } = convert('||blob.core.windows.net/$web/*index.html$doc');
+  assert.equal(parsed.pattern, '||blob.core.windows.net/$web/*index.html');
+  assert.deepEqual(parsed.options.resourceTypes, ['main_frame']);
+  assert.equal(parsed.unsupported.length, 0);
+  assert.equal(dnr.skip, undefined);
+  assert.equal(dnr.rule.condition.urlFilter, '||blob.core.windows.net/$web/*index.html');
+  assert.deepEqual(dnr.rule.condition.resourceTypes, ['main_frame']);
+});
+
+test('should keep literal $.min.js path and parse $script,3p options', () => {
+  // ubo-filters: /$.min.js|$script,3p — first `$` is part of the path; `|` is right-anchor.
+  const { parsed, dnr } = convert('/$.min.js|$script,3p');
+  assert.equal(parsed.pattern, '/$.min.js|');
+  assert.deepEqual(parsed.options.resourceTypes, ['script']);
+  assert.equal(parsed.options.thirdParty, true);
+  assert.equal(parsed.unsupported.length, 0);
+  assert.equal(dnr.rule.condition.urlFilter, '/$.min.js|');
+  assert.deepEqual(dnr.rule.condition.resourceTypes, ['script']);
+});
+
+test('should strip entity domains from DNR but keep valid siblings', () => {
+  // Chrome ignores the whole rule if initiatorDomains contains `gmx.*`.
+  const { dnr } = convert('||uim.tifbs.net/js/*.js$script,redirect=noopjs,domain=gmx.*|web.de');
+  assert.equal(dnr.skip, undefined);
+  assert.deepEqual(dnr.rule.condition.initiatorDomains, ['web.de']);
+  assert.ok(!dnr.rule.condition.initiatorDomains.some((d) => d.includes('*')));
+});
+
+test('should skip rule when $domain is only entity wildcards (would become global)', () => {
+  const { dnr } = convert('/pop.js$domain=booru.*');
+  assert.equal(dnr.skip, 'invalid-domain');
+  assert.equal(dnr.rule, undefined);
+});
+
+test('should skip rule when $to uses entity wildcard', () => {
+  const { dnr } = convert('||tikimall.$doc,to=tikimall.*|~tiki.vn');
+  assert.equal(dnr.skip, 'invalid-domain');
+});
+
+test('should skip rule when excluded domain is invalid (dropping exclude would over-match)', async () => {
+  const { isValidDnrDomain, sanitizeDnrDomainLists } = await import('../scripts/lib/to-dnr.mjs');
+  assert.equal(isValidDnrDomain('web.de'), true);
+  assert.equal(isValidDnrDomain('gmx.*'), false);
+  assert.equal(isValidDnrDomain('$domain=fortune.com'), false);
+  assert.equal(isValidDnrDomain('[::1]'), true);
+  assert.equal(sanitizeDnrDomainLists(['web.de'], ['evil.*']).skip, 'invalid-domain');
+  assert.deepEqual(sanitizeDnrDomainLists(['gmx.*', 'web.de'], []), {
+    include: ['web.de'],
+    exclude: [],
+  });
+});
+
+test('should skip $replace with trailing / instead of emitting regexFilter', () => {
+  // Path ends with `/` from replace=/…/ — must not be treated as full regex with no options.
+  const { parsed, dnr } = convert(
+    '/theme/002/js/application.js?2.0|$script,1p,replace=/video\\.maxPop/0/',
+  );
+  assert.equal(parsed.pattern, '/theme/002/js/application.js?2.0|');
+  assert.ok(parsed.unsupported.some((t) => t.startsWith('replace=')));
+  assert.equal(dnr.skip, 'unsupported:replace');
+  assert.equal(dnr.rule, undefined);
+});
+
+test('should skip $replace when value contains commas', () => {
+  const { parsed, dnr } = convert('||ads.example^$script,replace=/a,b/');
+  assert.equal(parsed.pattern, '||ads.example^');
+  assert.ok(parsed.unsupported.some((t) => t.startsWith('replace=')));
+  assert.equal(dnr.skip, 'unsupported:replace');
+});
+
+test('should skip $header when value contains escaped commas', () => {
+  const { parsed, dnr } = convert(
+    '||example.com^$script,header=vary:/^referer\\,accept-encoding/i',
+  );
+  assert.equal(parsed.pattern, '||example.com^');
+  assert.deepEqual(parsed.options.resourceTypes, ['script']);
+  assert.ok(parsed.unsupported.some((t) => t.startsWith('header=')));
+  assert.equal(dnr.skip, 'unsupported:header');
+});
+
+test('should still parse full regex with $options after closing slash', () => {
+  const { parsed, dnr } = convert('/^ads$/$script,3p');
+  assert.equal(parsed.pattern, '/^ads$/');
+  assert.equal(parsed.isRegex, true);
+  assert.deepEqual(parsed.options.resourceTypes, ['script']);
+  assert.equal(parsed.options.thirdParty, true);
+  assert.equal(dnr.skip, undefined);
+  assert.equal(dnr.rule.condition.regexFilter, '^ads$');
+});
+
 test('should parse $badfilter without treating it as unsupported', () => {
   const { parsed, dnr } = convert('||ads.example^$script,badfilter');
   assert.equal(parsed.options.badfilter, true);
