@@ -180,6 +180,31 @@ test('should honor entity-domain generichide hosts (google.* / gmx.*)', () => {
   assert.equal(other.disableGeneric, false);
 });
 
+test('should apply trailing-dot generichide entity keys to matching sites only', () => {
+  // hostsFromPattern maps ||stream4free. / ||asd. → label.*; bare `asd` would
+  // wrongly match evil.asd while missing asd.homes.
+  const data = {
+    byList: {
+      seed: {
+        hideGeneric: ['.ad-slot'],
+        unhideGeneric: [],
+        hideSpecific: {},
+        unhideSpecific: {},
+        procedural: [],
+      },
+    },
+    networkExceptions: {
+      generichide: ['stream4free.*', 'asd.*', 'asd.homes'],
+      elemhide: [],
+      specifichide: [],
+    },
+  };
+  assert.equal(mod.matchCosmetic('stream4free.tv', data, ['seed']).disableGeneric, true);
+  assert.equal(mod.matchCosmetic('asd.homes', data, ['seed']).disableGeneric, true);
+  assert.equal(mod.matchCosmetic('evil.asd', data, ['seed']).disableGeneric, false);
+  assert.equal(mod.matchCosmetic('example.com', data, ['seed']).disableGeneric, false);
+});
+
 test('matchScriptlets applies exceptions and dedupes', () => {
   const data = {
     byList: {

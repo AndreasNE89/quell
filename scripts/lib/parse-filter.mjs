@@ -391,12 +391,20 @@ function findOptionsDollar(text) {
  * Extract hostname(s) from a network pattern for @@…$generichide / elemhide / specifichide.
  * Entity-domain patterns (||pahe.*^ or ||www.google.* /path) must stay as label.*
  * so runtime hostMatchesDomain can match real hosts.
+ *
+ * Trailing-dot hostname prefixes (`||stream4free.` / `||asd.`) are EasyList's
+ * "hostname starts with label." form — NOT a bare label. Stripping to `stream4free`
+ * / `asd` makes suffix matching miss `stream4free.tv` and wrongly match `evil.asd`.
+ * Map them to `label.*` so entity matching covers the intended sites.
  */
 export function hostsFromPattern(pattern, isRegex) {
   if (!pattern || isRegex) return [];
   // ||example.* or ||www.google.*/path — capture before `.*` (optional leading www.).
   const entity = /^\|\|(?:www\.)?([a-z0-9-]+)\.\*/i.exec(pattern);
   if (entity) return [`${entity[1].toLowerCase()}.*`];
+  // ||stream4free. or ||asd.^ — single-label + trailing dot (hostname prefix).
+  const prefix = /^\|\|(?:www\.)?([a-z0-9-]+)\.(?=$|\^|\/|\*)/i.exec(pattern);
+  if (prefix) return [`${prefix[1].toLowerCase()}.*`];
   // ||example.com^ or ||example.com/path or |https://example.com^
   const m =
     /^\|\|([^^*/]+)/.exec(pattern) ||
