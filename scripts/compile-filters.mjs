@@ -13,7 +13,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseLine } from './lib/parse-filter.mjs';
+import { parseLine, hostsFromPattern } from './lib/parse-filter.mjs';
 import { toDnrRule, ruleKey, networkFilterIdentity } from './lib/to-dnr.mjs';
 import { DNR } from './lib/limits.mjs';
 
@@ -43,18 +43,6 @@ function emptyCosmeticBucket() {
     scriptlets: [],
     scriptletExceptions: [],
   };
-}
-
-/** Extract initiator/request hosts from a network pattern for cosmetic exceptions. */
-function hostsFromPattern(pattern, isRegex) {
-  if (!pattern || isRegex) return [];
-  // ||example.com^ or ||example.com/path or |https://example.com^
-  const m =
-    /^\|\|([^^*/]+)/.exec(pattern) ||
-    /^\|https?:\/\/([^^*/]+)/i.exec(pattern) ||
-    /^([a-z0-9.-]+\.[a-z]{2,})/i.exec(pattern);
-  if (!m) return [];
-  return [m[1].toLowerCase().replace(/\.$/, '')];
 }
 
 /** Reject selectors that could break out of a CSS rule (e.g. `a{}body{display:none}`). */

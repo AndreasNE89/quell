@@ -453,31 +453,33 @@ async function handleSetYoutubeOptions(
   youtubeBlockSponsored: boolean,
   youtubeBlockShorts: boolean,
 ): Promise<PopupData> {
-  const settings = await mutateSettings((s) => {
+  await mutateSettings((s) => {
     s.youtubeBlockSponsored = youtubeBlockSponsored;
     s.youtubeBlockShorts = youtubeBlockShorts;
   });
-  await syncRegisteredScripts(settings);
+  // Sync must ride settingsChain — overlapping applyAll/sync* with a stale snapshot
+  // can undo a newer allowlist/pause/list change (last writer wins on DNR/scripts).
+  await withSettings((s) => syncRegisteredScripts(s));
   return handlePopupGet();
 }
 
 async function handleToggleSite(hostname: string, enabled: boolean): Promise<PopupData> {
   const host = normalizeHostname(hostname);
-  const settings = await mutateSettings((s) => {
+  await mutateSettings((s) => {
     const set = new Set(s.allowlist.map(normalizeHostname));
     if (enabled) set.delete(host);
     else set.add(host);
     s.allowlist = [...set];
   });
-  await Promise.all([syncAllowlist(settings), syncRegisteredScripts(settings)]);
+  await withSettings((s) => Promise.all([syncAllowlist(s), syncRegisteredScripts(s)]));
   return handlePopupGet();
 }
 
 async function handleSetPaused(paused: boolean): Promise<PopupData> {
-  const settings = await mutateSettings((s) => {
+  await mutateSettings((s) => {
     s.paused = paused;
   });
-  await applyAll(settings);
+  await withSettings((s) => applyAll(s));
   return handlePopupGet();
 }
 
@@ -492,11 +494,11 @@ async function handleListsGet(): Promise<ListsData> {
 }
 
 async function handleListSetEnabled(id: string, enabled: boolean): Promise<ListsData> {
-  const settings = await mutateSettings((s) => {
+  await mutateSettings((s) => {
     s.enabledLists[id] = enabled;
   });
   // Network + cosmetics + scriptlets all honor list enablement.
-  await Promise.all([syncRulesets(settings), syncRegisteredScripts(settings)]);
+  await withSettings((s) => Promise.all([syncRulesets(s), syncRegisteredScripts(s)]));
   return handleListsGet();
 }
 

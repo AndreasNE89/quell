@@ -279,9 +279,16 @@ function parseNetwork(line) {
           redirect = value.trim();
           break;
         case 'generichide':
+        case 'ghide': // uBO alias
+          cosmeticException = 'generichide';
+          break;
         case 'elemhide':
+        case 'ehide': // uBO alias
+          cosmeticException = 'elemhide';
+          break;
         case 'specifichide':
-          cosmeticException = name;
+        case 'shide': // uBO alias
+          cosmeticException = 'specifichide';
           break;
         default:
           unsupported.push(token);
@@ -329,6 +336,25 @@ function findOptionsDollar(text) {
     if (text[i] === '$') return i;
   }
   return -1;
+}
+
+/**
+ * Extract hostname(s) from a network pattern for @@…$generichide / elemhide / specifichide.
+ * Entity-domain patterns (||pahe.*^ or ||www.google.* /path) must stay as label.*
+ * so runtime hostMatchesDomain can match real hosts.
+ */
+export function hostsFromPattern(pattern, isRegex) {
+  if (!pattern || isRegex) return [];
+  // ||example.* or ||www.google.*/path — capture before `.*` (optional leading www.).
+  const entity = /^\|\|(?:www\.)?([a-z0-9-]+)\.\*/i.exec(pattern);
+  if (entity) return [`${entity[1].toLowerCase()}.*`];
+  // ||example.com^ or ||example.com/path or |https://example.com^
+  const m =
+    /^\|\|([^^*/]+)/.exec(pattern) ||
+    /^\|https?:\/\/([^^*/]+)/i.exec(pattern) ||
+    /^([a-z0-9.-]+\.[a-z]{2,})/i.exec(pattern);
+  if (!m) return [];
+  return [m[1].toLowerCase().replace(/\.$/, '')];
 }
 
 /**
