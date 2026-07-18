@@ -90,6 +90,29 @@ test('$generichide with a pattern is a cosmetic exception, not network allow', (
   assert.equal(dnr.cosmeticException, 'generichide');
 });
 
+test('should map uBO $ghide/$ehide/$shide aliases to cosmetic exceptions', () => {
+  // ubo-filters ships ~859 $ghide rules; treating them as unsupported dropped all of them.
+  assert.equal(convert('@@||bild.de^$ghide').dnr.cosmeticException, 'generichide');
+  assert.equal(convert('@@||example.com^$ehide').dnr.cosmeticException, 'elemhide');
+  assert.equal(convert('@@||example.com^$shide').dnr.cosmeticException, 'specifichide');
+  assert.equal(convert('@@*$ghide,domain=web.de|gmx.*').dnr.cosmeticException, 'generichide');
+  assert.equal(convert('@@*$ghide,domain=web.de|gmx.*').dnr.skip, undefined);
+  assert.deepEqual(convert('@@*$ghide,domain=web.de|gmx.*').parsed.options.initiatorDomains, [
+    'web.de',
+    'gmx.*',
+  ]);
+});
+
+test('should extract entity hosts from generichide patterns for runtime matching', async () => {
+  const { hostsFromPattern } = await import('../scripts/lib/parse-filter.mjs');
+  // EasyList: @@||www.google.*/search?$generichide — must not become dead host `www.google`.
+  assert.deepEqual(hostsFromPattern('||www.google.*/search?', false), ['google.*']);
+  assert.deepEqual(hostsFromPattern('||pahe.*^', false), ['pahe.*']);
+  assert.deepEqual(hostsFromPattern('||userupload.*^', false), ['userupload.*']);
+  assert.deepEqual(hostsFromPattern('||example.com^', false), ['example.com']);
+  assert.deepEqual(hostsFromPattern('||mail.google.com^', false), ['mail.google.com']);
+});
+
 test('ruleKey distinguishes $important from plain block', async () => {
   const { ruleKey } = await import('../scripts/lib/to-dnr.mjs');
   const a = convert('||ads.example^').dnr.rule;

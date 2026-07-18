@@ -158,6 +158,28 @@ test('matchCosmetic generichide returns generic selectors as unhide', () => {
   assert.ok(m.unhide.includes('.g'));
 });
 
+test('should honor entity-domain generichide hosts (google.* / gmx.*)', () => {
+  const data = {
+    byList: {
+      seed: {
+        hideGeneric: ['.ad-slot'],
+        unhideGeneric: [],
+        hideSpecific: {},
+        unhideSpecific: {},
+        procedural: [],
+      },
+    },
+    networkExceptions: { generichide: ['google.*', 'gmx.*'], elemhide: [], specifichide: [] },
+  };
+  const serp = mod.matchCosmetic('www.google.com', data, ['seed']);
+  assert.equal(serp.disableGeneric, true);
+  assert.ok(serp.unhide.includes('.ad-slot'));
+  const gmx = mod.matchCosmetic('www.gmx.net', data, ['seed']);
+  assert.equal(gmx.disableGeneric, true);
+  const other = mod.matchCosmetic('example.com', data, ['seed']);
+  assert.equal(other.disableGeneric, false);
+});
+
 test('matchScriptlets applies exceptions and dedupes', () => {
   const data = {
     byList: {
