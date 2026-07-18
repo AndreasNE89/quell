@@ -310,6 +310,27 @@ function parseNetwork(line) {
   };
 }
 
+/**
+ * True when `optionStr` looks like a comma-separated EasyList/uBO options list.
+ * Option *names* are [a-z0-9-]+ (optionally negated, optionally =value). Path
+ * fragments like `web/*index.html$doc` or `.min.js|$script` fail this check.
+ */
+function looksLikeOptionString(optionStr) {
+  if (!optionStr) return false;
+  const tokens = optionStr.split(',');
+  if (!tokens.length) return false;
+  for (const tokenRaw of tokens) {
+    const token = tokenRaw.trim();
+    if (!token) return false;
+    const key = token.startsWith('~') ? token.slice(1) : token;
+    if (!key) return false;
+    const eq = key.indexOf('=');
+    const name = eq === -1 ? key : key.slice(0, eq);
+    if (!/^[a-z0-9-]+$/i.test(name)) return false;
+  }
+  return true;
+}
+
 function findOptionsDollar(text) {
   // Full regex filters are `/pattern/` optionally followed by `$options`. Filter
   // options never contain `/`, so for a full regex the closing delimiter is simply
@@ -319,23 +340,30 @@ function findOptionsDollar(text) {
   // Path-anchored patterns also start with `/` and often contain a second `/`
   // (e.g. `/ad/image/*$image`). Those are NOT full regexes: only treat as regex when
   // the last `/` is the final character, or is immediately followed by `$options`.
-  // Otherwise fall through to the first-unescaped-`$` scan.
+  // Otherwise fall through to the options-looking-`$` scan.
   const isFullRegexCandidate = text.length > 1 && text.startsWith('/') && text.lastIndexOf('/') > 0;
   if (isFullRegexCandidate) {
     const close = text.lastIndexOf('/');
     if (close + 1 === text.length) return -1; // `/pattern/` with no options
-    if (text[close + 1] === '$') return close + 1; // `/pattern/$options`
+    if (text[close + 1] === '$' && looksLikeOptionString(text.slice(close + 2))) {
+      return close + 1; // `/pattern/$options`
+    }
     // else: path-like `/foo/bar*$opts` — fall through
   }
-  // Non-regex (or path-anchored): the first unescaped `$` introduces options.
+  // Non-regex (or path-anchored): URLs may contain a literal `$` (Azure `$web`,
+  // `$.min.js`). Use the LAST `$` whose suffix looks like options — never the first
+  // `$` blindly, or path `$` steals the split and the rule is skipped as unsupported.
+  let found = -1;
   for (let i = 0; i < text.length; i++) {
     if (text[i] === '\\') {
       i++;
       continue;
     }
-    if (text[i] === '$') return i;
+    if (text[i] === '$' && looksLikeOptionString(text.slice(i + 1))) {
+      found = i;
+    }
   }
-  return -1;
+  return found;
 }
 
 /**

@@ -254,14 +254,24 @@ export function toDnrRule(f) {
   else if (f.options.thirdParty === false) condition.domainType = 'firstParty';
 
   // Initiator (document) domain constraints ($domain / $from).
-  const initDomains = dedup(f.options.initiatorDomains);
-  const exInitDomains = dedup(f.options.excludedInitiatorDomains);
+  const initSan = sanitizeDnrDomainLists(
+    dedup(f.options.initiatorDomains),
+    dedup(f.options.excludedInitiatorDomains),
+  );
+  if (initSan.skip) return { skip: initSan.skip };
+  const initDomains = initSan.include;
+  const exInitDomains = initSan.exclude;
   if (initDomains.length) condition.initiatorDomains = initDomains;
   if (exInitDomains.length) condition.excludedInitiatorDomains = exInitDomains;
 
   // Destination host constraints ($to / $denyallow).
-  const reqDomains = dedup(f.options.requestDomains);
-  const exReqDomains = dedup(f.options.excludedRequestDomains);
+  const reqSan = sanitizeDnrDomainLists(
+    dedup(f.options.requestDomains),
+    dedup(f.options.excludedRequestDomains),
+  );
+  if (reqSan.skip) return { skip: reqSan.skip };
+  const reqDomains = reqSan.include;
+  const exReqDomains = reqSan.exclude;
   if (reqDomains.length) condition.requestDomains = reqDomains;
   if (exReqDomains.length) condition.excludedRequestDomains = exReqDomains;
 
@@ -336,6 +346,36 @@ export function toDnrRule(f) {
 
 function dedup(arr) {
   return [...new Set(arr)];
+}
+
+/**
+ * Chrome DNR domain arrays reject wildcards / garbage. Entity domains (`gmx.*`)
+ * and option-bleed (`$domain=fortune.com`) make Chrome ignore the whole rule —
+ * including sibling valid domains like `web.de`. Bracketed IPv6 is allowed (MDN).
+ */
+export function isValidDnrDomain(d) {
+  if (!d || typeof d !== 'string') return false;
+  if (/[*/=$]/.test(d)) return false;
+  if (d.startsWith('[') && d.endsWith(']')) return d.length > 2 && !d.slice(1, -1).includes('[');
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(d)) return true;
+  return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/i.test(d);
+}
+
+/**
+ * Sanitize include/exclude domain lists for DNR.
+ * - Dropping an *exclude* widens the rule → skip.
+ * - Dropping all *includes* would make the rule global → skip.
+ * - Dropping some includes but keeping others narrows safely (under-match).
+ * @returns {{ include: string[], exclude: string[] } | { skip: string }}
+ */
+export function sanitizeDnrDomainLists(include, exclude) {
+  const rawInclude = include || [];
+  const rawExclude = exclude || [];
+  const cleanInclude = rawInclude.filter(isValidDnrDomain);
+  const cleanExclude = rawExclude.filter(isValidDnrDomain);
+  if (cleanExclude.length !== rawExclude.length) return { skip: 'invalid-domain' };
+  if (rawInclude.length && cleanInclude.length === 0) return { skip: 'invalid-domain' };
+  return { include: cleanInclude, exclude: cleanExclude };
 }
 
 /** Stable dedup key — priority must be included so $important variants are kept. */
