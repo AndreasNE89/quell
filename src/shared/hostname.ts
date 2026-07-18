@@ -4,9 +4,46 @@
 // cheap. `ads.sub.example.co.uk` yields suffixes down to `co.uk` — a filter written
 // for any of them matches, and no real filter targets a bare public suffix.
 
-/** Strip a leading `www.` for stable allowlist / exception keys. */
+/** Common second-level labels in multi-part public suffixes (co.uk, com.au, …). */
+const MULTI_TLD_SECONDS = new Set([
+  'co',
+  'com',
+  'net',
+  'org',
+  'gov',
+  'ac',
+  'edu',
+  'or',
+  'ne',
+  'go',
+  'lg',
+]);
+
+export function isIPv4Host(host: string): boolean {
+  return /^\d{1,3}(\.\d{1,3}){3}$/.test(host);
+}
+
+/**
+ * Heuristic public-suffix / bare-TLD check (no full PSL). Used so allowlisting
+ * `www.com` / `www.co.uk` cannot store `com` / `co.uk` and disable the whole TLD.
+ */
+export function isPublicSuffixHost(host: string): boolean {
+  const parts = host.split('.').filter(Boolean);
+  if (parts.length <= 1) return true;
+  if (parts.length === 2 && MULTI_TLD_SECONDS.has(parts[0])) return true;
+  return false;
+}
+
+/**
+ * Strip a leading `www.` for stable allowlist / exception keys — but never when
+ * the remainder would be a bare public suffix (`www.com` → keep `www.com`).
+ */
 export function normalizeHostname(hostname: string): string {
-  return hostname.trim().toLowerCase().replace(/^www\./, '');
+  const h = hostname.trim().toLowerCase();
+  if (!h.startsWith('www.')) return h;
+  const rest = h.slice(4);
+  if (!rest || isPublicSuffixHost(rest)) return h;
+  return rest;
 }
 
 /**
@@ -19,8 +56,32 @@ export function isValidMatchPatternHost(host: string): boolean {
   // IPv6 (raw or bracketed) is not expressible as a match-pattern host.
   if (host.includes(':') || host.includes('[') || host.includes(']')) return false;
   // Hostname or IPv4.
-  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return true;
+  if (isIPv4Host(host)) return true;
   return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/i.test(host);
+}
+
+/**
+ * Hosts safe to store on the user allowlist / emit as DNR requestDomains.
+ * Rejects bare TLDs and multi-part public suffixes that would match unrelated sites.
+ */
+export function isSafeAllowlistHost(host: string): boolean {
+  const h = normalizeHostname(host);
+  if (!isValidMatchPatternHost(h)) return false;
+  if (isIPv4Host(h) || h === 'localhost') return true;
+  if (isPublicSuffixHost(h)) return false;
+  return true;
+}
+
+/**
+ * Chrome match-pattern excludes for an allowlisted host.
+ * IPv4 only gets an exact host pattern — `*.192.168.1.1` is rejected by Chrome
+ * and would abort the whole `chrome.scripting` registration batch.
+ */
+export function allowlistMatchPatterns(host: string): string[] {
+  const h = normalizeHostname(host);
+  if (!isSafeAllowlistHost(h)) return [];
+  if (isIPv4Host(h)) return [`*://${h}/*`];
+  return [`*://${h}/*`, `*://*.${h}/*`, `*://www.${h}/*`];
 }
 
 /** Return the hostname and each of its parent domains, most specific first. */
@@ -37,21 +98,6 @@ export function domainSuffixes(hostname: string): string[] {
   if (hostname && hostname !== host && !out.includes(hostname)) out.unshift(hostname);
   return out;
 }
-
-/** Common second-level labels in multi-part public suffixes (co.uk, com.au, …). */
-const MULTI_TLD_SECONDS = new Set([
-  'co',
-  'com',
-  'net',
-  'org',
-  'gov',
-  'ac',
-  'edu',
-  'or',
-  'ne',
-  'go',
-  'lg',
-]);
 
 /**
  * Entity domain `example.*` — match when the registrable name (hostname minus a
@@ -108,7 +154,11 @@ export function domainSpecMatches(
 
 /** Is this hostname on the user allowlist (exact or subdomain of an entry)? */
 export function isAllowlistedHost(hostname: string, allowlist: string[]): boolean {
-  return allowlist.some((h) => hostMatchesDomain(hostname, h));
+  return allowlist.some((h) => {
+    // Ignore corrupt/legacy bare-TLD entries so they cannot disable a whole suffix.
+    if (!isSafeAllowlistHost(h)) return false;
+    return hostMatchesDomain(hostname, h);
+  });
 }
 
 /** True if any exception host matches this page hostname. */

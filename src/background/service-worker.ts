@@ -37,7 +37,8 @@ import { matchCosmetic, matchScriptlets } from '../engine/cosmetic-match.js';
 import {
   normalizeHostname,
   isAllowlistedHost,
-  isValidMatchPatternHost,
+  isSafeAllowlistHost,
+  allowlistMatchPatterns,
 } from '../shared/hostname.js';
 
 import cosmeticJson from '../generated/cosmetic.json';
@@ -80,14 +81,6 @@ async function syncRulesets(settings: Settings): Promise<void> {
   }
 }
 
-function allowlistPatterns(host: string): string[] {
-  const h = normalizeHostname(host);
-  // Match patterns reject IPv6 / empty / garbage hosts; one bad entry must not abort
-  // chrome.scripting registration for cosmetics + YouTube hooks.
-  if (!isValidMatchPatternHost(h)) return [];
-  return [`*://${h}/*`, `*://*.${h}/*`, `*://www.${h}/*`];
-}
-
 async function syncAllowlist(settings: Settings): Promise<void> {
   // Rebuild only the allowlist id band — never touch custom rules (>= ALLOWLIST_ID_END).
   const existing = await chrome.declarativeNetRequest.getDynamicRules();
@@ -99,7 +92,7 @@ async function syncAllowlist(settings: Settings): Promise<void> {
     ...new Set(
       settings.allowlist
         .map(normalizeHostname)
-        .filter((h) => isValidMatchPatternHost(h)),
+        .filter((h) => isSafeAllowlistHost(h)),
     ),
   ];
   const addRules: chrome.declarativeNetRequest.Rule[] = hosts.map((host, i) => ({
@@ -128,7 +121,7 @@ async function syncAllowlist(settings: Settings): Promise<void> {
  */
 async function syncRegisteredScripts(settings: Settings): Promise<void> {
   const shouldExist = !settings.paused;
-  const excludeMatches = settings.allowlist.flatMap(allowlistPatterns);
+  const excludeMatches = settings.allowlist.flatMap(allowlistMatchPatterns);
   const exclude = excludeMatches.length ? excludeMatches : undefined;
   const ids = enabledListIds(settings);
   const cssFiles = ids
@@ -466,9 +459,11 @@ async function handleSetYoutubeOptions(
 async function handleToggleSite(hostname: string, enabled: boolean): Promise<PopupData> {
   const host = normalizeHostname(hostname);
   await mutateSettings((s) => {
-    const set = new Set(s.allowlist.map(normalizeHostname));
+    const set = new Set(
+      s.allowlist.map(normalizeHostname).filter((h) => isSafeAllowlistHost(h)),
+    );
     if (enabled) set.delete(host);
-    else set.add(host);
+    else if (isSafeAllowlistHost(host)) set.add(host);
     s.allowlist = [...set];
   });
   await withSettings((s) => Promise.all([syncAllowlist(s), syncRegisteredScripts(s)]));
