@@ -218,6 +218,44 @@ test('should skip rule when excluded domain is invalid (dropping exclude would o
   });
 });
 
+test('should skip $replace with trailing / instead of emitting regexFilter', () => {
+  // Path ends with `/` from replace=/…/ — must not be treated as full regex with no options.
+  const { parsed, dnr } = convert(
+    '/theme/002/js/application.js?2.0|$script,1p,replace=/video\\.maxPop/0/',
+  );
+  assert.equal(parsed.pattern, '/theme/002/js/application.js?2.0|');
+  assert.ok(parsed.unsupported.some((t) => t.startsWith('replace=')));
+  assert.equal(dnr.skip, 'unsupported:replace');
+  assert.equal(dnr.rule, undefined);
+});
+
+test('should skip $replace when value contains commas', () => {
+  const { parsed, dnr } = convert('||ads.example^$script,replace=/a,b/');
+  assert.equal(parsed.pattern, '||ads.example^');
+  assert.ok(parsed.unsupported.some((t) => t.startsWith('replace=')));
+  assert.equal(dnr.skip, 'unsupported:replace');
+});
+
+test('should skip $header when value contains escaped commas', () => {
+  const { parsed, dnr } = convert(
+    '||example.com^$script,header=vary:/^referer\\,accept-encoding/i',
+  );
+  assert.equal(parsed.pattern, '||example.com^');
+  assert.deepEqual(parsed.options.resourceTypes, ['script']);
+  assert.ok(parsed.unsupported.some((t) => t.startsWith('header=')));
+  assert.equal(dnr.skip, 'unsupported:header');
+});
+
+test('should still parse full regex with $options after closing slash', () => {
+  const { parsed, dnr } = convert('/^ads$/$script,3p');
+  assert.equal(parsed.pattern, '/^ads$/');
+  assert.equal(parsed.isRegex, true);
+  assert.deepEqual(parsed.options.resourceTypes, ['script']);
+  assert.equal(parsed.options.thirdParty, true);
+  assert.equal(dnr.skip, undefined);
+  assert.equal(dnr.rule.condition.regexFilter, '^ads$');
+});
+
 test('should parse $badfilter without treating it as unsupported', () => {
   const { parsed, dnr } = convert('||ads.example^$script,badfilter');
   assert.equal(parsed.options.badfilter, true);

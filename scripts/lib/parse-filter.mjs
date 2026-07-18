@@ -200,7 +200,7 @@ function parseNetwork(line) {
   let redirectRule = false; // $redirect-rule=… (not expressible in DNR)
 
   if (optionStr) {
-    for (const tokenRaw of optionStr.split(',')) {
+    for (const tokenRaw of splitOptionTokens(optionStr)) {
       const token = tokenRaw.trim();
       if (!token) continue;
       const neg = token.startsWith('~');
@@ -311,13 +311,33 @@ function parseNetwork(line) {
 }
 
 /**
+ * Split EasyList/uBO options on commas that start a new option.
+ * Values may contain commas (`$replace=/a,b/`, `$header=vary:/^x\,y/`); only split
+ * when the text after `,` looks like `~?name` followed by `=`, `,`, or end.
+ */
+function splitOptionTokens(optionStr) {
+  const tokens = [];
+  let start = 0;
+  for (let i = 0; i < optionStr.length; i++) {
+    if (optionStr[i] !== ',') continue;
+    const rest = optionStr.slice(i + 1).trimStart();
+    if (!rest || /^(~?[a-z0-9-]+)(=|,|$)/i.test(rest)) {
+      tokens.push(optionStr.slice(start, i));
+      start = i + 1;
+    }
+  }
+  tokens.push(optionStr.slice(start));
+  return tokens;
+}
+
+/**
  * True when `optionStr` looks like a comma-separated EasyList/uBO options list.
  * Option *names* are [a-z0-9-]+ (optionally negated, optionally =value). Path
  * fragments like `web/*index.html$doc` or `.min.js|$script` fail this check.
  */
 function looksLikeOptionString(optionStr) {
   if (!optionStr) return false;
-  const tokens = optionStr.split(',');
+  const tokens = splitOptionTokens(optionStr);
   if (!tokens.length) return false;
   for (const tokenRaw of tokens) {
     const token = tokenRaw.trim();
@@ -332,23 +352,24 @@ function looksLikeOptionString(optionStr) {
 }
 
 function findOptionsDollar(text) {
-  // Full regex filters are `/pattern/` optionally followed by `$options`. Filter
-  // options never contain `/`, so for a full regex the closing delimiter is simply
-  // the LAST `/` in the string — options (if any) begin with the `$` right after it.
-  // This preserves a `$` end-anchor *inside* the regex (e.g. `/ads$/`, `/ad/x$/`).
+  // Full regex filters are `/pattern/` optionally followed by `$options`. When the
+  // last `/` is immediately followed by `$` + option-shaped suffix, that `$` is the
+  // options delimiter (preserves `$` end-anchors inside `/ads$/`).
   //
-  // Path-anchored patterns also start with `/` and often contain a second `/`
-  // (e.g. `/ad/image/*$image`). Those are NOT full regexes: only treat as regex when
-  // the last `/` is the final character, or is immediately followed by `$options`.
-  // Otherwise fall through to the options-looking-`$` scan.
+  // Do NOT treat "ends with `/`" as "regex, no options": `$replace=/…/` and similar
+  // option values also end with `/`, and path filters like
+  // `/file.js|$script,replace=/x/` must fall through to the options-looking `$` scan.
   const isFullRegexCandidate = text.length > 1 && text.startsWith('/') && text.lastIndexOf('/') > 0;
   if (isFullRegexCandidate) {
     const close = text.lastIndexOf('/');
-    if (close + 1 === text.length) return -1; // `/pattern/` with no options
-    if (text[close + 1] === '$' && looksLikeOptionString(text.slice(close + 2))) {
+    if (
+      close + 1 < text.length &&
+      text[close + 1] === '$' &&
+      looksLikeOptionString(text.slice(close + 2))
+    ) {
       return close + 1; // `/pattern/$options`
     }
-    // else: path-like `/foo/bar*$opts` — fall through
+    // else: `/pattern/`, or path-like `/foo|$opts` — fall through
   }
   // Non-regex (or path-anchored): URLs may contain a literal `$` (Azure `$web`,
   // `$.min.js`). Use the LAST `$` whose suffix looks like options — never the first
