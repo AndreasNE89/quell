@@ -36,6 +36,7 @@ test('default settings enable sponsored YouTube blocking and leave Shorts off', 
   const s = mod.defaultSettings();
   assert.equal(s.youtubeBlockSponsored, true);
   assert.equal(s.youtubeBlockShorts, false);
+  assert.equal(s.youtubeSponsorBlock, true);
   assert.equal(s.darkModeEnabled, false);
   assert.deepEqual(s.darkModeSiteOverrides, {});
 });

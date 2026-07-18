@@ -13,6 +13,7 @@ const el = {
   pauseToggle: $<HTMLInputElement>('pauseToggle'),
   ytSponsoredToggle: $<HTMLInputElement>('ytSponsoredToggle'),
   ytShortsToggle: $<HTMLInputElement>('ytShortsToggle'),
+  ytSponsorBlockToggle: $<HTMLInputElement>('ytSponsorBlockToggle'),
   tabBlocked: $('tabBlocked'),
   totalBlocked: $('totalBlocked'),
   optionsBtn: $('optionsBtn'),
@@ -55,8 +56,10 @@ function render(data: PopupData): void {
   el.pauseToggle.checked = data.paused;
   el.ytSponsoredToggle.checked = data.youtubeBlockSponsored;
   el.ytShortsToggle.checked = data.youtubeBlockShorts;
+  el.ytSponsorBlockToggle.checked = data.youtubeSponsorBlock;
   el.ytSponsoredToggle.disabled = data.paused;
   el.ytShortsToggle.disabled = data.paused;
+  el.ytSponsorBlockToggle.disabled = data.paused;
 
   el.tabBlocked.textContent = data.statsReliable ? String(data.tabBlocked) : '—';
   el.totalBlocked.textContent = data.statsReliable
@@ -169,6 +172,7 @@ async function saveYoutubeOptions(): Promise<void> {
     type: 'popup:setYoutubeOptions',
     youtubeBlockSponsored: el.ytSponsoredToggle.checked,
     youtubeBlockShorts: el.ytShortsToggle.checked,
+    youtubeSponsorBlock: el.ytSponsorBlockToggle.checked,
   })) as PopupData;
   current = data;
   render(data);
@@ -178,6 +182,9 @@ el.ytSponsoredToggle.addEventListener('change', () => {
   void saveYoutubeOptions();
 });
 el.ytShortsToggle.addEventListener('change', () => {
+  void saveYoutubeOptions();
+});
+el.ytSponsorBlockToggle.addEventListener('change', () => {
   void saveYoutubeOptions();
 });
 

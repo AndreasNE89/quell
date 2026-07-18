@@ -2,6 +2,8 @@
 // popup, and options page. Keeping every message in one discriminated union means the
 // compiler catches a mismatched handler.
 
+import type { SponsorSegment } from './sponsorblock.js';
+
 export type ListGroup = 'ads' | 'privacy' | 'security' | 'annoyances';
 
 export interface ListMeta {
@@ -38,6 +40,8 @@ export interface Settings {
   youtubeBlockSponsored: boolean;
   /** Hide YouTube Shorts shelves/entries and leave /shorts/ pages. */
   youtubeBlockShorts: boolean;
+  /** Skip mid-video sponsor/intro/etc. segments via the SponsorBlock API. */
+  youtubeSponsorBlock: boolean;
   /** Global paid dark-mode preference (gated by license). */
   darkModeEnabled: boolean;
   /** Hostname → force on/off; missing key follows `darkModeEnabled`. */
@@ -115,8 +119,10 @@ export type Message =
       type: 'popup:setYoutubeOptions';
       youtubeBlockSponsored: boolean;
       youtubeBlockShorts: boolean;
+      youtubeSponsorBlock: boolean;
     }
   | { type: 'youtube:getOptions'; hostname: string }
+  | { type: 'sponsorblock:getSegments'; videoId: string }
   | { type: 'lists:get' }
   | { type: 'lists:setEnabled'; id: string; enabled: boolean }
   | { type: 'stats:get' }
@@ -168,6 +174,7 @@ export interface PopupData {
   statsReliable: boolean;
   youtubeBlockSponsored: boolean;
   youtubeBlockShorts: boolean;
+  youtubeSponsorBlock: boolean;
 }
 
 export interface YoutubeOptionsData {
@@ -175,6 +182,12 @@ export interface YoutubeOptionsData {
   paused: boolean;
   youtubeBlockSponsored: boolean;
   youtubeBlockShorts: boolean;
+  youtubeSponsorBlock: boolean;
+}
+
+export interface SponsorBlockSegmentsData {
+  videoId: string;
+  segments: SponsorSegment[];
 }
 
 export interface ListsData {

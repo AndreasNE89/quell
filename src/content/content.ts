@@ -19,6 +19,8 @@ import {
   youtubeOptsFromSettings,
   isYoutubeHost,
 } from './youtube-ui.js';
+import { refreshSponsorBlock, startSponsorBlock } from './sponsorblock.js';
+import type { SponsorSegment } from '../shared/sponsorblock.js';
 import { startDarkModeSmart } from './dark-mode-smart.js';
 
 if (location.protocol === 'http:' || location.protocol === 'https:' || location.protocol === 'about:') {
@@ -44,8 +46,19 @@ async function refreshYoutubeOpts(host: string): Promise<void> {
     const raw = await send({ type: 'youtube:getOptions', hostname: host });
     youtubeOpts = raw as YoutubeOptionsData | null;
     if (youtubeOpts) applyYoutubeFeatures(youtubeOpts);
+    refreshSponsorBlock();
   } catch {
     /* SW may be asleep; storage bootstrap already applied */
+  }
+}
+
+async function fetchSponsorSegments(videoId: string): Promise<SponsorSegment[]> {
+  try {
+    const raw = await send({ type: 'sponsorblock:getSegments', videoId });
+    const data = raw as { segments?: SponsorSegment[] } | null;
+    return Array.isArray(data?.segments) ? data.segments : [];
+  } catch {
+    return [];
   }
 }
 
@@ -53,12 +66,17 @@ async function refreshYoutubeOpts(host: string): Promise<void> {
 function bootstrapYoutube(host: string): void {
   if (!isYoutubeHost(host)) return;
   watchYoutubeSpa(() => youtubeOpts);
+  startSponsorBlock({
+    getOpts: () => youtubeOpts,
+    fetchSegments: fetchSponsorSegments,
+  });
   onYoutubeStorageChanged(host);
   void chrome.storage.local.get(STORAGE_KEY).then((stored) => {
     const partial = stored[STORAGE_KEY] as Partial<Settings> | undefined;
     if (!partial) return;
     youtubeOpts = youtubeOptsFromSettings(partial, host);
     applyYoutubeFeatures(youtubeOpts);
+    refreshSponsorBlock();
   });
   void refreshYoutubeOpts(host);
 }

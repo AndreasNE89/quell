@@ -23,11 +23,13 @@ import type {
   ScriptletRule,
   GeneratedMeta,
   YoutubeOptionsData,
+  SponsorBlockSegmentsData,
   DarkModeData,
   DarkModeSiteOverride,
   LicenseData,
   LicenseState,
 } from '../shared/types.js';
+import { fetchSponsorSegments } from './sponsorblock-api.js';
 import {
   ALLOWLIST_ID_START,
   ALLOWLIST_ID_END,
@@ -560,10 +562,17 @@ async function handleMessage(msg: Message, sender: chrome.runtime.MessageSender)
       return handleSetPaused(msg.paused);
 
     case 'popup:setYoutubeOptions':
-      return handleSetYoutubeOptions(msg.youtubeBlockSponsored, msg.youtubeBlockShorts);
+      return handleSetYoutubeOptions(
+        msg.youtubeBlockSponsored,
+        msg.youtubeBlockShorts,
+        msg.youtubeSponsorBlock,
+      );
 
     case 'youtube:getOptions':
       return handleYoutubeGetOptions(msg.hostname);
+
+    case 'sponsorblock:getSegments':
+      return handleSponsorBlockGetSegments(msg.videoId);
 
     case 'lists:get':
       return handleListsGet();
@@ -716,6 +725,7 @@ async function handlePopupGet(): Promise<PopupData> {
     statsReliable: STATS_RELIABLE,
     youtubeBlockSponsored: settings.youtubeBlockSponsored !== false,
     youtubeBlockShorts: !!settings.youtubeBlockShorts,
+    youtubeSponsorBlock: settings.youtubeSponsorBlock !== false,
   };
 }
 
@@ -726,19 +736,27 @@ async function handleYoutubeGetOptions(hostname: string): Promise<YoutubeOptions
     allowlisted: isAllowlistedHost(hostname, settings.allowlist),
     youtubeBlockSponsored: settings.youtubeBlockSponsored !== false,
     youtubeBlockShorts: !!settings.youtubeBlockShorts,
+    youtubeSponsorBlock: settings.youtubeSponsorBlock !== false,
   };
 }
 
 async function handleSetYoutubeOptions(
   youtubeBlockSponsored: boolean,
   youtubeBlockShorts: boolean,
+  youtubeSponsorBlock: boolean,
 ): Promise<PopupData> {
   const settings = await mutateSettings((s) => {
     s.youtubeBlockSponsored = youtubeBlockSponsored;
     s.youtubeBlockShorts = youtubeBlockShorts;
+    s.youtubeSponsorBlock = youtubeSponsorBlock;
   });
   await syncRegisteredScripts(settings);
   return handlePopupGet();
+}
+
+async function handleSponsorBlockGetSegments(videoId: string): Promise<SponsorBlockSegmentsData> {
+  const segments = await fetchSponsorSegments(videoId);
+  return { videoId, segments };
 }
 
 async function handleToggleSite(hostname: string, enabled: boolean): Promise<PopupData> {

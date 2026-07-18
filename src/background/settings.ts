@@ -12,6 +12,7 @@ export function defaultSettings(): Settings {
     blockedTotal: 0,
     youtubeBlockSponsored: true,
     youtubeBlockShorts: false,
+    youtubeSponsorBlock: true,
     darkModeEnabled: false,
     darkModeSiteOverrides: {},
     darkModeAutoOff: {},
@@ -58,6 +59,9 @@ export function mergeSettings(partial: Partial<Settings>): Settings {
   }
   if (typeof partial.youtubeBlockShorts === 'boolean') {
     next.youtubeBlockShorts = partial.youtubeBlockShorts;
+  }
+  if (typeof partial.youtubeSponsorBlock === 'boolean') {
+    next.youtubeSponsorBlock = partial.youtubeSponsorBlock;
   }
   if (typeof partial.darkModeEnabled === 'boolean') next.darkModeEnabled = partial.darkModeEnabled;
   if (Array.isArray(partial.allowlist)) next.allowlist = [...partial.allowlist];

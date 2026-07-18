@@ -91,19 +91,24 @@ async function loadYoutubeOptions(): Promise<void> {
   const data = (await send({ type: 'popup:get' })) as PopupData;
   const sponsored = $<HTMLInputElement>('ytSponsored');
   const shorts = $<HTMLInputElement>('ytShorts');
+  const sponsorBlock = $<HTMLInputElement>('ytSponsorBlock');
   sponsored.checked = data.youtubeBlockSponsored;
   shorts.checked = data.youtubeBlockShorts;
+  sponsorBlock.checked = data.youtubeSponsorBlock;
   sponsored.disabled = data.paused;
   shorts.disabled = data.paused;
+  sponsorBlock.disabled = data.paused;
 }
 
 async function saveYoutubeOptions(): Promise<void> {
   const sponsored = $<HTMLInputElement>('ytSponsored');
   const shorts = $<HTMLInputElement>('ytShorts');
+  const sponsorBlock = $<HTMLInputElement>('ytSponsorBlock');
   await send({
     type: 'popup:setYoutubeOptions',
     youtubeBlockSponsored: sponsored.checked,
     youtubeBlockShorts: shorts.checked,
+    youtubeSponsorBlock: sponsorBlock.checked,
   });
 }
 
@@ -189,6 +194,9 @@ $<HTMLInputElement>('ytSponsored').addEventListener('change', () => {
   void saveYoutubeOptions();
 });
 $<HTMLInputElement>('ytShorts').addEventListener('change', () => {
+  void saveYoutubeOptions();
+});
+$<HTMLInputElement>('ytSponsorBlock').addEventListener('change', () => {
   void saveYoutubeOptions();
 });
 

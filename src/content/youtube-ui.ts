@@ -106,6 +106,7 @@ export function youtubeOptsFromSettings(
     allowlisted: isAllowlistedHost(hostname, settings.allowlist ?? []),
     youtubeBlockSponsored: settings.youtubeBlockSponsored !== false,
     youtubeBlockShorts: !!settings.youtubeBlockShorts,
+    youtubeSponsorBlock: settings.youtubeSponsorBlock !== false,
   };
 }
 

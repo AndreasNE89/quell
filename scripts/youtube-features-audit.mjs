@@ -89,6 +89,7 @@ async function setYoutubeOptions(context, extensionId, sponsored, shorts) {
           type: 'popup:setYoutubeOptions',
           youtubeBlockSponsored: sponsored,
           youtubeBlockShorts: shorts,
+          youtubeSponsorBlock: true,
         });
         await chrome.runtime.sendMessage({ type: 'popup:setPaused', paused: false });
       },
