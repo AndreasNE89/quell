@@ -113,6 +113,18 @@ test('should extract entity hosts from generichide patterns for runtime matching
   assert.deepEqual(hostsFromPattern('||mail.google.com^', false), ['mail.google.com']);
 });
 
+test('should map trailing-dot hostname prefixes to entity keys for generichide', async () => {
+  const { hostsFromPattern } = await import('../scripts/lib/parse-filter.mjs');
+  // ubo-filters: @@||stream4free.$ghide — must not become bare `stream4free`
+  // (suffix match misses stream4free.tv; would only hit *.stream4free).
+  assert.deepEqual(hostsFromPattern('||stream4free.', false), ['stream4free.*']);
+  assert.deepEqual(hostsFromPattern('||asd.', false), ['asd.*']);
+  assert.deepEqual(hostsFromPattern('||shrink.', false), ['shrink.*']);
+  assert.deepEqual(hostsFromPattern('||asd.^', false), ['asd.*']);
+  // Multi-label hosts stay exact — do not treat example.com. as entity.
+  assert.deepEqual(hostsFromPattern('||example.com.', false), ['example.com']);
+});
+
 test('ruleKey distinguishes $important from plain block', async () => {
   const { ruleKey } = await import('../scripts/lib/to-dnr.mjs');
   const a = convert('||ads.example^').dnr.rule;

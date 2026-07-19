@@ -131,9 +131,12 @@ function compileList(list, text, ctx) {
 function applyNetworkCosmeticException(out, parsed, bag) {
   if (!parsed.isException) return; // only @@…$generichide etc.
   const kind = out.cosmeticException;
+  // Page hosts for cosmetic exceptions come from the URL pattern, $domain/$from,
+  // and $to (destination) — e.g. @@||asd.$generichide,to=asd.homes|asd.ink.
   const hosts = [
     ...hostsFromPattern(parsed.pattern, parsed.isRegex),
     ...(parsed.options?.initiatorDomains || []),
+    ...(parsed.options?.requestDomains || []),
   ];
   const set = bag[kind];
   if (!set) return;
