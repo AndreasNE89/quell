@@ -18,7 +18,7 @@ before(async () => {
   await build({
     stdin: {
       contents: `
-        export { domainSuffixes, hostMatchesDomain, domainSpecMatches, normalizeHostname, isAllowlistedHost, isValidMatchPatternHost } from './src/shared/hostname.js';
+        export { domainSuffixes, hostMatchesDomain, domainSpecMatches, normalizeHostname, isAllowlistedHost, isValidMatchPatternHost, isSafeAllowlistHost, isPublicSuffixHost, allowlistMatchPatterns } from './src/shared/hostname.js';
         export { matchCosmetic, matchScriptlets, mergeCosmeticLists } from './src/engine/cosmetic-match.js';
         export { parseProcedural } from './src/engine/procedural.js';
       `,
@@ -208,6 +208,34 @@ test('matchScriptlets applies exceptions and dedupes', () => {
 test('normalizeHostname strips www', () => {
   assert.equal(mod.normalizeHostname('www.Example.COM'), 'example.com');
   assert.equal(mod.isAllowlistedHost('www.example.com', ['example.com']), true);
+});
+
+test('should not strip www when remainder is a bare public suffix', () => {
+  assert.equal(mod.normalizeHostname('www.com'), 'www.com');
+  assert.equal(mod.normalizeHostname('www.co.uk'), 'www.co.uk');
+  assert.equal(mod.normalizeHostname('WWW.COM.AU'), 'www.com.au');
+  assert.equal(mod.normalizeHostname('www.example.com'), 'example.com');
+});
+
+test('should not treat bare TLD allowlist entries as matching all sites', () => {
+  assert.equal(mod.isSafeAllowlistHost('com'), false);
+  assert.equal(mod.isSafeAllowlistHost('co.uk'), false);
+  assert.equal(mod.isSafeAllowlistHost('www.com'), true);
+  assert.equal(mod.isAllowlistedHost('evil.com', ['com']), false);
+  assert.equal(mod.isAllowlistedHost('shop.co.uk', ['co.uk']), false);
+  assert.equal(mod.isAllowlistedHost('www.com', ['www.com']), true);
+  assert.equal(mod.isAllowlistedHost('evil.com', ['www.com']), false);
+});
+
+test('should emit only exact match patterns for IPv4 allowlist hosts', () => {
+  assert.deepEqual(mod.allowlistMatchPatterns('192.168.1.1'), ['*://192.168.1.1/*']);
+  assert.deepEqual(mod.allowlistMatchPatterns('example.com'), [
+    '*://example.com/*',
+    '*://*.example.com/*',
+    '*://www.example.com/*',
+  ]);
+  assert.deepEqual(mod.allowlistMatchPatterns('com'), []);
+  assert.deepEqual(mod.allowlistMatchPatterns('co.uk'), []);
 });
 
 test('disabled lists are excluded from mergeCosmeticLists', () => {
