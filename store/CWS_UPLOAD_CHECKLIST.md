@@ -29,9 +29,9 @@ Block ads and trackers with EasyList-style filters, cosmetics, and scriptlets �
 
 **Category:** Productivity  
 
-**Homepage:** `https://github.com/AndreasNE89/quell`  
+**Homepage:** leave blank (private repo — do not paste GitHub until public)  
 
-**Support:** `https://github.com/AndreasNE89/quell/issues`
+**Support:** leave blank (private repo — do not paste GitHub until public)
 
 ## Permissions (paste from `store/PERMISSIONS.md`)
 
@@ -57,7 +57,7 @@ Block ads and trackers using Declarative Net Request, cosmetic filters, and scri
 https://andreasne89.github.io/quell/privacy-policy.html
 ```
 
-Homepage URL (not the Search Console “Official URL” dropdown): GitHub repo. Official URL may stay **None** unless the site is verified in Search Console.
+Homepage / Official URL: leave blank until a public site exists. Do not paste the private GitHub repo.
 
 ## Still required from you
 

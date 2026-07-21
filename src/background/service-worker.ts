@@ -23,7 +23,13 @@ import type {
   ScriptletRule,
   GeneratedMeta,
   YoutubeOptionsData,
+  SponsorBlockSegmentsData,
+  DarkModeData,
+  DarkModeSiteOverride,
+  LicenseData,
+  LicenseState,
 } from '../shared/types.js';
+import { fetchSponsorSegments } from './sponsorblock-api.js';
 import {
   ALLOWLIST_ID_START,
   ALLOWLIST_ID_END,
@@ -31,13 +37,38 @@ import {
   GENERIC_CSS_SCRIPT_ID,
   SCRIPTLETS_SCRIPT_ID,
   YOUTUBE_SCRIPTLETS_SCRIPT_ID,
+  DARK_MODE_SCRIPT_ID,
+  DARK_MODE_FORCE_ON_SCRIPT_ID,
+  DARK_MODE_CSS_PATH,
 } from '../shared/constants.js';
 import { loadSettings, saveSettings, isListEnabled } from './settings.js';
+import {
+  defaultLicense,
+  initLicense,
+  loadLicense,
+  refreshLicense,
+  openCheckout,
+  openRestore,
+  devUnlock,
+  ensureUnpackedTestLicense,
+  isUnpackedInstall,
+  toLicenseData,
+} from './license.js';
+import {
+  isLicenseEffectivelyPaid,
+  resolveDarkModeForHost,
+  hostsWithForceOff,
+  hostsWithForceOn,
+  isExtensionRestrictedHostname,
+  isDarkModeInjectibleUrl,
+  isHttpOrHttpsUrl,
+} from '../shared/dark-mode.js';
 import { matchCosmetic, matchScriptlets } from '../engine/cosmetic-match.js';
 import {
   normalizeHostname,
   isAllowlistedHost,
   isSafeAllowlistHost,
+  isValidMatchPatternHost,
   allowlistMatchPatterns,
 } from '../shared/hostname.js';
 
@@ -71,14 +102,53 @@ async function syncRulesets(settings: Settings): Promise<void> {
     const on = !settings.paused && isListEnabled(settings, list.id, list.enabledByDefault);
     (on ? enable : disable).push(list.id);
   }
-  try {
-    await chrome.declarativeNetRequest.updateEnabledRulesets({
-      enableRulesetIds: enable,
-      disableRulesetIds: disable,
-    });
-  } catch (e) {
-    console.error('[StampStack] updateEnabledRulesets failed', e);
+
+  // Disable unwanted rulesets first — always succeeds and frees global-pool budget.
+  if (disable.length) {
+    try {
+      await chrome.declarativeNetRequest.updateEnabledRulesets({ disableRulesetIds: disable });
+    } catch (e) {
+      console.error('[StampStack] disable rulesets failed', e);
+    }
   }
+
+  // Enable wanted rulesets. We ship well past the 30k guaranteed minimum, so the extra rules
+  // draw from a global pool shared with every other installed extension. If that pool is
+  // exhausted, enabling the full set THROWS and would leave the user with zero blocking.
+  // Degrade gracefully: drop the largest ruleset and retry (the built-in seed is never
+  // dropped), so a tight pool costs coverage rather than all protection. Self-heals — every
+  // sync retries the full set, so dropped lists re-enable once the pool frees up.
+  const ruleCount = (id: string): number => META.lists.find((l) => l.id === id)?.ruleCount ?? 0;
+  let toEnable = [...enable];
+  while (toEnable.length) {
+    try {
+      await chrome.declarativeNetRequest.updateEnabledRulesets({ enableRulesetIds: toEnable });
+      return;
+    } catch (e) {
+      const droppable = toEnable.filter((id) => id !== 'quell-seed');
+      if (!droppable.length) {
+        console.error('[StampStack] updateEnabledRulesets failed for the minimal set', e);
+        return;
+      }
+      const largest = droppable.reduce((a, b) => (ruleCount(b) > ruleCount(a) ? b : a));
+      console.warn(
+        `[StampStack] static rule pool tight — dropping "${largest}" (${ruleCount(largest)} rules) and retrying`,
+      );
+      toEnable = toEnable.filter((id) => id !== largest);
+    }
+  }
+}
+
+/**
+ * Exact-host match patterns for dark-mode registration — no `*://*.h/*` subdomain wildcard.
+ * resolveDarkModeForHost resolves per-site overrides by EXACT (www-stripped) host, so the
+ * registered FOUC scope must match that, or a force-off/on on example.com would wrongly
+ * exclude/include sub.example.com and diverge from what the content script applies.
+ */
+function darkModeHostPatterns(host: string): string[] {
+  const h = normalizeHostname(host);
+  if (!isValidMatchPatternHost(h)) return [];
+  return [`*://${h}/*`, `*://www.${h}/*`];
 }
 
 async function syncAllowlist(settings: Settings): Promise<void> {
@@ -121,8 +191,24 @@ async function syncAllowlist(settings: Settings): Promise<void> {
  */
 async function syncRegisteredScripts(settings: Settings): Promise<void> {
   const shouldExist = !settings.paused;
-  const excludeMatches = settings.allowlist.flatMap(allowlistMatchPatterns);
-  const exclude = excludeMatches.length ? excludeMatches : undefined;
+  const allowlistMatches = [...new Set(settings.allowlist.flatMap(allowlistMatchPatterns))];
+  const allowlistExclude = allowlistMatches.length ? allowlistMatches : undefined;
+
+  // Generic cosmetic CSS is additionally excluded on hosts with a $generichide/$elemhide
+  // network exception, so those hosts never receive the sheet (and need no per-page revert
+  // of the whole generic set). matchCosmetic mirrors this: it only emits the revert for
+  // entity-domain (example.*) exceptions, which can't be expressed as a match pattern here.
+  const cosmeticMatches = [
+    ...new Set(
+      [
+        ...settings.allowlist,
+        ...COSMETIC.networkExceptions.generichide,
+        ...COSMETIC.networkExceptions.elemhide,
+      ].flatMap(allowlistMatchPatterns),
+    ),
+  ];
+  const cosmeticExclude = cosmeticMatches.length ? cosmeticMatches : undefined;
+
   const ids = enabledListIds(settings);
   const cssFiles = ids
     .map((id) => META.lists.find((l) => l.id === id)?.genericCssFile)
@@ -133,7 +219,7 @@ async function syncRegisteredScripts(settings: Settings): Promise<void> {
     id: GENERIC_CSS_SCRIPT_ID,
     css: cssFiles.length ? cssFiles : undefined,
     matches: ['<all_urls>'],
-    excludeMatches: exclude,
+    excludeMatches: cosmeticExclude,
     runAt: 'document_start',
     allFrames: true,
     persistAcrossSessions: true,
@@ -148,7 +234,7 @@ async function syncRegisteredScripts(settings: Settings): Promise<void> {
       '*://youtu.be/*',
       '*://*.youtubekids.com/*',
     ],
-    excludeMatches: exclude,
+    excludeMatches: allowlistExclude,
     runAt: 'document_start',
     allFrames: true,
     world: 'MAIN',
@@ -196,18 +282,117 @@ async function syncOneRegisteredScript(
   }
 }
 
-async function applyAll(settings: Settings): Promise<void> {
+/**
+ * Paid dark mode — independent of pause/allowlist cosmetics.
+ * Global on → register with force-off excludes; global off → force-on matches only.
+ */
+async function syncDarkModeScripts(
+  settings: Settings,
+  license: LicenseState = defaultLicense(),
+): Promise<void> {
+  const paid = isLicenseEffectivelyPaid(license);
+  const forceOffExclude = [
+    ...new Set(hostsWithForceOff(settings.darkModeSiteOverrides).flatMap(darkModeHostPatterns)),
+  ];
+  const forceOnMatches = [
+    ...new Set(hostsWithForceOn(settings.darkModeSiteOverrides).flatMap(darkModeHostPatterns)),
+  ];
+
+  // Top frame ONLY (allFrames: false): the FOUC shell forces an opaque charcoal canvas, which
+  // must never hit iframes — transparent-by-design embeds (Stripe fields, sign-in buttons,
+  // overlay widgets) would become opaque dark slabs with un-recolored text. Subframes are
+  // darkened by the engine itself (runs in every frame, gated on the TOP host via sender.tab),
+  // which keeps transparent backgrounds transparent.
+  const globalScript: chrome.scripting.RegisteredContentScript = {
+    id: DARK_MODE_SCRIPT_ID,
+    css: [DARK_MODE_CSS_PATH],
+    matches: ['http://*/*', 'https://*/*'],
+    excludeMatches: forceOffExclude.length ? forceOffExclude : undefined,
+    runAt: 'document_start',
+    allFrames: false,
+    persistAcrossSessions: true,
+  };
+
+  const forceOnScript: chrome.scripting.RegisteredContentScript = {
+    id: DARK_MODE_FORCE_ON_SCRIPT_ID,
+    css: [DARK_MODE_CSS_PATH],
+    matches: forceOnMatches.length ? forceOnMatches : ['http://*/*'],
+    runAt: 'document_start',
+    allFrames: false,
+    persistAcrossSessions: true,
+  };
+
+  try {
+    const globalOn = paid && settings.darkModeEnabled;
+    await syncOneRegisteredScript(globalScript, globalOn);
+    // When global is on, force-on hosts are already covered; only need force script when global off.
+    await syncOneRegisteredScript(
+      forceOnScript,
+      paid && !settings.darkModeEnabled && forceOnMatches.length > 0,
+    );
+  } catch (e) {
+    console.error('[StampStack] syncDarkModeScripts failed', e);
+  }
+}
+
+/**
+ * Live-update open tabs after a toggle, instantly and without a reload. The content script
+ * re-evaluates and applies the correct visual itself: the matte smart invert on a light page,
+ * or a no-op reset on an already-dark page.
+ *
+ * We deliberately do NOT insertCSS the invert here. Doing so applied it to every tab whose
+ * host resolves to "on" — including already-dark pages, which would flash to light for a frame
+ * before the content script cancelled it. Letting the content script decide keeps the toggle
+ * both instant and flash-free.
+ */
+async function applyDarkModeToOpenTabs(
+  _settings: Settings,
+  _license: LicenseState,
+): Promise<void> {
+  // No paid gate here: on a paid→unpaid transition we still need to reach open tabs so the
+  // content script can cancel any lingering invert (it resets itself when darkmode:get reports
+  // unpaid). The content script is the authority on what to apply.
+  const tabs = await chrome.tabs.query({ url: ['http://*/*', 'https://*/*'] });
+  await Promise.all(
+    tabs.map(async (tab) => {
+      if (tab.id == null || !isDarkModeInjectibleUrl(tab.url)) return;
+      try {
+        // Clean up any invert sheet an older build inserted via insertCSS (harmless if none).
+        await chrome.scripting
+          .removeCSS({ target: { tabId: tab.id, allFrames: true }, files: [DARK_MODE_CSS_PATH] })
+          .catch(() => {});
+        await chrome.tabs.sendMessage(tab.id, { type: 'darkmode:refresh' } satisfies Message);
+      } catch {
+        /* Discarded tab or content script not ready — next navigation picks up registration. */
+      }
+    }),
+  );
+}
+
+async function syncDarkModeAndActiveTab(
+  settings: Settings,
+  license: LicenseState,
+): Promise<void> {
+  await syncDarkModeScripts(settings, license);
+  await applyDarkModeToOpenTabs(settings, license);
+}
+
+async function applyAll(settings: Settings, license?: LicenseState): Promise<void> {
+  const lic = license ?? (await loadLicense());
   await Promise.all([
     syncRulesets(settings),
     syncAllowlist(settings),
     syncRegisteredScripts(settings),
+    syncDarkModeScripts(settings, lic),
   ]);
 }
 
 // Serialize read-modify-write of the single settings blob. Message handlers and the
 // blocked-count flush run concurrently; without this, two `loadSettings → mutate →
 // saveSettings` cycles interleave and the second clobbers the first's field change.
-let settingsChain: Promise<Settings> = loadSettings();
+// Every step must `await loadSettings()` itself — never pass a stale chain value into
+// nested mutateSettings (that deadlocks: mutate waits for the outer job that awaits it).
+let settingsChain: Promise<unknown> = Promise.resolve();
 function mutateSettings(mutator: (s: Settings) => void): Promise<Settings> {
   const next = settingsChain.then(async () => {
     const s = await loadSettings();
@@ -215,14 +400,17 @@ function mutateSettings(mutator: (s: Settings) => void): Promise<Settings> {
     await saveSettings(s);
     return s;
   });
-  settingsChain = next.catch(() => loadSettings());
+  settingsChain = next.catch(() => undefined);
   return next;
 }
 
-/** Run work after the current settings chain (and extend the chain so init can't race). */
+/** Run exclusive settings-aware work; always reloads settings after prior chain jobs. */
 function withSettings<T>(fn: (s: Settings) => Promise<T>): Promise<T> {
-  const next = settingsChain.then(async (s) => fn(s));
-  settingsChain = next.then(() => loadSettings()).catch(() => loadSettings());
+  const next = settingsChain.then(async () => {
+    const s = await loadSettings();
+    return fn(s);
+  });
+  settingsChain = next.catch(() => undefined);
   return next;
 }
 
@@ -231,14 +419,62 @@ function withSettings<T>(fn: (s: Settings) => Promise<T>): Promise<T> {
 // ---------------------------------------------------------------------------
 
 async function init(): Promise<void> {
+  // Refresh provider state first; then ensure unpacked dev license (ExtPay may report unpaid).
+  let license = await refreshLicense();
+  license = await ensureUnpackedTestLicense();
+
+  // One-shot: clear auto-off overrides written while sampling under invert (false dark).
+  await clearBuggyAutoOffOverrides();
+
+  if (isUnpackedInstall() && isLicenseEffectivelyPaid(license)) {
+    // One-shot on first unpacked run. init() re-runs on every SW cold-start, so without
+    // this persisted flag a dev who later turns dark mode OFF would have it flipped back on.
+    const flag = await chrome.storage.local.get(DARK_AUTO_ENABLE_KEY);
+    if (!flag[DARK_AUTO_ENABLE_KEY]) {
+      await mutateSettings((s) => {
+        if (!s.darkModeEnabled) s.darkModeEnabled = true;
+      });
+      await chrome.storage.local.set({ [DARK_AUTO_ENABLE_KEY]: true });
+      license = await loadLicense();
+    }
+  }
+
   await withSettings(async (settings) => {
-    await applyAll(settings);
+    await applyAll(settings, license);
     await chrome.action.setBadgeBackgroundColor({ color: '#2f6f4f' });
   });
 }
 
+const AUTO_OFF_RESET_KEY = 'stampstack.darkAutoOffReset.v1';
+const DARK_AUTO_ENABLE_KEY = 'stampstack.darkAutoEnable.v1';
+
+/** Remove force-off entries that were auto-persisted under the invert false-positive bug. */
+async function clearBuggyAutoOffOverrides(): Promise<void> {
+  const flag = await chrome.storage.local.get(AUTO_OFF_RESET_KEY);
+  if (flag[AUTO_OFF_RESET_KEY]) return;
+  await mutateSettings((s) => {
+    if (!s.darkModeAutoOff) s.darkModeAutoOff = {};
+    for (const host of Object.keys(s.darkModeAutoOff)) {
+      if (s.darkModeSiteOverrides[host] === 'off') delete s.darkModeSiteOverrides[host];
+      delete s.darkModeAutoOff[host];
+    }
+  });
+  await chrome.storage.local.set({ [AUTO_OFF_RESET_KEY]: true });
+}
+
+/** After purchase / restore: cache is paid — auto-enable dark mode once. */
+async function onLicenseUnlocked(_license: LicenseState): Promise<void> {
+  const settings = await mutateSettings((s) => {
+    s.darkModeEnabled = true;
+  });
+  await syncDarkModeAndActiveTab(settings, _license);
+}
+
+initLicense(onLicenseUnlocked);
+
 chrome.runtime.onInstalled.addListener(() => void init());
 chrome.runtime.onStartup.addListener(() => void init());
+void init();
 
 // ---------------------------------------------------------------------------
 // Blocked-request counting + badge (fires only for unpacked/dev builds)
@@ -257,6 +493,15 @@ if (debug) {
     void chrome.action.setBadgeText({ tabId, text: next > 999 ? '999+' : String(next) });
     void bumpTotal();
   });
+
+  // Reset the per-tab badge counter on top-frame navigation. Only meaningful alongside
+  // onRuleMatchedDebug (dev/--dev-feedback builds), so it lives here — the `webNavigation`
+  // permission is added only for those builds (scripts/build.mjs) and never ships to store.
+  chrome.webNavigation?.onBeforeNavigate.addListener((d) => {
+    if (d.frameId !== 0) return;
+    tabBlocked.set(d.tabId, 0);
+    void chrome.action.setBadgeText({ tabId: d.tabId, text: '' });
+  });
 }
 
 let pendingTotal = 0;
@@ -273,12 +518,6 @@ async function bumpTotal(): Promise<void> {
     });
   }, 5000);
 }
-
-chrome.webNavigation?.onBeforeNavigate.addListener((d) => {
-  if (d.frameId !== 0) return;
-  tabBlocked.set(d.tabId, 0);
-  void chrome.action.setBadgeText({ tabId: d.tabId, text: '' });
-});
 
 chrome.tabs.onRemoved.addListener((tabId) => tabBlocked.delete(tabId));
 
@@ -317,10 +556,17 @@ async function handleMessage(msg: Message, sender: chrome.runtime.MessageSender)
       return handleSetPaused(msg.paused);
 
     case 'popup:setYoutubeOptions':
-      return handleSetYoutubeOptions(msg.youtubeBlockSponsored, msg.youtubeBlockShorts);
+      return handleSetYoutubeOptions(
+        msg.youtubeBlockSponsored,
+        msg.youtubeBlockShorts,
+        msg.youtubeSponsorBlock,
+      );
 
     case 'youtube:getOptions':
       return handleYoutubeGetOptions(msg.hostname);
+
+    case 'sponsorblock:getSegments':
+      return handleSponsorBlockGetSegments(msg.videoId);
 
     case 'lists:get':
       return handleListsGet();
@@ -330,6 +576,48 @@ async function handleMessage(msg: Message, sender: chrome.runtime.MessageSender)
 
     case 'stats:get':
       return handleStatsGet();
+
+    case 'darkmode:get':
+      // Content-script callers (incl. subframes) resolve against the TOP document's host so
+      // every frame in a tab follows the top site's setting — a Stripe iframe on example.com
+      // follows example.com's toggle, not stripe.com's. Popup/options callers have no sender
+      // tab and use the hostname they pass (or the active tab).
+      if (sender.tab?.url && isHttpOrHttpsUrl(sender.tab.url)) {
+        try {
+          return handleDarkModeGet(new URL(sender.tab.url).hostname);
+        } catch {
+          /* fall through to msg.hostname */
+        }
+      }
+      return handleDarkModeGet(msg.hostname);
+
+    case 'darkmode:setEnabled':
+      return handleDarkModeSetEnabled(msg.enabled);
+
+    case 'darkmode:setSiteOverride':
+      return handleDarkModeSetSiteOverride(msg.hostname, msg.override);
+
+    case 'darkmode:autoSkip':
+      return handleDarkModeAutoSkip(msg.hostname, sender.frameId, msg.reason);
+
+    case 'darkmode:refresh':
+      // SW → content only; tabs should not message the SW with this type.
+      return null;
+
+    case 'license:get':
+      return handleLicenseGet();
+
+    case 'license:openCheckout':
+      return openCheckout();
+
+    case 'license:openRestore':
+      return openRestore();
+
+    case 'license:refresh':
+      return handleLicenseRefresh();
+
+    case 'license:devUnlock':
+      return handleLicenseDevUnlock();
 
     default:
       void (msg satisfies never);
@@ -411,7 +699,9 @@ async function handlePopupGet(): Promise<PopupData> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   let hostname: string | null = null;
   const url = tab?.url ?? null;
-  if (url) {
+  // Only real web pages get a host — chrome://, about:, file:, view-source: etc. can't be
+  // acted on, so leaving hostname null disables the per-site controls there.
+  if (url && isHttpOrHttpsUrl(url)) {
     try {
       hostname = new URL(url).hostname;
     } catch {
@@ -429,6 +719,7 @@ async function handlePopupGet(): Promise<PopupData> {
     statsReliable: STATS_RELIABLE,
     youtubeBlockSponsored: settings.youtubeBlockSponsored !== false,
     youtubeBlockShorts: !!settings.youtubeBlockShorts,
+    youtubeSponsorBlock: settings.youtubeSponsorBlock !== false,
   };
 }
 
@@ -439,21 +730,29 @@ async function handleYoutubeGetOptions(hostname: string): Promise<YoutubeOptions
     allowlisted: isAllowlistedHost(hostname, settings.allowlist),
     youtubeBlockSponsored: settings.youtubeBlockSponsored !== false,
     youtubeBlockShorts: !!settings.youtubeBlockShorts,
+    youtubeSponsorBlock: settings.youtubeSponsorBlock !== false,
   };
 }
 
 async function handleSetYoutubeOptions(
   youtubeBlockSponsored: boolean,
   youtubeBlockShorts: boolean,
+  youtubeSponsorBlock: boolean,
 ): Promise<PopupData> {
   await mutateSettings((s) => {
     s.youtubeBlockSponsored = youtubeBlockSponsored;
     s.youtubeBlockShorts = youtubeBlockShorts;
+    s.youtubeSponsorBlock = youtubeSponsorBlock;
   });
   // Sync must ride settingsChain — overlapping applyAll/sync* with a stale snapshot
   // can undo a newer allowlist/pause/list change (last writer wins on DNR/scripts).
   await withSettings((s) => syncRegisteredScripts(s));
   return handlePopupGet();
+}
+
+async function handleSponsorBlockGetSegments(videoId: string): Promise<SponsorBlockSegmentsData> {
+  const segments = await fetchSponsorSegments(videoId);
+  return { videoId, segments };
 }
 
 async function handleToggleSite(hostname: string, enabled: boolean): Promise<PopupData> {
@@ -509,4 +808,152 @@ async function handleStatsGet(): Promise<StatsData> {
     regexRulesUsed: META.regexRulesUsed,
     statsReliable: STATS_RELIABLE,
   };
+}
+
+async function buildDarkModeData(
+  settings: Settings,
+  license: LicenseState,
+  hostname: string | null | undefined,
+): Promise<DarkModeData> {
+  const licenseData = toLicenseData(license);
+  const host = hostname ? normalizeHostname(hostname) : null;
+  const restricted = !!(host && isExtensionRestrictedHostname(host));
+  const resolved = resolveDarkModeForHost({
+    paid: licenseData.paid,
+    enabled: settings.darkModeEnabled,
+    overrides: settings.darkModeSiteOverrides,
+    hostname: host,
+  });
+  return {
+    paid: licenseData.paid,
+    enabled: settings.darkModeEnabled,
+    apply: restricted ? false : resolved.apply,
+    hostname: host,
+    override: resolved.override,
+    restricted,
+    autoOff: !!(host && settings.darkModeAutoOff?.[host]),
+    autoOffHosts: { ...(settings.darkModeAutoOff ?? {}) },
+    siteOverrides: { ...settings.darkModeSiteOverrides },
+    license: licenseData,
+  };
+}
+
+async function handleDarkModeGet(hostname?: string | null): Promise<DarkModeData> {
+  const settings = await loadSettings();
+  let host = hostname ?? null;
+  if (host === undefined || host === null) {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab?.url && isHttpOrHttpsUrl(tab.url)) {
+      try {
+        host = new URL(tab.url).hostname;
+      } catch {
+        host = null;
+      }
+    }
+  }
+  const license = await loadLicense();
+  return buildDarkModeData(settings, license, host);
+}
+
+async function handleDarkModeSetEnabled(enabled: boolean): Promise<DarkModeData> {
+  const license = await loadLicense();
+  if (!isLicenseEffectivelyPaid(license)) {
+    const settings = await loadSettings();
+    return buildDarkModeData(settings, license, null);
+  }
+  const settings = await mutateSettings((s) => {
+    s.darkModeEnabled = enabled;
+  });
+  await syncDarkModeAndActiveTab(settings, license);
+  return handleDarkModeGet();
+}
+
+async function handleDarkModeSetSiteOverride(
+  hostname: string,
+  override: DarkModeSiteOverride | null,
+): Promise<DarkModeData> {
+  const host = normalizeHostname(hostname);
+  const license = await loadLicense();
+  if (!isLicenseEffectivelyPaid(license) || !host) {
+    const settings = await loadSettings();
+    return buildDarkModeData(settings, license, host || null);
+  }
+  const settings = await mutateSettings((s) => {
+    if (!s.darkModeAutoOff) s.darkModeAutoOff = {};
+    if (override == null) {
+      delete s.darkModeSiteOverrides[host];
+      delete s.darkModeAutoOff[host];
+    } else {
+      s.darkModeSiteOverrides[host] = override;
+      // User choice replaces any auto-off marker.
+      delete s.darkModeAutoOff[host];
+    }
+  });
+  await syncDarkModeAndActiveTab(settings, license);
+  return handleDarkModeGet(host);
+}
+
+/**
+ * Content script detected a confidently already-dark page.
+ * Persist force-off (exclude from registered invert) unless user Force on.
+ */
+async function handleDarkModeAutoSkip(
+  hostname: string,
+  frameId: number | undefined,
+  _reason?: string,
+): Promise<{ ok: boolean; skipped: boolean }> {
+  // Only the top frame may persist a per-host force-off. Without this, a dark-themed
+  // cross-origin embed (YouTube/Vimeo/Disqus/CodePen) would auto-skip for its OWN host and
+  // silently disable dark mode when that host is later visited directly. The content script
+  // already guards this (top-frame only), but keep a defense-in-depth check on the SW side.
+  if (frameId != null && frameId !== 0) return { ok: true, skipped: false };
+
+  const host = normalizeHostname(hostname);
+  if (!host) return { ok: false, skipped: false };
+
+  const license = await loadLicense();
+  if (!isLicenseEffectivelyPaid(license)) return { ok: true, skipped: false };
+
+  let skipped = false;
+  const settings = await mutateSettings((s) => {
+    if (!s.darkModeAutoOff) s.darkModeAutoOff = {};
+    // Force on always wins — never auto-skip.
+    if (s.darkModeSiteOverrides[host] === 'on') return;
+    // Already force-off (user or prior auto) — keep; refresh auto marker only if unset user intent.
+    if (s.darkModeSiteOverrides[host] === 'off') {
+      skipped = true;
+      return;
+    }
+    s.darkModeSiteOverrides[host] = 'off';
+    s.darkModeAutoOff[host] = true;
+    skipped = true;
+  });
+
+  if (skipped) {
+    // Update registration excludes; content script already reset invert on this page.
+    await syncDarkModeScripts(settings, license);
+  }
+  return { ok: true, skipped };
+}
+
+async function handleLicenseGet(): Promise<LicenseData> {
+  const license = await loadLicense();
+  return toLicenseData(license);
+}
+
+async function handleLicenseRefresh(): Promise<LicenseData> {
+  const license = await refreshLicense();
+  const settings = await loadSettings();
+  await syncDarkModeAndActiveTab(settings, license);
+  return toLicenseData(license);
+}
+
+async function handleLicenseDevUnlock(): Promise<{ ok: boolean; error?: string; darkMode?: DarkModeData }> {
+  const result = await devUnlock();
+  if (!result.ok || !result.license) return { ok: false, error: result.error };
+  const settings = await mutateSettings((s) => {
+    s.darkModeEnabled = true;
+  });
+  await syncDarkModeAndActiveTab(settings, result.license);
+  return { ok: true, darkMode: await handleDarkModeGet() };
 }

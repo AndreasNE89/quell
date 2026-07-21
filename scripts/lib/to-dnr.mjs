@@ -40,6 +40,24 @@ function isAscii(s) {
 }
 
 /**
+ * Chrome DNR `initiatorDomains`/`requestDomains` (and their excluded* variants) accept
+ * only canonical lowercase hostnames or IPv4 literals. Filter lists routinely use forms
+ * DNR rejects: entity wildcards (`example.*`), bracketed IPv6 (`[::1]`, `[::]`), ports,
+ * or paths. Chrome silently drops such a rule (and older Chromium could reject the whole
+ * ruleset), so the filter never fires. Mirror src/shared/hostname.ts:isValidMatchPatternHost.
+ */
+export function isValidDnrDomain(host) {
+  if (!host || typeof host !== 'string') return false;
+  if (!isAscii(host)) return false;
+  // Wildcards / paths / whitespace / IPv6 brackets / ports are not canonical hosts.
+  if (/[*\/\s]/.test(host) || host.includes(':') || host.includes('[') || host.includes(']')) {
+    return false;
+  }
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return true; // IPv4
+  return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/i.test(host);
+}
+
+/**
  * Normalize / validate a plain (non-regex) pattern for Chrome DNR `urlFilter`.
  *
  * Chrome rejects the entire static ruleset when any rule has an invalid urlFilter
@@ -192,6 +210,7 @@ export function networkFilterIdentity(f) {
     excludedInitiatorDomains: [...(o.excludedInitiatorDomains || [])].sort(),
     requestDomains: [...(o.requestDomains || [])].sort(),
     excludedRequestDomains: [...(o.excludedRequestDomains || [])].sort(),
+    removeParams: [...(o.removeParams || [])].sort(),
     thirdParty: o.thirdParty ?? null,
     matchCase: !!o.matchCase,
     important: !!o.important,
@@ -220,6 +239,12 @@ export function toDnrRule(f) {
   // Remaining unsupported options must not silently become block/allow.
   if (f.unsupported?.length) {
     return { skip: unsupportedReason(f.unsupported) };
+  }
+
+  // @@…$removeparam can't be narrowly exempted in DNR (it would need to allow only the param
+  // transform); a broad allow would over-unblock the request. Drop the exception instead.
+  if (f.isException && f.options?.removeParams?.length) {
+    return { skip: 'exception-removeparam' };
   }
 
   const condition = {};
@@ -276,6 +301,22 @@ export function toDnrRule(f) {
   if (exReqDomains.length) condition.excludedRequestDomains = exReqDomains;
 
   if (f.options.matchCase) condition.isUrlFilterCaseSensitive = true;
+
+  // $removeparam=<name> → strip query params via DNR redirect + queryTransform. A global
+  // param strip (no url/domain) is legitimate — unlike a global block — so emit it before
+  // the too-broad guard. removeParams no-ops when the param is absent (no redirect loop).
+  if (f.options.removeParams && f.options.removeParams.length) {
+    return {
+      rule: {
+        priority: f.options.important ? PRIORITY.IMPORTANT_REDIRECT : PRIORITY.REDIRECT,
+        action: {
+          type: 'redirect',
+          redirect: { transform: { queryTransform: { removeParams: dedup(f.options.removeParams) } } },
+        },
+        condition,
+      },
+    };
+  }
 
   // Guard: a rule with no meaningful condition at all is dangerously broad; drop it.
   if (
