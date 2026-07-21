@@ -22,6 +22,7 @@ before(async () => {
           pruneObject,
           stripYoutubeAdKeys,
           abortCurrentInlineScript,
+          urlMatchesNeedle,
         } from './src/scriptlets/library.js';
       `,
       resolveDir: ROOT,
@@ -80,6 +81,23 @@ test('stripYoutubeAdKeys clears nested player ad fields to empty arrays', () => 
   assert.deepEqual(obj.nested.adSlots, []);
   assert.equal(obj.nested.ok, true);
   assert.equal(obj.videoDetails.title, 'ok');
+});
+
+test('urlMatchesNeedle treats path needles as literals, not broken regexes', () => {
+  const fb = 'https://www.facebook.com/api/graphql';
+  // Real uBO Facebook SEARCH_ADS / MarketplaceFeedAdStory replace needles.
+  assert.equal(mod.urlMatchesNeedle(fb, '/api/graphql'), true);
+  assert.equal(mod.urlMatchesNeedle('https://example.com/other', '/api/graphql'), false);
+  // Other common path needles from ubo-filters that used to throw on RegExp flags.
+  assert.equal(mod.urlMatchesNeedle('https://www.dailymotion.com/player/metadata/video/x', '/player/metadata'), true);
+  assert.equal(mod.urlMatchesNeedle('https://api.bilibili.com/x/v2/feed/rcmd', '/feed/rcmd'), true);
+});
+
+test('urlMatchesNeedle still accepts /pattern/flags regex needles', () => {
+  assert.equal(mod.urlMatchesNeedle('https://www.youtube.com/youtubei/v1/player?key=1', '/player/i'), true);
+  assert.equal(mod.urlMatchesNeedle('https://cdn.example.com/static.js', '/player/i'), false);
+  assert.equal(mod.urlMatchesNeedle('https://x.test/ADS', '/ads/i'), true);
+  assert.equal(mod.urlMatchesNeedle('*anything*', '*'), true);
 });
 
 test('abort-current-inline-script setter retains assigned values', () => {
