@@ -303,6 +303,30 @@ test('should parse $badfilter without treating it as unsupported', () => {
   assert.equal(dnr.skip, undefined);
 });
 
+test('should ignore uBO $reason metadata and still emit the network block', () => {
+  // ubo-badware: ||designrigoroso.com^$all,reason=malicious — $reason is display-only.
+  // Treating it as unsupported skipped the whole phishing/malware host block.
+  const plain = convert('||designrigoroso.com^$all,reason=malicious');
+  assert.equal(plain.parsed.unsupported.length, 0);
+  assert.equal(plain.dnr.skip, undefined);
+  assert.equal(plain.dnr.rule.action.type, 'block');
+  assert.equal(plain.dnr.rule.condition.urlFilter, '||designrigoroso.com^');
+
+  const quoted = convert('||outertune.org^$doc,reason="Not the official site"');
+  assert.equal(quoted.parsed.unsupported.length, 0);
+  assert.equal(quoted.dnr.skip, undefined);
+  assert.equal(quoted.dnr.rule.action.type, 'block');
+  assert.deepEqual(quoted.dnr.rule.condition.resourceTypes, ['main_frame']);
+
+  const regex = convert(
+    '/^https?:\\/\\/gitcoin-[a-z]+\\.com\\//$all,reason="Blatant scammers who are not related to GitHub or Gitcoin whatsoever."',
+  );
+  assert.equal(regex.parsed.unsupported.length, 0);
+  assert.equal(regex.dnr.skip, undefined);
+  assert.equal(regex.dnr.rule.action.type, 'block');
+  assert.equal(regex.dnr.rule.condition.regexFilter, '^https?:\\/\\/gitcoin-[a-z]+\\.com\\/');
+});
+
 test('should match badfilter identity to target without badfilter token', async () => {
   const { networkFilterIdentity } = await import('../scripts/lib/to-dnr.mjs');
   const bad = parseLine('||ads.example^$script,badfilter');
