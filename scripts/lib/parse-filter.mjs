@@ -269,6 +269,11 @@ function parseNetwork(line) {
         case 'all':
           // matches all resource types — leave resourceTypes empty (DNR default = all)
           break;
+        case 'reason':
+          // uBO strict-block page metadata only — ignore so the network rule still emits.
+          // ubo-badware ships `$all,reason=malicious` / `$doc,reason="…"`; treating reason
+          // as unsupported dropped those phishing/malware host blocks entirely.
+          break;
         case 'redirect':
           // $redirect=noopjs → serve a neutered bundled resource instead of the request.
           redirect = value.trim();
