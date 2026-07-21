@@ -292,16 +292,16 @@ export function toDnrRule(f) {
   const important = f.options.important;
 
   if (f.isException) {
-    // Only *document-level* exceptions ($document/$subdocument) map to
-    // allowAllRequests — that action matches the FRAME's URL and exempts the whole
-    // frame tree. A bare `@@||domain^` (no resource type) must stay a plain `allow`,
-    // which matches the request's own URL and can unblock a subresource; funneling it
-    // into allowAllRequests would silently fail to unblock third-party subrequests.
-    const isDocLevel = rt.includes('main_frame') || rt.includes('sub_frame');
-    if (isDocLevel) {
-      // allowAllRequests forbids any other condition fields for resource typing.
+    // Only $document (main_frame) exceptions map to allowAllRequests — that action
+    // matches the FRAME's URL and exempts the whole frame tree. ABP/uBO $subdocument
+    // / $frame alone only unblock the iframe *request* (plain `allow` on sub_frame);
+    // treating them as allowAllRequests over-unblocks nested pixels/XHR and wrongly
+    // expands match to main_frame when both types are forced.
+    // A bare `@@||domain^` (no resource type) must also stay plain `allow`.
+    if (rt.includes('main_frame')) {
+      // allowAllRequests only permits main_frame / sub_frame in resourceTypes.
       delete condition.excludedResourceTypes;
-      condition.resourceTypes = ['main_frame', 'sub_frame'];
+      condition.resourceTypes = rt.filter((t) => t === 'main_frame' || t === 'sub_frame');
       return {
         rule: {
           priority: important ? PRIORITY.IMPORTANT_ALLOW : PRIORITY.ALLOW,

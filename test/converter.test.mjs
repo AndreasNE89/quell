@@ -35,7 +35,34 @@ test('document exception becomes allowAllRequests', () => {
   const { dnr } = convert('@@||good.example^$document');
   assert.equal(dnr.rule.action.type, 'allowAllRequests');
   assert.equal(dnr.rule.priority, PRIORITY.ALLOW);
+  assert.deepEqual(dnr.rule.condition.resourceTypes, ['main_frame']);
+});
+
+test('$document,$subdocument exception allowlists both frame types', () => {
+  const { dnr } = convert('@@||good.example^$document,subdocument');
+  assert.equal(dnr.rule.action.type, 'allowAllRequests');
   assert.deepEqual(dnr.rule.condition.resourceTypes, ['main_frame', 'sub_frame']);
+});
+
+test('$subdocument exception is plain allow on sub_frame, not allowAllRequests', () => {
+  // EasyList ships rules like @@||g.doubleclick.net/pagead/ads$subdocument,domain=…
+  // These must only unblock the iframe document request, not the whole frame tree.
+  const { dnr } = convert('@@||ads.example/pagead$subdocument,domain=site.example');
+  assert.equal(dnr.rule.action.type, 'allow');
+  assert.deepEqual(dnr.rule.condition.resourceTypes, ['sub_frame']);
+  assert.deepEqual(dnr.rule.condition.initiatorDomains, ['site.example']);
+});
+
+test('$frame exception (uBO alias) is plain allow on sub_frame', () => {
+  const { dnr } = convert('@@||ads.example/pagead?$frame,domain=site.example');
+  assert.equal(dnr.rule.action.type, 'allow');
+  assert.deepEqual(dnr.rule.condition.resourceTypes, ['sub_frame']);
+});
+
+test('$script,subdocument exception stays plain allow with both types', () => {
+  const { dnr } = convert('@@||cdn.example/x$script,subdocument');
+  assert.equal(dnr.rule.action.type, 'allow');
+  assert.deepEqual(dnr.rule.condition.resourceTypes, ['script', 'sub_frame']);
 });
 
 test('non-document exception is a plain allow', () => {
