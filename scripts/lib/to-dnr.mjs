@@ -49,10 +49,13 @@ function isAscii(s) {
 export function isValidDnrDomain(host) {
   if (!host || typeof host !== 'string') return false;
   if (!isAscii(host)) return false;
-  // Wildcards / paths / whitespace / IPv6 brackets / ports are not canonical hosts.
-  if (/[*\/\s]/.test(host) || host.includes(':') || host.includes('[') || host.includes(']')) {
-    return false;
+  // Entity wildcards / paths / option bleed make Chrome ignore the whole rule.
+  if (/[*/=$]/.test(host) || /\s/.test(host)) return false;
+  // Bracketed IPv6 is allowed (MDN); bare `:` ports are not.
+  if (host.startsWith('[') && host.endsWith(']')) {
+    return host.length > 2 && !host.slice(1, -1).includes('[');
   }
+  if (host.includes(':')) return false;
   if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return true; // IPv4
   return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/i.test(host);
 }
@@ -387,19 +390,6 @@ export function toDnrRule(f) {
 
 function dedup(arr) {
   return [...new Set(arr)];
-}
-
-/**
- * Chrome DNR domain arrays reject wildcards / garbage. Entity domains (`gmx.*`)
- * and option-bleed (`$domain=fortune.com`) make Chrome ignore the whole rule —
- * including sibling valid domains like `web.de`. Bracketed IPv6 is allowed (MDN).
- */
-export function isValidDnrDomain(d) {
-  if (!d || typeof d !== 'string') return false;
-  if (/[*/=$]/.test(d)) return false;
-  if (d.startsWith('[') && d.endsWith(']')) return d.length > 2 && !d.slice(1, -1).includes('[');
-  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(d)) return true;
-  return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/i.test(d);
 }
 
 /**

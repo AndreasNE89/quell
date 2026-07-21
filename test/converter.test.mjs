@@ -111,14 +111,14 @@ test('$to maps to requestDomains', () => {
   assert.deepEqual(dnr.rule.condition.excludedRequestDomains, ['cdn.example']);
 });
 
-test('isValidDnrDomain accepts canonical hosts / IPv4, rejects wildcards and IPv6', async () => {
+test('isValidDnrDomain accepts canonical hosts / IPv4 / bracketed IPv6, rejects wildcards', async () => {
   const { isValidDnrDomain } = await import('../scripts/lib/to-dnr.mjs');
   assert.equal(isValidDnrDomain('example.com'), true);
   assert.equal(isValidDnrDomain('sub.example.co.uk'), true);
   assert.equal(isValidDnrDomain('192.168.1.1'), true);
+  assert.equal(isValidDnrDomain('[::1]'), true, 'bracketed IPv6');
   assert.equal(isValidDnrDomain('gmx.*'), false, 'entity wildcard');
-  assert.equal(isValidDnrDomain('[::1]'), false, 'bracketed IPv6');
-  assert.equal(isValidDnrDomain('[::]'), false);
+  assert.equal(isValidDnrDomain('$domain=fortune.com'), false, 'option bleed');
   assert.equal(isValidDnrDomain(''), false);
 });
 
@@ -133,13 +133,13 @@ test('rule scoped ONLY to an invalid entity domain is skipped (not shipped globa
   // site, broader than the author scoped it. Skip instead.
   const { dnr } = convert('||uim.tifbs.net/js/x.js$script,domain=gmx.*');
   assert.equal(dnr.rule, undefined);
-  assert.equal(dnr.skip, 'invalid-initiator-domains');
+  assert.equal(dnr.skip, 'invalid-domain');
 });
 
-test('bracketed-IPv6 excluded request/initiator domains are dropped, rule kept', () => {
+test('bracketed-IPv6 excluded initiator domains are kept when valid', () => {
   const { dnr } = convert('||0.0.0.0^$domain=~[::1]|~[::]');
   assert.equal(dnr.skip, undefined);
-  assert.equal(dnr.rule.condition.excludedInitiatorDomains, undefined, 'all invalid → omitted');
+  assert.deepEqual(dnr.rule.condition.excludedInitiatorDomains, ['[::1]', '[::]']);
   assert.equal(dnr.rule.action.type, 'block');
 });
 
