@@ -15,6 +15,8 @@ const ALIASES: Record<string, string> = {
   'abort-on-property-read': 'abort-on-property-read',
   aopw: 'abort-on-property-write',
   'abort-on-property-write': 'abort-on-property-write',
+  // uBO short names: `acs` is the common form in filter lists; `acis` is rarer.
+  acs: 'abort-current-inline-script',
   acis: 'abort-current-inline-script',
   'abort-current-inline-script': 'abort-current-inline-script',
   nostif: 'prevent-setTimeout',

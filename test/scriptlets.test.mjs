@@ -22,6 +22,7 @@ before(async () => {
           pruneObject,
           stripYoutubeAdKeys,
           abortCurrentInlineScript,
+          runScriptlet,
           urlMatchesNeedle,
         } from './src/scriptlets/library.js';
       `,
@@ -118,6 +119,38 @@ test('abort-current-inline-script setter retains assigned values', () => {
     assert.equal(g.__acisProbe, 'after-assign');
   } finally {
     delete g.__acisProbe;
+    if (prevWindow) Object.defineProperty(g, 'window', prevWindow);
+    else delete g.window;
+    if (prevDocument) Object.defineProperty(g, 'document', prevDocument);
+    else delete g.document;
+    if (prevHTMLScript) g.HTMLScriptElement = prevHTMLScript;
+    else delete g.HTMLScriptElement;
+  }
+});
+
+test('acs short name aliases to abort-current-inline-script (uBO lists use acs, not acis)', () => {
+  const g = globalThis;
+  const prevWindow = Object.getOwnPropertyDescriptor(g, 'window');
+  const prevDocument = Object.getOwnPropertyDescriptor(g, 'document');
+  const prevHTMLScript = g.HTMLScriptElement;
+  class FakeHTMLScriptElement {}
+  g.HTMLScriptElement = FakeHTMLScriptElement;
+  const doc = { currentScript: null };
+  Object.defineProperty(g, 'document', { value: doc, configurable: true, writable: true });
+  Object.defineProperty(g, 'window', { value: g, configurable: true, writable: true });
+  g.__acsAliasProbe = 'initial';
+  try {
+    // Without the `acs` alias, runScriptlet no-ops and the assignment below would
+    // just set a data property — the trap proves the scriptlet actually ran.
+    mod.runScriptlet('acs', ['__acsAliasProbe']);
+    g.__acsAliasProbe = 'after-assign';
+    assert.equal(g.__acsAliasProbe, 'after-assign');
+    doc.currentScript = new FakeHTMLScriptElement();
+    Object.defineProperty(doc.currentScript, 'src', { value: '' });
+    Object.defineProperty(doc.currentScript, 'textContent', { value: 'trigger' });
+    assert.throws(() => g.__acsAliasProbe, /aborted inline script/);
+  } finally {
+    delete g.__acsAliasProbe;
     if (prevWindow) Object.defineProperty(g, 'window', prevWindow);
     else delete g.window;
     if (prevDocument) Object.defineProperty(g, 'document', prevDocument);
