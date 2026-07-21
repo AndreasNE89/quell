@@ -28,7 +28,7 @@ export function startDarkModeSmart(): void {
   if (isExtensionRestrictedHostname(location.hostname)) return;
   chrome.runtime.onMessage.addListener((msg: Message, _sender, sendResponse) => {
     if (msg.type !== 'darkmode:refresh') return;
-    void run(false)
+    void run()
       .then(() => sendResponse({ ok: true }))
       .catch(() => sendResponse({ ok: false }));
     return true;
@@ -36,12 +36,12 @@ export function startDarkModeSmart(): void {
   // bfcache: a toggle made while this page sat in the back/forward cache never reached it —
   // re-evaluate when the cached document is shown again.
   window.addEventListener('pageshow', (e) => {
-    if (e.persisted) void run(false);
+    if (e.persisted) void run();
   });
-  void run(true);
+  void run();
 }
 
-async function run(initial: boolean): Promise<void> {
+async function run(): Promise<void> {
   // Each run supersedes older ones so a slow initial run can't apply after a newer toggle.
   const gen = ++runGeneration;
   const host = location.hostname;
@@ -58,9 +58,10 @@ async function run(initial: boolean): Promise<void> {
     // Disarm the registered document_start shell — its :where(:not([data-stampstack-off]))
     // guard stops matching, so the site's OWN html background/color-scheme return exactly
     // (an !important counter-value would stomp them — natively-dark sites went white).
-    // Top frame only (registration is top-frame-only); skip on fresh loads where the shell
-    // never matched this document.
-    if (!initial && isTopFrame()) {
+    // Top frame only (registration is top-frame-only). Always set on unpaid/off — including
+    // first paint — so a race where the shell still injects (or a paid→unpaid refresh)
+    // cannot leave the charcoal canvas stuck without the engine.
+    if (isTopFrame()) {
       document.documentElement?.setAttribute('data-stampstack-off', '');
     }
     return;

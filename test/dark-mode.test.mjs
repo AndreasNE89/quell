@@ -78,6 +78,36 @@ test('should not apply dark mode when unpaid', () => {
   assert.equal(r.apply, false);
 });
 
+test('should treat force-on override as off when license unpaid (lapse gate)', () => {
+  // Paid→unpaid (grace expiry / cancel): per-site force-on must not keep dark mode alive.
+  const r = mod.resolveDarkModeForHost({
+    paid: false,
+    enabled: false,
+    overrides: { 'example.com': 'on' },
+    hostname: 'example.com',
+  });
+  assert.equal(r.apply, false);
+  assert.equal(r.override, null);
+});
+
+test('should expire cached paid after grace so open-tab refresh sees unpaid', () => {
+  const now = 1_700_000_000_000;
+  const expired = {
+    paid: true,
+    verifiedAt: now - mod.LICENSE_GRACE_MS - 60_000,
+  };
+  assert.equal(mod.isLicenseEffectivelyPaid(expired, now), false);
+  assert.equal(
+    mod.resolveDarkModeForHost({
+      paid: mod.isLicenseEffectivelyPaid(expired, now),
+      enabled: true,
+      overrides: {},
+      hostname: 'example.com',
+    }).apply,
+    false,
+  );
+});
+
 test('should follow global when no override', () => {
   assert.equal(
     mod.resolveDarkModeForHost({

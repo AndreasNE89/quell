@@ -385,6 +385,10 @@ async function applyAll(settings: Settings, license?: LicenseState): Promise<voi
     syncRegisteredScripts(settings),
     syncDarkModeScripts(settings, lic),
   ]);
+  // init()/applyAll unregisters dark CSS on paid→unpaid (grace expiry, ExtPay cancel),
+  // but already-open tabs keep the dynamic engine until told to stop. license:refresh
+  // already uses syncDarkModeAndActiveTab; cold-start must too or unpaid dark mode sticks.
+  await applyDarkModeToOpenTabs(settings, lic);
 }
 
 // Serialize read-modify-write of the single settings blob. Message handlers and the
