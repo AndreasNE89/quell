@@ -416,15 +416,25 @@ function hookJsonParsePrune(paths: JsonPath[]): void {
   } as typeof JSON.parse;
 }
 
-function urlMatchesNeedle(url: string, needle: string | undefined): boolean {
+/** JS RegExp flag charset (ES2024). Used so path needles like `/api/graphql`
+ *  are not misread as `/api/` + invalid flags `graphql` (which threw and never matched). */
+const REGEXP_FLAG_CHARS = /^[dgimsuvy]*$/;
+
+/**
+ * Match a URL against a uBO scriptlet needle.
+ * - empty / `*` → always match
+ * - `/pattern/flags` with valid flags → RegExp
+ * - otherwise → literal substring (so `/api/graphql` matches GraphQL XHRs)
+ */
+export function urlMatchesNeedle(url: string, needle: string | undefined): boolean {
   if (!needle || needle === '*') return true;
   const n = unquoteArg(needle);
   const rx = /^\/(.*)\/([a-z]*)$/.exec(n);
-  if (rx) {
+  if (rx && REGEXP_FLAG_CHARS.test(rx[2])) {
     try {
       return new RegExp(rx[1], rx[2]).test(url);
     } catch {
-      return false;
+      /* fall through to literal substring */
     }
   }
   return url.includes(n);
