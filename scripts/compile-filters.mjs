@@ -105,7 +105,7 @@ function compileList(list, text, ctx) {
     }
 
     // Per-list static-rule budget (cap in-loop so regex counting matches what ships).
-    if (dnrRules.length >= DNR.GUARANTEED_MINIMUM_STATIC_RULES) {
+    if (dnrRules.length >= DNR.MAX_STATIC_RULES_PER_LIST) {
       skips['static-budget'] = (skips['static-budget'] || 0) + 1;
       continue;
     }
@@ -289,12 +289,12 @@ function main() {
     const text = readFileSync(file, 'utf8');
     const { dnrRules, stats } = compileList(list, text, ctx);
 
-    // A ruleset must fit the per-extension static budget when enabled.
-    if (dnrRules.length > DNR.GUARANTEED_MINIMUM_STATIC_RULES) {
+    // Bound a single ruleset file so it can't dominate the global pool by itself.
+    if (dnrRules.length > DNR.MAX_STATIC_RULES_PER_LIST) {
       console.warn(
-        `  ! list "${list.id}" produced ${dnrRules.length} rules (> guaranteed ${DNR.GUARANTEED_MINIMUM_STATIC_RULES}); truncating.`,
+        `  ! list "${list.id}" produced ${dnrRules.length} rules (> per-list max ${DNR.MAX_STATIC_RULES_PER_LIST}); truncating.`,
       );
-      dnrRules.length = DNR.GUARANTEED_MINIMUM_STATIC_RULES;
+      dnrRules.length = DNR.MAX_STATIC_RULES_PER_LIST;
     }
 
     const rulesetPath = join(RULESET_DIR, `${list.id}.json`);

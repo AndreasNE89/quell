@@ -58,8 +58,8 @@ These steps require your Google account, developer registration, and (usually) p
 - [ ] **Description:** from LISTING.md
 - [ ] **Category:** Productivity (or Tools)
 - [ ] **Language:** English
-- [ ] **Official URL:** `https://github.com/AndreasNE89/quell`
-- [ ] **Support URL:** `https://github.com/AndreasNE89/quell/issues`
+- [ ] **Official URL / Homepage:** leave blank until a public homepage exists (do **not** paste a private GitHub URL)
+- [ ] **Support URL:** leave blank until a public support channel exists (do **not** paste a private GitHub issues URL)
 
 ### Store assets (upload in dashboard)
 

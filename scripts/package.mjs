@@ -81,7 +81,7 @@ function validateDist() {
     }
   }
   // Store packages must not ship unused/dev-only permissions (CWS review risk).
-  const forbidden = ['declarativeNetRequestFeedback', 'tabs'].filter((p) =>
+  const forbidden = ['declarativeNetRequestFeedback', 'tabs', 'webNavigation'].filter((p) =>
     man.permissions?.includes(p),
   );
   if (forbidden.length) {

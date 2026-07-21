@@ -40,6 +40,27 @@ function isAscii(s) {
 }
 
 /**
+ * Chrome DNR `initiatorDomains`/`requestDomains` (and their excluded* variants) accept
+ * only canonical lowercase hostnames or IPv4 literals. Filter lists routinely use forms
+ * DNR rejects: entity wildcards (`example.*`), bracketed IPv6 (`[::1]`, `[::]`), ports,
+ * or paths. Chrome silently drops such a rule (and older Chromium could reject the whole
+ * ruleset), so the filter never fires. Mirror src/shared/hostname.ts:isValidMatchPatternHost.
+ */
+export function isValidDnrDomain(host) {
+  if (!host || typeof host !== 'string') return false;
+  if (!isAscii(host)) return false;
+  // Entity wildcards / paths / option bleed make Chrome ignore the whole rule.
+  if (/[*/=$]/.test(host) || /\s/.test(host)) return false;
+  // Bracketed IPv6 is allowed (MDN); bare `:` ports are not.
+  if (host.startsWith('[') && host.endsWith(']')) {
+    return host.length > 2 && !host.slice(1, -1).includes('[');
+  }
+  if (host.includes(':')) return false;
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return true; // IPv4
+  return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/i.test(host);
+}
+
+/**
  * Normalize / validate a plain (non-regex) pattern for Chrome DNR `urlFilter`.
  *
  * Chrome rejects the entire static ruleset when any rule has an invalid urlFilter
@@ -192,6 +213,7 @@ export function networkFilterIdentity(f) {
     excludedInitiatorDomains: [...(o.excludedInitiatorDomains || [])].sort(),
     requestDomains: [...(o.requestDomains || [])].sort(),
     excludedRequestDomains: [...(o.excludedRequestDomains || [])].sort(),
+    removeParams: [...(o.removeParams || [])].sort(),
     thirdParty: o.thirdParty ?? null,
     matchCase: !!o.matchCase,
     important: !!o.important,
@@ -220,6 +242,12 @@ export function toDnrRule(f) {
   // Remaining unsupported options must not silently become block/allow.
   if (f.unsupported?.length) {
     return { skip: unsupportedReason(f.unsupported) };
+  }
+
+  // @@…$removeparam can't be narrowly exempted in DNR (it would need to allow only the param
+  // transform); a broad allow would over-unblock the request. Drop the exception instead.
+  if (f.isException && f.options?.removeParams?.length) {
+    return { skip: 'exception-removeparam' };
   }
 
   const condition = {};
@@ -276,6 +304,22 @@ export function toDnrRule(f) {
   if (exReqDomains.length) condition.excludedRequestDomains = exReqDomains;
 
   if (f.options.matchCase) condition.isUrlFilterCaseSensitive = true;
+
+  // $removeparam=<name> → strip query params via DNR redirect + queryTransform. A global
+  // param strip (no url/domain) is legitimate — unlike a global block — so emit it before
+  // the too-broad guard. removeParams no-ops when the param is absent (no redirect loop).
+  if (f.options.removeParams && f.options.removeParams.length) {
+    return {
+      rule: {
+        priority: f.options.important ? PRIORITY.IMPORTANT_REDIRECT : PRIORITY.REDIRECT,
+        action: {
+          type: 'redirect',
+          redirect: { transform: { queryTransform: { removeParams: dedup(f.options.removeParams) } } },
+        },
+        condition,
+      },
+    };
+  }
 
   // Guard: a rule with no meaningful condition at all is dangerously broad; drop it.
   if (
@@ -346,19 +390,6 @@ export function toDnrRule(f) {
 
 function dedup(arr) {
   return [...new Set(arr)];
-}
-
-/**
- * Chrome DNR domain arrays reject wildcards / garbage. Entity domains (`gmx.*`)
- * and option-bleed (`$domain=fortune.com`) make Chrome ignore the whole rule —
- * including sibling valid domains like `web.de`. Bracketed IPv6 is allowed (MDN).
- */
-export function isValidDnrDomain(d) {
-  if (!d || typeof d !== 'string') return false;
-  if (/[*/=$]/.test(d)) return false;
-  if (d.startsWith('[') && d.endsWith(']')) return d.length > 2 && !d.slice(1, -1).includes('[');
-  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(d)) return true;
-  return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/i.test(d);
 }
 
 /**

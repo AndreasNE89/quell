@@ -8,10 +8,19 @@ import { fileURLToPath } from 'node:url';
 import { get as httpsGet } from 'node:https';
 import { get as httpGet } from 'node:http';
 
-const FILTERS = join(dirname(fileURLToPath(import.meta.url)), '..', 'filters');
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const FILTERS = join(ROOT, 'filters');
 const registry = JSON.parse(readFileSync(join(FILTERS, 'lists.json'), 'utf8'));
+const VERSION = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).version || '0';
 const MAX_REDIRECTS = 8;
 const ATTEMPTS = 3;
+
+/** TLS-trust failures (usually a corporate proxy / VPN / AV intercepting HTTPS). */
+function isCertError(e) {
+  const s = `${e?.code ?? ''} ${e?.message ?? ''}`;
+  return /CERT|SELF_SIGNED|UNABLE_TO_VERIFY|first certificate/i.test(s);
+}
+let sawCertError = false;
 
 const only = process.argv.slice(2); // optional list ids to restrict to
 
@@ -22,7 +31,7 @@ function downloadOnce(url, redirects = 0) {
     const req = getter(
       url,
       {
-        headers: { 'User-Agent': 'stampstack-adblock/1.1.2' },
+        headers: { 'User-Agent': `stampstack-adblock/${VERSION}` },
         timeout: 120_000,
       },
       (res) => {
@@ -80,8 +89,18 @@ for (const list of registry.lists) {
     ok++;
   } catch (e) {
     console.log(`FAILED (${e.message})`);
+    if (isCertError(e)) sawCertError = true;
     failed++;
   }
 }
 console.log(`\nDone: ${ok} updated, ${failed} failed.`);
+if (sawCertError) {
+  console.log(
+    '\nTLS certificate verification failed — a proxy/VPN/AV on this network is likely\n' +
+      'intercepting HTTPS with a CA that Node does not trust. Options:\n' +
+      '  • Point Node at that CA:  set NODE_EXTRA_CA_CERTS=C:\\path\\to\\corp-root-ca.pem\n' +
+      '  • Skip the download and build with the lists already in filters/:  npm run package -- --skip-lists\n' +
+      '  • Retry off the intercepting network (the failure is often transient).',
+  );
+}
 if (failed) process.exitCode = 1;

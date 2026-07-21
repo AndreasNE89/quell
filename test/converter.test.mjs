@@ -111,6 +111,44 @@ test('$to maps to requestDomains', () => {
   assert.deepEqual(dnr.rule.condition.excludedRequestDomains, ['cdn.example']);
 });
 
+test('isValidDnrDomain accepts canonical hosts / IPv4 / bracketed IPv6, rejects wildcards', async () => {
+  const { isValidDnrDomain } = await import('../scripts/lib/to-dnr.mjs');
+  assert.equal(isValidDnrDomain('example.com'), true);
+  assert.equal(isValidDnrDomain('sub.example.co.uk'), true);
+  assert.equal(isValidDnrDomain('192.168.1.1'), true);
+  assert.equal(isValidDnrDomain('[::1]'), true, 'bracketed IPv6');
+  assert.equal(isValidDnrDomain('gmx.*'), false, 'entity wildcard');
+  assert.equal(isValidDnrDomain('$domain=fortune.com'), false, 'option bleed');
+  assert.equal(isValidDnrDomain(''), false);
+});
+
+test('entity-wildcard $domain drops invalid entries, keeping valid ones', () => {
+  const { dnr } = convert('||x.example/a.js$script,domain=gmx.*|realsite.com');
+  assert.equal(dnr.skip, undefined);
+  assert.deepEqual(dnr.rule.condition.initiatorDomains, ['realsite.com']);
+});
+
+test('rule scoped ONLY to an invalid entity domain is skipped (not shipped globally)', () => {
+  // ||uim.tifbs.net/js/*.js$domain=gmx.* — dropping gmx.* would block the script on every
+  // site, broader than the author scoped it. Skip instead.
+  const { dnr } = convert('||uim.tifbs.net/js/x.js$script,domain=gmx.*');
+  assert.equal(dnr.rule, undefined);
+  assert.equal(dnr.skip, 'invalid-domain');
+});
+
+test('bracketed-IPv6 excluded initiator domains are kept when valid', () => {
+  const { dnr } = convert('||0.0.0.0^$domain=~[::1]|~[::]');
+  assert.equal(dnr.skip, undefined);
+  assert.deepEqual(dnr.rule.condition.excludedInitiatorDomains, ['[::1]', '[::]']);
+  assert.equal(dnr.rule.action.type, 'block');
+});
+
+test('entity-wildcard $to (requestDomains) with no valid entry is skipped', () => {
+  const { dnr } = convert('||tracker.example^$to=gmx.*');
+  assert.equal(dnr.rule, undefined);
+  assert.equal(dnr.skip, 'invalid-domain');
+});
+
 test('$generichide with a pattern is a cosmetic exception, not network allow', () => {
   const { dnr } = convert('@@||example.com^$generichide');
   assert.equal(dnr.rule, undefined);
@@ -150,6 +188,32 @@ test('should map trailing-dot hostname prefixes to entity keys for generichide',
   assert.deepEqual(hostsFromPattern('||asd.^', false), ['asd.*']);
   // Multi-label hosts stay exact — do not treat example.com. as entity.
   assert.deepEqual(hostsFromPattern('||example.com.', false), ['example.com']);
+});
+
+test('$removeparam=<name> becomes a queryTransform redirect', () => {
+  const { dnr } = convert('||example.com^$removeparam=fbclid');
+  assert.equal(dnr.rule.action.type, 'redirect');
+  assert.deepEqual(dnr.rule.action.redirect.transform.queryTransform.removeParams, ['fbclid']);
+  assert.equal(dnr.rule.priority, PRIORITY.REDIRECT);
+  assert.equal(dnr.rule.condition.urlFilter, '||example.com^');
+});
+
+test('global $removeparam (no pattern) is allowed, not dropped as too-broad', () => {
+  const { dnr } = convert('$removeparam=utm_source');
+  assert.equal(dnr.skip, undefined);
+  assert.deepEqual(dnr.rule.action.redirect.transform.queryTransform.removeParams, ['utm_source']);
+  assert.equal(dnr.rule.condition.urlFilter, undefined);
+});
+
+test('regex / negated / bare $removeparam is skipped, not mis-emitted', () => {
+  assert.ok(convert('||x.example^$removeparam=/utm_.*/').dnr.skip?.startsWith('unsupported'));
+  assert.ok(convert('||x.example^$removeparam=~keep').dnr.skip?.startsWith('unsupported'));
+});
+
+test('@@...$removeparam exception is skipped (cannot be narrowly exempted)', () => {
+  const { dnr } = convert('@@||example.com^$removeparam=fbclid');
+  assert.equal(dnr.rule, undefined);
+  assert.equal(dnr.skip, 'exception-removeparam');
 });
 
 test('ruleKey distinguishes $important from plain block', async () => {

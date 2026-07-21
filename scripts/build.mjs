@@ -36,6 +36,9 @@ const COMMON = {
   legalComments: 'none',
   minify: store,
   sourcemap: false,
+  // Compile-time dev flag (src/shared/build-flags.ts). Store builds → false, so the
+  // dev-unlock / test-license paths can never fire in a packaged extension.
+  define: { __STAMPSTACK_DEV__: store ? 'false' : 'true' },
 };
 
 /** Entry points: [srcFile, outFile, format]. */
@@ -44,6 +47,7 @@ const ENTRIES = [
   ['content/content.ts', 'content.js', 'iife'],
   ['content/scriptlets-main.ts', 'scriptlets.js', 'iife'],
   ['content/scriptlets-youtube.ts', 'scriptlets-youtube.js', 'iife'],
+  ['content/extpay-bridge.ts', 'extpay-bridge.js', 'iife'],
   ['popup/popup.ts', 'popup.js', 'esm'],
   ['options/options.ts', 'options.js', 'esm'],
 ];
@@ -51,6 +55,46 @@ const ENTRIES = [
 function assertGenerated() {
   if (!existsSync(join(GEN, 'meta.json'))) {
     console.error('Missing src/generated/. Run `npm run compile-filters` first.');
+    process.exit(1);
+  }
+}
+
+/** Ensure gitignored local ExtPay override exists so imports resolve. */
+function ensureExtPayLocalConfig() {
+  const local = join(SRC, 'shared', 'extpay-config.local.ts');
+  const example = join(SRC, 'shared', 'extpay-config.local.example.ts');
+  if (!existsSync(local)) {
+    if (!existsSync(example)) {
+      console.error('Missing extpay-config.local.example.ts');
+      process.exit(1);
+    }
+    cpSync(example, local);
+  }
+}
+
+/**
+ * A store build with an unconfigured ExtensionPay id would ship an unpurchasable paid dark
+ * mode (checkout opens a non-existent project). Refuse to build unless an id is set (anything
+ * other than the placeholder — ExtensionPay ids are developer-chosen slugs and may end with
+ * '-'). Override with ALLOW_UNCONFIGURED_EXTPAY=1 for local testing.
+ */
+function assertExtPayConfiguredForStore() {
+  if (process.env.ALLOW_UNCONFIGURED_EXTPAY === '1') return;
+  const local = join(SRC, 'shared', 'extpay-config.local.ts');
+  let id = null;
+  if (existsSync(local)) {
+    const m = readFileSync(local, 'utf8').match(
+      /EXTPAY_EXTENSION_ID_OVERRIDE\s*:[^=]*=\s*(['"])([^'"]*)\1/,
+    );
+    if (m) id = m[2];
+  }
+  const valid = typeof id === 'string' && id.length > 0 && id !== 'YOUR_EXTENSIONPAY_ID';
+  if (!valid) {
+    console.error(
+      `\n[--store] ExtensionPay id is not configured (got ${JSON.stringify(id)}). Paid dark mode ` +
+        `would be unpurchasable.\nSet your id in src/shared/extpay-config.local.ts, or set ` +
+        `ALLOW_UNCONFIGURED_EXTPAY=1 to build anyway for testing.`,
+    );
     process.exit(1);
   }
 }
@@ -64,9 +108,11 @@ function buildManifest() {
   if (pkg.version) manifest.version = pkg.version;
 
   // Dev-only: optional feedback for badge counts when loading unpacked with --dev-feedback.
+  // webNavigation only resets the badge counter, which is itself dev-only — so it ships
+  // only alongside the feedback permission, never in a store build.
   if (process.argv.includes('--dev-feedback')) {
-    if (!manifest.permissions.includes('declarativeNetRequestFeedback')) {
-      manifest.permissions.push('declarativeNetRequestFeedback');
+    for (const perm of ['declarativeNetRequestFeedback', 'webNavigation']) {
+      if (!manifest.permissions.includes(perm)) manifest.permissions.push(perm);
     }
   }
 
@@ -91,6 +137,7 @@ function copyStatic() {
   ]) {
     for (const f of files) cpSync(join(SRC, dir, f), join(DIST, f));
   }
+  cpSync(join(SRC, 'content', 'dark-mode.css'), join(DIST, 'dark-mode.css'));
   cpSync(join(SRC, 'icons'), join(DIST, 'icons'), { recursive: true });
   cpSync(join(SRC, 'redirects'), join(DIST, 'redirects'), { recursive: true });
 
@@ -116,6 +163,8 @@ function copyStatic() {
 
 async function run() {
   assertGenerated();
+  ensureExtPayLocalConfig();
+  if (store) assertExtPayConfiguredForStore();
   rmSync(DIST, { recursive: true, force: true });
   mkdirSync(DIST, { recursive: true });
 

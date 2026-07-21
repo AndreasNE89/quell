@@ -42,8 +42,16 @@ Load the extension: Chrome → `chrome://extensions` → Developer mode → **Lo
 3. **Scriptlets**: MAIN-world IIFE (`scriptlets.js`) for domain-scoped injections.
 4. **Settings**: `chrome.storage.local` key `stampstack.settings` (`paused`, `enabledLists`, `allowlist`, `blockedTotal`). Migrates from `quell.settings` / intermediate rename keys.
 5. **Allowlist**: dynamic DNR `allowAllRequests` rules with ids ≥ `1_000_000`.
+6. **Paid dark mode** (optional): registered invert CSS + smart content script; ExtPay-gated; pause/allowlist do not disable it.
 
 Messages are a single discriminated union in `src/shared/types.ts`. Keep handlers and senders in sync.
+
+### Paid dark mode / ExtensionPay
+
+- Config: `src/shared/extpay-config.ts` (placeholder) or gitignored `extpay-config.local.ts` (from `.example`).
+- Unpacked QA: popup/options **Dev unlock**.
+- Smart: already-dark hosts auto force-off; user Force on/off wins.
+- After bundle, confirm `dist/dark-mode.css` + `extpay-bridge.js`.
 
 ## Hard rules for agents
 

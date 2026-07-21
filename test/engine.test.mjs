@@ -140,7 +140,7 @@ test('matchCosmetic honors mixed include/exclude via unhideSpecific cancel', () 
   assert.ok(!child.hide.includes('.ad'), 'exclude domain should cancel via unhide');
 });
 
-test('matchCosmetic generichide returns generic selectors as unhide', () => {
+test('matchCosmetic concrete generichide does NOT revert (excluded at registration)', () => {
   const data = {
     byList: {
       seed: {
@@ -151,11 +151,33 @@ test('matchCosmetic generichide returns generic selectors as unhide', () => {
         procedural: [],
       },
     },
+    // Concrete host: the generic stylesheet is excluded via syncRegisteredScripts, so the
+    // content script must NOT ship the whole generic set as a per-page revert.
     networkExceptions: { generichide: ['example.com'], elemhide: [], specifichide: [] },
   };
   const m = mod.matchCosmetic('www.example.com', data, ['seed']);
   assert.equal(m.disableGeneric, true);
-  assert.ok(m.unhide.includes('.g'));
+  assert.ok(!m.unhide.includes('.g'), 'concrete generichide host needs no revert payload');
+});
+
+test('matchCosmetic entity generichide (example.*) still reverts the generic set', () => {
+  const data = {
+    byList: {
+      seed: {
+        hideGeneric: ['.g'],
+        unhideGeneric: [],
+        hideSpecific: {},
+        unhideSpecific: {},
+        procedural: [],
+      },
+    },
+    // Entity domains can't be a match pattern, so the sheet is still injected and the
+    // content-script revert is required to honor the generichide exception.
+    networkExceptions: { generichide: ['example.*'], elemhide: [], specifichide: [] },
+  };
+  const m = mod.matchCosmetic('www.example.com', data, ['seed']);
+  assert.equal(m.disableGeneric, true);
+  assert.ok(m.unhide.includes('.g'), 'entity generichide still needs the revert');
 });
 
 test('should honor entity-domain generichide hosts (google.* / gmx.*)', () => {

@@ -126,6 +126,82 @@ body {
   color: var(--fg);
 }
 
+.dark-upsell {
+  padding: 4px 2px 8px;
+}
+.dark-upsell-text {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.btn-buy {
+  display: block;
+  width: 100%;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-buy:hover {
+  filter: brightness(1.05);
+}
+.btn-buy:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.btn-buy.btn-dev {
+  margin-top: 6px;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  font-weight: 500;
+}
+.btn-buy.btn-dev:hover {
+  filter: none;
+  color: var(--fg);
+  border-color: var(--muted);
+}
+.dark-hint {
+  margin: 6px 2px 0;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+/* Primary per-page dark-mode toggle (Dark Reader-style quick switch). */
+.dark-site-row {
+  padding: 8px 2px 6px;
+}
+.dark-site-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.dark-site-host {
+  color: var(--muted);
+  font-size: 11px;
+  word-break: break-all;
+}
+.dark-reset-link {
+  display: block;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  padding: 0 2px 6px;
+  text-align: left;
+}
+.dark-reset-link:hover {
+  text-decoration: underline;
+}
+
 .switch {
   position: relative;
   width: 40px;
