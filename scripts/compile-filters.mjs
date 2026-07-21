@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { parseLine, hostsFromPattern } from './lib/parse-filter.mjs';
 import { toDnrRule, ruleKey, networkFilterIdentity } from './lib/to-dnr.mjs';
 import { DNR } from './lib/limits.mjs';
+import { scriptletLooksObfuscated } from './lib/scriptlet-safe.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -71,7 +72,7 @@ function compileList(list, text, ctx) {
     if (!parsed) continue;
 
     if (parsed.type === 'cosmetic') {
-      applyCosmetic(parsed, cos, stats);
+      applyCosmetic(parsed, cos, stats, skips);
       continue;
     }
 
@@ -143,10 +144,15 @@ function applyNetworkCosmeticException(out, parsed, bag) {
   for (const h of hosts) if (h) set.add(h);
 }
 
-function applyCosmetic(c, cos, stats) {
+function applyCosmetic(c, cos, stats, skips) {
   if (c.kind === 'scriptlet') {
     // Scriptlets must be domain-scoped (injecting into every page is unsafe).
     if (!c.domains.include.length) return;
+    // CWS rejects `atob("…")` / long base64 in the package as "obfuscated code".
+    if (scriptletLooksObfuscated(c.scriptlet)) {
+      skips['scriptlet-obfuscated'] = (skips['scriptlet-obfuscated'] || 0) + 1;
+      return;
+    }
     if (c.isException) {
       cos.scriptletExceptions.push({
         domains: c.domains,
