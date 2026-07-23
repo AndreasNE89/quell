@@ -95,9 +95,50 @@ export function normalizeUrlFilter(pattern) {
 }
 
 /**
+ * Heuristic public-suffix / bare-TLD check (mirrors src/shared/hostname.ts).
+ * Used so converter domain scope like `to=com` / `domain=co.uk` cannot count as
+ * host narrowing for allow / allowAllRequests (Chrome matches listed domains and
+ * all subdomains — `com` would cover essentially the commercial web).
+ */
+const MULTI_TLD_SECONDS = new Set([
+  'co',
+  'com',
+  'net',
+  'org',
+  'gov',
+  'ac',
+  'edu',
+  'or',
+  'ne',
+  'go',
+  'lg',
+]);
+
+export function isPublicSuffixDomain(host) {
+  if (!host || typeof host !== 'string') return true;
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return false;
+  if (host.startsWith('[') && host.endsWith(']')) return false;
+  const parts = host.toLowerCase().split('.').filter(Boolean);
+  if (parts.length <= 1) return true;
+  if (parts.length === 2 && MULTI_TLD_SECONDS.has(parts[0])) return true;
+  return false;
+}
+
+/** True when at least one include-domain is a real host (not a bare public suffix). */
+export function hasMeaningfulDomainScope(initiatorDomains, requestDomains) {
+  for (const d of initiatorDomains || []) {
+    if (!isPublicSuffixDomain(d)) return true;
+  }
+  for (const d of requestDomains || []) {
+    if (!isPublicSuffixDomain(d)) return true;
+  }
+  return false;
+}
+
+/**
  * True when a DNR `urlFilter` matches essentially every http(s) URL — anchors,
- * separators, wildcards, or a lone `/` with no host/path meat.
- * Used to keep `$document` allowAllRequests from becoming a global unblock.
+ * separators, wildcards, scheme-only prefixes, or a lone `/` with no host/path meat.
+ * Used to keep allow / allowAllRequests from becoming a global unblock.
  */
 export function isUniversallyMatchingUrlFilter(urlFilter) {
   if (!urlFilter) return true;
@@ -107,6 +148,11 @@ export function isUniversallyMatchingUrlFilter(urlFilter) {
   if (core.endsWith('|')) core = core.slice(0, -1);
   // Empty / anchor-only / separator-only / slash-only cores do not scope a frame.
   if (!core || /^[\^*$\/.]+$/.test(core)) return true;
+  // Scheme-only cores (`http*`, `https://*`, `http:`, bare `http`) match every
+  // http(s) navigation — same global unblock as `/` or `.*` for web traffic.
+  // Colon after https? must be optional (`http*` has no `:`); use `(?::…)?`
+  // so `https?:` is not parsed as `http` + optional `s` + required `:`.
+  if (/^https?(?::[/]*)?\**$/.test(core)) return true;
   return false;
 }
 
@@ -118,13 +164,21 @@ export function isUniversallyMatchingUrlFilter(urlFilter) {
 export function isUniversallyMatchingRegexFilter(regexFilter) {
   if (!regexFilter) return true;
   const p = regexFilter;
-  // Optional ^ / $ around match-all wildcards or empty.
-  if (/^\^?\.\*[\$]?$/.test(p)) return true;
-  if (/^\^?\.\+[\$]?$/.test(p)) return true;
+  // Optional ^ / $ around match-all wildcards or empty (incl. .{0,} / .*?).
+  if (/^\^?\.(?:\*|\+|\{\d*,\d*\})\??\$?$/.test(p)) return true;
   if (/^\^?\.\$?$/.test(p)) return true;
   if (p === '^' || p === '$' || p === '^$') return true;
-  // Scheme-only https?:\/\/ with optional .* / .+ matches all web navigations.
-  if (/^\^?https\?:\\\/\\\/(?:\.\*|\.\+)?\$?$/.test(p)) return true;
+  // Scheme-only https?:\/\/ with optional .* / .+ / .*? matches all web navigations.
+  // Filter source literally contains `?` after `s` (`https?:\/\/`), so escape it.
+  if (/^\^?https\?:\\\/\\\/(?:\.\*|\.\+|\.\*\?)?\$?$/.test(p)) return true;
+  // Bare / wildcarded scheme prefix in filter source: ^http, ^https.*, ^http$
+  if (/^\^?https?\.\*[\$]?$/.test(p) || /^\^?https?\$?$/.test(p)) return true;
+  // Alternation with a match-all branch (`.*|a`, `a|.*`) still matches everything.
+  const body = p.replace(/^\^/, '').replace(/\$$/, '');
+  if (body.includes('|')) {
+    const alts = body.split('|');
+    if (alts.some((a) => /^(?:\.\*|\.\+|\.\*\?|\.\{\d*,\d*\}\??)$/.test(a))) return true;
+  }
   return false;
 }
 
@@ -376,20 +430,23 @@ export function toDnrRule(f) {
     // treating them as allowAllRequests over-unblocks nested pixels/XHR and wrongly
     // expands match to main_frame when both types are forced.
     // A bare `@@||domain^` (no resource type) must also stay plain `allow`.
+    const hasDomainScope = hasMeaningfulDomainScope(initDomains, reqDomains);
+    const hasScopedUrl =
+      (condition.urlFilter &&
+        !isUniversallyMatchingUrlFilter(condition.urlFilter)) ||
+      (condition.regexFilter &&
+        !isUniversallyMatchingRegexFilter(condition.regexFilter));
+    const hasAnyUrlConstraint = !!(condition.urlFilter || condition.regexFilter);
+
     if (rt.includes('main_frame')) {
       // Resource types alone are not enough scope here: `@@$document` / `@@*$document`
       // would otherwise emit allowAllRequests with only main_frame and disable network
       // blocking for every top-level navigation (Chrome exempts that frame tree).
-      // Require a *non-universal* URL or include-domain constraint — a present but
-      // match-all urlFilter/regexFilter (`/`, `|`, `.*`, `https?:\/\/`, …) is the same
-      // global unblock. Exclude-only / type-only document exceptions stay skipped.
+      // Require a *non-universal* URL or a *meaningful* include-domain constraint —
+      // match-all urlFilter/regexFilter (`/`, `|`, `.*`, `http*`, `^http`, …) and
+      // bare public-suffix domains (`to=com`) are the same global / TLD-wide unblock.
+      // Exclude-only / type-only document exceptions stay skipped.
       // (Plain allow/block may still use type-only scope — e.g. EasyPrivacy `$ping`.)
-      const hasDomainScope = initDomains.length > 0 || reqDomains.length > 0;
-      const hasScopedUrl =
-        (condition.urlFilter &&
-          !isUniversallyMatchingUrlFilter(condition.urlFilter)) ||
-        (condition.regexFilter &&
-          !isUniversallyMatchingRegexFilter(condition.regexFilter));
       if (!hasDomainScope && !hasScopedUrl) {
         return { skip: 'too-broad-allow-all' };
       }
@@ -403,6 +460,13 @@ export function toDnrRule(f) {
           condition,
         },
       };
+    }
+    // Plain allow at ALLOW priority overrides BLOCK. A present but universal
+    // urlFilter/regexFilter with no real host scope (`@@|http*`, `@@/.*/`, …)
+    // disables network blocking globally — skip those. Type-only allows (no URL
+    // constraint) still emit.
+    if (hasAnyUrlConstraint && !hasScopedUrl && !hasDomainScope) {
+      return { skip: 'too-broad-allow' };
     }
     return {
       rule: {

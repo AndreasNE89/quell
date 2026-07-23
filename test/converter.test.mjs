@@ -64,9 +64,41 @@ test('match-all URL/regex $document exceptions are dropped (residual global AAR)
     '@@||^$document',
     '@@||.$document',
     '@@/https?:\\/\\//$document',
+    // Scheme-prefix / counted / non-greedy residuals after #18
+    '@@|http*$document',
+    '@@|https://*$document',
+    '@@|http:$document',
+    '@@http*$document',
+    '@@/^http/$document',
+    '@@/.{0,}/$document',
+    '@@/.*?/$document',
+    '@@/.*|a/$document',
   ]) {
     const { dnr } = convert(line);
     assert.equal(dnr.skip, 'too-broad-allow-all', line);
+  }
+});
+
+test('public-suffix-only $document domain scope is dropped (TLD-wide AAR)', () => {
+  // Chrome requestDomains/initiatorDomains match the listed domain and all
+  // subdomains — `com` would allowAllRequests across essentially *.com.
+  for (const line of [
+    '@@*$document,to=com',
+    '@@*$document,domain=com',
+    '@@*$document,to=co.uk',
+    '@@*$document,domain=org',
+  ]) {
+    const { dnr } = convert(line);
+    assert.equal(dnr.skip, 'too-broad-allow-all', line);
+  }
+});
+
+test('match-all plain allow exceptions are dropped (global ALLOW over BLOCK)', () => {
+  // Without $document these still emit action:allow at PRIORITY.ALLOW — a
+  // universal url/regex with no host scope disables network blocking globally.
+  for (const line of ['@@|http*', '@@/.*/', '@@/', '@@|', '@@/^http/']) {
+    const { dnr } = convert(line);
+    assert.equal(dnr.skip, 'too-broad-allow', line);
   }
 });
 
