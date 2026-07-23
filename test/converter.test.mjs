@@ -44,6 +44,20 @@ test('$document,$subdocument exception allowlists both frame types', () => {
   assert.deepEqual(dnr.rule.condition.resourceTypes, ['main_frame', 'sub_frame']);
 });
 
+test('unscoped $document exception is dropped (would globally allowAllRequests)', () => {
+  for (const line of ['@@$document', '@@*$document', '@@||*$document']) {
+    const { dnr } = convert(line);
+    assert.equal(dnr.skip, 'too-broad-allow-all', line);
+  }
+});
+
+test('$document with initiator domain still allowAllRequests', () => {
+  const { dnr } = convert('@@$document,domain=good.example');
+  assert.equal(dnr.rule.action.type, 'allowAllRequests');
+  assert.deepEqual(dnr.rule.condition.initiatorDomains, ['good.example']);
+  assert.deepEqual(dnr.rule.condition.resourceTypes, ['main_frame']);
+});
+
 test('$subdocument exception is plain allow on sub_frame, not allowAllRequests', () => {
   // EasyList ships rules like @@||g.doubleclick.net/pagead/ads$subdocument,domain=…
   // These must only unblock the iframe document request, not the whole frame tree.
