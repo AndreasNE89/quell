@@ -212,6 +212,15 @@ export function isUniversallyMatchingUrlFilter(urlFilter) {
   // Colon after https? must be optional (`http*` has no `:`); use `(?::…)?`
   // so `https?:` is not parsed as `http` + optional `s` + required `:`.
   if (/^https?(?::[/]*)?\**$/.test(core)) return true;
+  // Wildcard-wrapped scheme / authority that still match every http(s) URL:
+  // `*http*`, `*://*`, `http*://*`, `*http*://*` (and `|https*://*` after | strip).
+  // `normalizeUrlFilter` also turns `||*.com^` into `*.com^` — handled below.
+  if (/^\**https?\**(?::[/]*\**)?$/.test(core)) return true;
+  if (/^\**:[/]*\**$/.test(core)) return true;
+  // Leading-wildcard public-suffix hosts (`*.com^`, `*.co.uk/`, `*.github.io^`) are
+  // TLD/tenant-wide — same over-unblock class as `||com^` / `to=github.io`.
+  const suffixHost = /^\*+\.?([a-z0-9.-]+?)(?:[\^\/].*)?$/i.exec(core);
+  if (suffixHost && isPublicSuffixDomain(suffixHost[1])) return true;
   return false;
 }
 
@@ -227,9 +236,17 @@ export function isUniversallyMatchingRegexFilter(regexFilter) {
   if (/^\^?\.(?:\*|\+|\{\d*,\d*\})\??\$?$/.test(p)) return true;
   if (/^\^?\.\$?$/.test(p)) return true;
   if (p === '^' || p === '$' || p === '^$') return true;
+  // Any-char classes used as `.*` equivalents: [\s\S]* / [\d\D]* / [\w\W]*.
+  if (
+    /^\^?\[(?:\\s\\S|\\S\\s|\\d\\D|\\D\\d|\\w\\W|\\W\\w)\](?:\*|\{0,\})\??\$?$/.test(p)
+  ) {
+    return true;
+  }
   // Scheme-only https?:\/\/ with optional .* / .+ / .*? matches all web navigations.
   // Filter source literally contains `?` after `s` (`https?:\/\/`), so escape it.
   if (/^\^?https\?:\\\/\\\/(?:\.\*|\.\+|\.\*\?)?\$?$/.test(p)) return true;
+  // Any-host origin (`^https?:\/\/[^\/]+` ± trailing .*) — every http(s) site.
+  if (/^\^?https\?:\\\/\\\/\[\^\\\/\](?:\+|\*|\{0,\})(?:\.\*)?\$?$/.test(p)) return true;
   // Bare / wildcarded scheme prefix in filter source: ^http, ^https.*, ^http$
   if (/^\^?https?\.\*[\$]?$/.test(p) || /^\^?https?\$?$/.test(p)) return true;
   // Alternation with a match-all branch (`.*|a`, `a|.*`) still matches everything.
