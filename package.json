@@ -1,6 +1,6 @@
 {
   "name": "stampstack-adblock",
-  "version": "1.3.6",
+  "version": "1.3.7",
   "private": true,
   "description": "StampStack — a Manifest V3 ad blocker for Chromium browsers aiming for uBlock Origin blocking parity within the MV3 rules.",
   "type": "module",
