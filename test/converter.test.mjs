@@ -93,6 +93,25 @@ test('public-suffix-only $document domain scope is dropped (TLD-wide AAR)', () =
   }
 });
 
+test('multi-tenant platform suffix $document scope is dropped (tenant-wide AAR)', () => {
+  // Residual after #20/#22: github.io is not a bare TLD but requestDomains and
+  // ||github.io^ still match every Pages tenant — same over-unblock class.
+  for (const line of [
+    '@@*$document,to=github.io',
+    '@@*$document,domain=blogspot.com',
+    '@@||github.io^$document',
+    '@@||blogspot.com^$document',
+    '@@||github.io/path$document',
+  ]) {
+    const { dnr } = convert(line);
+    assert.equal(dnr.skip, 'too-broad-allow-all', line);
+  }
+  // Real tenant host still allowlists.
+  const ok = convert('@@||alice.github.io^$document');
+  assert.equal(ok.dnr.rule.action.type, 'allowAllRequests');
+  assert.equal(ok.dnr.rule.condition.urlFilter, '||alice.github.io^');
+});
+
 test('mixed real-host + public-suffix $document strips TLD (residual after #20)', () => {
   // hasMeaningfulDomainScope was true because example.com is real, but Chrome
   // OR-matches every requestDomains/initiatorDomains entry — leaving `com` would
@@ -116,6 +135,13 @@ test('plain allow with mixed public-suffix domain also strips TLD', () => {
   const { dnr } = convert('@@*$script,to=example.com|com');
   assert.equal(dnr.rule.action.type, 'allow');
   assert.deepEqual(dnr.rule.condition.requestDomains, ['example.com']);
+});
+
+test('plain allow with multi-tenant suffix urlFilter is dropped', () => {
+  const { dnr } = convert('@@||github.io^$script');
+  assert.equal(dnr.skip, 'too-broad-allow');
+  const scoped = convert('@@||alice.github.io^$script');
+  assert.equal(scoped.dnr.rule.action.type, 'allow');
 });
 
 test('match-all plain allow exceptions are dropped (global ALLOW over BLOCK)', () => {
