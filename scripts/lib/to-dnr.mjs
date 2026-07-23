@@ -95,6 +95,40 @@ export function normalizeUrlFilter(pattern) {
 }
 
 /**
+ * True when a DNR `urlFilter` matches essentially every http(s) URL — anchors,
+ * separators, wildcards, or a lone `/` with no host/path meat.
+ * Used to keep `$document` allowAllRequests from becoming a global unblock.
+ */
+export function isUniversallyMatchingUrlFilter(urlFilter) {
+  if (!urlFilter) return true;
+  let core = urlFilter;
+  if (core.startsWith('||')) core = core.slice(2);
+  else if (core.startsWith('|')) core = core.slice(1);
+  if (core.endsWith('|')) core = core.slice(0, -1);
+  // Empty / anchor-only / separator-only / slash-only cores do not scope a frame.
+  if (!core || /^[\^*$\/.]+$/.test(core)) return true;
+  return false;
+}
+
+/**
+ * True when a DNR `regexFilter` matches every URL (or every http(s) URL).
+ * Residual of the unscoped-$document guard: a match-all regex (dot-star)
+ * plus $document still has a regexFilter, so presence-alone is not enough scope.
+ */
+export function isUniversallyMatchingRegexFilter(regexFilter) {
+  if (!regexFilter) return true;
+  const p = regexFilter;
+  // Optional ^ / $ around match-all wildcards or empty.
+  if (/^\^?\.\*[\$]?$/.test(p)) return true;
+  if (/^\^?\.\+[\$]?$/.test(p)) return true;
+  if (/^\^?\.\$?$/.test(p)) return true;
+  if (p === '^' || p === '$' || p === '^$') return true;
+  // Scheme-only https?:\/\/ with optional .* / .+ matches all web navigations.
+  if (/^\^?https\?:\\\/\\\/(?:\.\*|\.\+)?\$?$/.test(p)) return true;
+  return false;
+}
+
+/**
  * Chrome DNR `regexFilter` is compiled with RE2 (plus a ~2KB compiled-size budget).
  * Emitting a pattern RE2 rejects makes the entire static ruleset fail to load
  * ("Could not load manifest"). Patterns that only exceed the memory budget are
@@ -346,15 +380,17 @@ export function toDnrRule(f) {
       // Resource types alone are not enough scope here: `@@$document` / `@@*$document`
       // would otherwise emit allowAllRequests with only main_frame and disable network
       // blocking for every top-level navigation (Chrome exempts that frame tree).
-      // Require a positive URL or include-domain constraint; exclude-only / type-only
-      // document exceptions stay skipped. (Plain allow/block may still use type-only
-      // scope — e.g. EasyPrivacy `$ping,third-party`.)
-      if (
-        !condition.urlFilter &&
-        !condition.regexFilter &&
-        !initDomains.length &&
-        !reqDomains.length
-      ) {
+      // Require a *non-universal* URL or include-domain constraint — a present but
+      // match-all urlFilter/regexFilter (`/`, `|`, `.*`, `https?:\/\/`, …) is the same
+      // global unblock. Exclude-only / type-only document exceptions stay skipped.
+      // (Plain allow/block may still use type-only scope — e.g. EasyPrivacy `$ping`.)
+      const hasDomainScope = initDomains.length > 0 || reqDomains.length > 0;
+      const hasScopedUrl =
+        (condition.urlFilter &&
+          !isUniversallyMatchingUrlFilter(condition.urlFilter)) ||
+        (condition.regexFilter &&
+          !isUniversallyMatchingRegexFilter(condition.regexFilter));
+      if (!hasDomainScope && !hasScopedUrl) {
         return { skip: 'too-broad-allow-all' };
       }
       // allowAllRequests only permits main_frame / sub_frame in resourceTypes.

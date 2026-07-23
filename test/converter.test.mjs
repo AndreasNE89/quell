@@ -51,6 +51,37 @@ test('unscoped $document exception is dropped (would globally allowAllRequests)'
   }
 });
 
+test('match-all URL/regex $document exceptions are dropped (residual global AAR)', () => {
+  // Presence of urlFilter/regexFilter alone is not enough scope — these match every
+  // (or every http(s)) navigation and would disable network blocking site-wide.
+  for (const line of [
+    '@@/.*/$document',
+    '@@/.+/$document',
+    '@@/^/$document',
+    '@@/$document',
+    '@@|$document',
+    '@@^$document',
+    '@@||^$document',
+    '@@||.$document',
+    '@@/https?:\\/\\//$document',
+  ]) {
+    const { dnr } = convert(line);
+    assert.equal(dnr.skip, 'too-broad-allow-all', line);
+  }
+});
+
+test('path-scoped $document exception still allowAllRequests', () => {
+  const { dnr } = convert('@@/ads.js$document');
+  assert.equal(dnr.rule.action.type, 'allowAllRequests');
+  assert.equal(dnr.rule.condition.urlFilter, '/ads.js');
+});
+
+test('hostname-scoped regex $document exception still allowAllRequests', () => {
+  const { dnr } = convert('@@/^https:\\/\\/good\\.example\\//$document');
+  assert.equal(dnr.rule.action.type, 'allowAllRequests');
+  assert.equal(dnr.rule.condition.regexFilter, '^https:\\/\\/good\\.example\\/');
+});
+
 test('$document with initiator domain still allowAllRequests', () => {
   const { dnr } = convert('@@$document,domain=good.example');
   assert.equal(dnr.rule.action.type, 'allowAllRequests');
