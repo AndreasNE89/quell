@@ -73,6 +73,19 @@ test('match-all URL/regex $document exceptions are dropped (residual global AAR)
     '@@/.{0,}/$document',
     '@@/.*?/$document',
     '@@/.*|a/$document',
+    // Wildcard-wrapped scheme / authority residuals after #20
+    '@@*http*$document',
+    '@@*://*$document',
+    '@@|http*://*$document',
+    '@@*http*://*$document',
+    // Leading-wildcard public / multi-tenant suffix (||*.com^ → *.com^)
+    '@@||*.com^$document',
+    '@@*.com^$document',
+    '@@*.github.io^$document',
+    // Regex any-char / any-host residuals
+    '@@/[\\s\\S]*/$document',
+    '@@/^https?:\\/\\/[^\\/]+/$document',
+    '@@/^https?:\\/\\/[^\\/]+.*/$document',
   ]) {
     const { dnr } = convert(line);
     assert.equal(dnr.skip, 'too-broad-allow-all', line);
@@ -147,7 +160,19 @@ test('plain allow with multi-tenant suffix urlFilter is dropped', () => {
 test('match-all plain allow exceptions are dropped (global ALLOW over BLOCK)', () => {
   // Without $document these still emit action:allow at PRIORITY.ALLOW — a
   // universal url/regex with no host scope disables network blocking globally.
-  for (const line of ['@@|http*', '@@/.*/', '@@/', '@@|', '@@/^http/']) {
+  for (const line of [
+    '@@|http*',
+    '@@/.*/',
+    '@@/',
+    '@@|',
+    '@@/^http/',
+    '@@*http*',
+    '@@*://*',
+    '@@|http*://*',
+    '@@||*.com^$script',
+    '@@/[\\s\\S]*/',
+    '@@/^https?:\\/\\/[^\\/]+/',
+  ]) {
     const { dnr } = convert(line);
     assert.equal(dnr.skip, 'too-broad-allow', line);
   }
