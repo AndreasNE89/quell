@@ -19,6 +19,41 @@ const MULTI_TLD_SECONDS = new Set([
   'lg',
 ]);
 
+/**
+ * Well-known multi-tenant / platform public suffixes (no full PSL).
+ * Chrome `requestDomains: ['github.io']` matches every `*.github.io` tenant —
+ * allowlisting the apex would disable network blocking across unrelated sites.
+ * Keep this list curated; it does not replace a real Public Suffix List.
+ */
+const MULTI_TENANT_SUFFIXES = new Set([
+  'github.io',
+  'gitlab.io',
+  'blogspot.com',
+  'appspot.com',
+  'herokuapp.com',
+  'pages.dev',
+  'vercel.app',
+  'netlify.app',
+  'workers.dev',
+  'web.app',
+  'firebaseapp.com',
+  'azurewebsites.net',
+  'azurestaticapps.net',
+  'wordpress.com',
+  'tumblr.com',
+  'webflow.io',
+  'ghost.io',
+  'notion.site',
+  'gitbook.io',
+  'readthedocs.io',
+  'sourceforge.io',
+  'fly.dev',
+  'deno.dev',
+  'repl.co',
+  'glitch.me',
+  'codesandbox.io',
+]);
+
 export function isIPv4Host(host: string): boolean {
   return /^\d{1,3}(\.\d{1,3}){3}$/.test(host);
 }
@@ -35,14 +70,25 @@ export function isPublicSuffixHost(host: string): boolean {
 }
 
 /**
+ * Platform / multi-tenant suffix whose subdomains are unrelated sites
+ * (github.io, blogspot.com, …). Not a bare TLD — still unsafe for user allowlist
+ * AAR / requestDomains, which match the listed domain and all subdomains.
+ */
+export function isMultiTenantPublicSuffix(host: string): boolean {
+  if (!host) return false;
+  return MULTI_TENANT_SUFFIXES.has(host.toLowerCase());
+}
+
+/**
  * Strip a leading `www.` for stable allowlist / exception keys — but never when
- * the remainder would be a bare public suffix (`www.com` → keep `www.com`).
+ * the remainder would be a bare public suffix (`www.com` → keep `www.com`) or a
+ * multi-tenant platform suffix (`www.github.io` → keep `www.github.io`).
  */
 export function normalizeHostname(hostname: string): string {
   const h = hostname.trim().toLowerCase();
   if (!h.startsWith('www.')) return h;
   const rest = h.slice(4);
-  if (!rest || isPublicSuffixHost(rest)) return h;
+  if (!rest || isPublicSuffixHost(rest) || isMultiTenantPublicSuffix(rest)) return h;
   return rest;
 }
 
@@ -62,25 +108,32 @@ export function isValidMatchPatternHost(host: string): boolean {
 
 /**
  * Hosts safe to store on the user allowlist / emit as DNR requestDomains.
- * Rejects bare TLDs and multi-part public suffixes that would match unrelated sites.
+ * Rejects bare TLDs, multi-part public suffixes, and multi-tenant platform
+ * suffixes that would match unrelated sites.
  */
 export function isSafeAllowlistHost(host: string): boolean {
   const h = normalizeHostname(host);
   if (!isValidMatchPatternHost(h)) return false;
   if (isIPv4Host(h) || h === 'localhost') return true;
-  if (isPublicSuffixHost(h)) return false;
+  if (isPublicSuffixHost(h) || isMultiTenantPublicSuffix(h)) return false;
   return true;
 }
 
 /**
- * Chrome match-pattern excludes for an allowlisted host.
+ * Chrome match-pattern excludes for an allowlisted host (and for generichide
+ * registration excludes).
  * IPv4 only gets an exact host pattern — `*.192.168.1.1` is rejected by Chrome
  * and would abort the whole `chrome.scripting` registration batch.
+ *
+ * Bare TLDs are never emitted. Multi-tenant suffixes (github.io) ARE emitted so
+ * EasyList `@@||github.io^$generichide` can exclude `*.github.io` from the
+ * generic sheet — user allowlist storage still rejects them via isSafeAllowlistHost.
  */
 export function allowlistMatchPatterns(host: string): string[] {
   const h = normalizeHostname(host);
-  if (!isSafeAllowlistHost(h)) return [];
+  if (!isValidMatchPatternHost(h)) return [];
   if (isIPv4Host(h)) return [`*://${h}/*`];
+  if (isPublicSuffixHost(h)) return [];
   return [`*://${h}/*`, `*://*.${h}/*`, `*://www.${h}/*`];
 }
 

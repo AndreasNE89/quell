@@ -18,7 +18,7 @@ before(async () => {
   await build({
     stdin: {
       contents: `
-        export { domainSuffixes, hostMatchesDomain, domainSpecMatches, normalizeHostname, isAllowlistedHost, isValidMatchPatternHost, isSafeAllowlistHost, isPublicSuffixHost, allowlistMatchPatterns } from './src/shared/hostname.js';
+        export { domainSuffixes, hostMatchesDomain, domainSpecMatches, normalizeHostname, isAllowlistedHost, isValidMatchPatternHost, isSafeAllowlistHost, isPublicSuffixHost, isMultiTenantPublicSuffix, allowlistMatchPatterns } from './src/shared/hostname.js';
         export { matchCosmetic, matchScriptlets, mergeCosmeticLists } from './src/engine/cosmetic-match.js';
         export { parseProcedural } from './src/engine/procedural.js';
       `,
@@ -264,6 +264,14 @@ test('should not strip www when remainder is a bare public suffix', () => {
   assert.equal(mod.normalizeHostname('www.example.com'), 'example.com');
 });
 
+test('should not strip www from multi-tenant platform suffixes', () => {
+  // www.github.io → github.io would let allowlist AAR every GitHub Pages tenant.
+  assert.equal(mod.normalizeHostname('www.github.io'), 'www.github.io');
+  assert.equal(mod.normalizeHostname('www.blogspot.com'), 'www.blogspot.com');
+  assert.equal(mod.normalizeHostname('www.pages.dev'), 'www.pages.dev');
+  assert.equal(mod.normalizeHostname('alice.github.io'), 'alice.github.io');
+});
+
 test('should not treat bare TLD allowlist entries as matching all sites', () => {
   assert.equal(mod.isSafeAllowlistHost('com'), false);
   assert.equal(mod.isSafeAllowlistHost('co.uk'), false);
@@ -272,6 +280,25 @@ test('should not treat bare TLD allowlist entries as matching all sites', () => 
   assert.equal(mod.isAllowlistedHost('shop.co.uk', ['co.uk']), false);
   assert.equal(mod.isAllowlistedHost('www.com', ['www.com']), true);
   assert.equal(mod.isAllowlistedHost('evil.com', ['www.com']), false);
+});
+
+test('should reject multi-tenant platform suffixes on the user allowlist', () => {
+  // Concrete trigger: visit https://github.io (live Pages docs), toggle allowlist →
+  // requestDomains:['github.io'] would allowAllRequests on every *.github.io site.
+  assert.equal(mod.isMultiTenantPublicSuffix('github.io'), true);
+  assert.equal(mod.isSafeAllowlistHost('github.io'), false);
+  assert.equal(mod.isSafeAllowlistHost('blogspot.com'), false);
+  assert.equal(mod.isSafeAllowlistHost('alice.github.io'), true);
+  assert.equal(mod.isAllowlistedHost('alice.github.io', ['github.io']), false);
+  assert.equal(mod.isAllowlistedHost('alice.github.io', ['alice.github.io']), true);
+  // Generichide registration still needs match patterns for EasyList
+  // @@||github.io^$generichide — allowlistMatchPatterns must not drop them.
+  assert.deepEqual(mod.allowlistMatchPatterns('github.io'), [
+    '*://github.io/*',
+    '*://*.github.io/*',
+    '*://www.github.io/*',
+  ]);
+  assert.deepEqual(mod.allowlistMatchPatterns('com'), []);
 });
 
 test('should emit only exact match patterns for IPv4 allowlist hosts', () => {

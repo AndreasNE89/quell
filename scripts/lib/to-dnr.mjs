@@ -99,6 +99,9 @@ export function normalizeUrlFilter(pattern) {
  * Used so converter domain scope like `to=com` / `domain=co.uk` cannot count as
  * host narrowing for allow / allowAllRequests (Chrome matches listed domains and
  * all subdomains — `com` would cover essentially the commercial web).
+ *
+ * Also treats curated multi-tenant platform suffixes (github.io, blogspot.com, …)
+ * the same way: `to=github.io` / `||github.io^$document` would AAR every tenant.
  */
 const MULTI_TLD_SECONDS = new Set([
   'co',
@@ -114,14 +117,60 @@ const MULTI_TLD_SECONDS = new Set([
   'lg',
 ]);
 
+/** Keep in sync with src/shared/hostname.ts MULTI_TENANT_SUFFIXES. */
+const MULTI_TENANT_SUFFIXES = new Set([
+  'github.io',
+  'gitlab.io',
+  'blogspot.com',
+  'appspot.com',
+  'herokuapp.com',
+  'pages.dev',
+  'vercel.app',
+  'netlify.app',
+  'workers.dev',
+  'web.app',
+  'firebaseapp.com',
+  'azurewebsites.net',
+  'azurestaticapps.net',
+  'wordpress.com',
+  'tumblr.com',
+  'webflow.io',
+  'ghost.io',
+  'notion.site',
+  'gitbook.io',
+  'readthedocs.io',
+  'sourceforge.io',
+  'fly.dev',
+  'deno.dev',
+  'repl.co',
+  'glitch.me',
+  'codesandbox.io',
+]);
+
 export function isPublicSuffixDomain(host) {
   if (!host || typeof host !== 'string') return true;
   if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return false;
   if (host.startsWith('[') && host.endsWith(']')) return false;
-  const parts = host.toLowerCase().split('.').filter(Boolean);
+  const lower = host.toLowerCase();
+  if (MULTI_TENANT_SUFFIXES.has(lower)) return true;
+  const parts = lower.split('.').filter(Boolean);
   if (parts.length <= 1) return true;
   if (parts.length === 2 && MULTI_TLD_SECONDS.has(parts[0])) return true;
   return false;
+}
+
+/**
+ * Host from a domain-anchored urlFilter (`||host^`, `||host/path`), or null.
+ * Entity wildcards (`||kwik.*`) return null — those are not bare-suffix scope.
+ */
+export function domainAnchorHostFromUrlFilter(urlFilter) {
+  if (!urlFilter || typeof urlFilter !== 'string') return null;
+  const m = /^\|\|([a-z0-9.-]+)/i.exec(urlFilter);
+  if (!m) return null;
+  let host = m[1].toLowerCase();
+  if (host.includes('*')) return null;
+  host = host.replace(/\.$/, '');
+  return host || null;
 }
 
 /** True when at least one include-domain is a real host (not a bare public suffix). */
@@ -456,9 +505,16 @@ export function toDnrRule(f) {
       else delete condition.requestDomains;
     }
     const hasDomainScope = hasMeaningfulDomainScope(scopedInit, scopedReq);
+    // `||com^` / `||github.io^` look like hostname scope but Chrome matches every
+    // subdomain of that public / multi-tenant suffix — same over-unblock as to=com.
+    const urlAnchorHost = condition.urlFilter
+      ? domainAnchorHostFromUrlFilter(condition.urlFilter)
+      : null;
+    const urlAnchorIsSuffix = !!(urlAnchorHost && isPublicSuffixDomain(urlAnchorHost));
     const hasScopedUrl =
       (condition.urlFilter &&
-        !isUniversallyMatchingUrlFilter(condition.urlFilter)) ||
+        !isUniversallyMatchingUrlFilter(condition.urlFilter) &&
+        !urlAnchorIsSuffix) ||
       (condition.regexFilter &&
         !isUniversallyMatchingRegexFilter(condition.regexFilter));
     const hasAnyUrlConstraint = !!(condition.urlFilter || condition.regexFilter);
