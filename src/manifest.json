@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "StampStack",
-  "version": "1.3.5",
+  "version": "1.3.6",
   "description": "Block ads and trackers with EasyList-style filters, cosmetics, and scriptlets — built for Manifest V3.",
   "minimum_chrome_version": "120",
   "permissions": [
