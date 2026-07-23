@@ -343,6 +343,20 @@ export function toDnrRule(f) {
     // expands match to main_frame when both types are forced.
     // A bare `@@||domain^` (no resource type) must also stay plain `allow`.
     if (rt.includes('main_frame')) {
+      // Resource types alone are not enough scope here: `@@$document` / `@@*$document`
+      // would otherwise emit allowAllRequests with only main_frame and disable network
+      // blocking for every top-level navigation (Chrome exempts that frame tree).
+      // Require a positive URL or include-domain constraint; exclude-only / type-only
+      // document exceptions stay skipped. (Plain allow/block may still use type-only
+      // scope — e.g. EasyPrivacy `$ping,third-party`.)
+      if (
+        !condition.urlFilter &&
+        !condition.regexFilter &&
+        !initDomains.length &&
+        !reqDomains.length
+      ) {
+        return { skip: 'too-broad-allow-all' };
+      }
       // allowAllRequests only permits main_frame / sub_frame in resourceTypes.
       delete condition.excludedResourceTypes;
       condition.resourceTypes = rt.filter((t) => t === 'main_frame' || t === 'sub_frame');
