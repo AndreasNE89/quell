@@ -93,6 +93,31 @@ test('public-suffix-only $document domain scope is dropped (TLD-wide AAR)', () =
   }
 });
 
+test('mixed real-host + public-suffix $document strips TLD (residual after #20)', () => {
+  // hasMeaningfulDomainScope was true because example.com is real, but Chrome
+  // OR-matches every requestDomains/initiatorDomains entry — leaving `com` would
+  // still allowAllRequests across *.com. Strip the suffix; keep the real host.
+  for (const [line, field, expected] of [
+    ['@@*$document,to=example.com|com', 'requestDomains', ['example.com']],
+    ['@@*$document,domain=example.com|com', 'initiatorDomains', ['example.com']],
+    ['@@*$document,to=example.com|co.uk', 'requestDomains', ['example.com']],
+    ['@@*$document,domain=example.com|co.uk', 'initiatorDomains', ['example.com']],
+    ['@@*$document,domain=192.168.1.1|com', 'initiatorDomains', ['192.168.1.1']],
+  ]) {
+    const { dnr } = convert(line);
+    assert.equal(dnr.rule.action.type, 'allowAllRequests', line);
+    assert.deepEqual(dnr.rule.condition[field], expected, line);
+    assert.equal(dnr.rule.condition[field].includes('com'), false, line);
+    assert.equal(dnr.rule.condition[field].includes('co.uk'), false, line);
+  }
+});
+
+test('plain allow with mixed public-suffix domain also strips TLD', () => {
+  const { dnr } = convert('@@*$script,to=example.com|com');
+  assert.equal(dnr.rule.action.type, 'allow');
+  assert.deepEqual(dnr.rule.condition.requestDomains, ['example.com']);
+});
+
 test('match-all plain allow exceptions are dropped (global ALLOW over BLOCK)', () => {
   // Without $document these still emit action:allow at PRIORITY.ALLOW — a
   // universal url/regex with no host scope disables network blocking globally.

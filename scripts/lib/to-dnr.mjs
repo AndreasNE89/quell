@@ -136,6 +136,16 @@ export function hasMeaningfulDomainScope(initiatorDomains, requestDomains) {
 }
 
 /**
+ * Drop bare public-suffix entries from an include-domain list.
+ * Chrome matches listed domains *and subdomains*, so keeping `com` beside
+ * `example.com` would still allow (or allowAllRequests) essentially *.com.
+ * Narrowing by stripping suffixes is the safe direction for exceptions.
+ */
+export function stripPublicSuffixDomains(domains) {
+  return (domains || []).filter((d) => !isPublicSuffixDomain(d));
+}
+
+/**
  * True when a DNR `urlFilter` matches essentially every http(s) URL — anchors,
  * separators, wildcards, scheme-only prefixes, or a lone `/` with no host/path meat.
  * Used to keep allow / allowAllRequests from becoming a global unblock.
@@ -430,7 +440,22 @@ export function toDnrRule(f) {
     // treating them as allowAllRequests over-unblocks nested pixels/XHR and wrongly
     // expands match to main_frame when both types are forced.
     // A bare `@@||domain^` (no resource type) must also stay plain `allow`.
-    const hasDomainScope = hasMeaningfulDomainScope(initDomains, reqDomains);
+    //
+    // Mixed include lists (`to=example.com|com`) still pass hasMeaningfulDomainScope
+    // because example.com is real — but Chrome OR-matches every entry, so leaving
+    // `com` in the emitted rule TLD-unblocks *.com. Strip suffixes before the guard
+    // and rewrite the condition (under-match is safe; public-suffix-only → skip).
+    const scopedInit = stripPublicSuffixDomains(initDomains);
+    const scopedReq = stripPublicSuffixDomains(reqDomains);
+    if (scopedInit.length !== initDomains.length) {
+      if (scopedInit.length) condition.initiatorDomains = scopedInit;
+      else delete condition.initiatorDomains;
+    }
+    if (scopedReq.length !== reqDomains.length) {
+      if (scopedReq.length) condition.requestDomains = scopedReq;
+      else delete condition.requestDomains;
+    }
+    const hasDomainScope = hasMeaningfulDomainScope(scopedInit, scopedReq);
     const hasScopedUrl =
       (condition.urlFilter &&
         !isUniversallyMatchingUrlFilter(condition.urlFilter)) ||
