@@ -19,11 +19,11 @@ StampStack is a browser extension that blocks ads and trackers using Declarative
 
 | Category | Practice |
 |----------|----------|
-| Browsing activity | Not sent to us. Blocking uses Chrome’s DNR engine and packaged (or user-updated) rules. |
+| Browsing activity | Not sent to us. Blocking uses Chrome’s DNR engine and the filter rules packaged into the extension. |
 | Settings & allowlist | Stored locally via `chrome.storage`. Not uploaded. |
 | Statistics | On-device only when available. Not synced to a StampStack server. |
 | Optional purchase | If you buy dark mode, ExtensionPay / Stripe process payment and may collect an email for receipt and restore. StampStack caches a local paid flag; **browsing history and allowlist are not sent** to the payment provider. |
-| Optional SponsorBlock | If you enable **Auto-skip sponsor segments**, StampStack requests segment schedules from the community SponsorBlock API (`sponsor.ajay.app`) using the YouTube **video id** only. Turn the toggle off to stop those requests. |
+| SponsorBlock (on by default) | The **Auto-skip sponsor segments** toggle is **on by default**. While it is on, StampStack asks the community SponsorBlock API (`sponsor.ajay.app`) which segments to skip. It sends only the **first 4 characters of a SHA-256 hash of the YouTube video id** — never the video id itself, the page URL, or any account identifier — and the request is made without cookies or credentials. The API answers with every video sharing that 4-character prefix, and the right one is selected on your device. Turn the toggle off in Options to stop these requests entirely. |
 
 ## Permissions
 
@@ -32,16 +32,15 @@ StampStack is a browser extension that blocks ads and trackers using Declarative
 | `declarativeNetRequest` | Apply filter rules on the network path. |
 | `scripting` | Inject cosmetic filters, approved scriptlets, and optional dark-mode CSS. |
 | `storage` | Save preferences, site allowlist, and license cache. |
-| `webNavigation` | Apply filters consistently across navigations. |
 | Host access `<all_urls>` | Required for a general-purpose ad/tracker blocker (and optional page darkening). |
 
 ## Third parties
 
-Filter lists may be downloaded from their publishers when you update lists. StampStack does not send browsing history to list publishers as part of filtering.
+Filter lists are compiled into the extension when a release is built. StampStack does **not** download filter lists while you browse, and never contacts a list publisher from your browser.
 
 **Optional payments:** Dark mode unlock uses [ExtensionPay](https://extensionpay.com) (Stripe under the hood). Contacting ExtensionPay happens only when you open checkout, restore a purchase, or the extension refreshes license status. We do not sell or share browsing data.
 
-**Optional SponsorBlock:** When enabled, segment lookups go to the [SponsorBlock](https://sponsor.ajay.app) community service (video id only). This is off unless you turn on the YouTube skip toggle.
+**SponsorBlock:** Segment lookups go to the [SponsorBlock](https://sponsor.ajay.app) community service. Auto-skip is **on by default**; while it is on, each lookup sends a 4-character SHA-256 hash prefix of the video id (not the video id, not the page URL) with no cookies attached. Turn off **Auto-skip sponsor segments** in Options to stop these requests.
 
 ## Contact
 

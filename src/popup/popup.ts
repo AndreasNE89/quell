@@ -16,6 +16,10 @@ const el = {
   ytSponsorBlockToggle: $<HTMLInputElement>('ytSponsorBlockToggle'),
   tabBlocked: $('tabBlocked'),
   totalBlocked: $('totalBlocked'),
+  stats: $('stats'),
+  ruleCount: $('ruleCount'),
+  reloadNote: $('reloadNote'),
+  reloadBtn: $<HTMLButtonElement>('reloadBtn'),
   optionsBtn: $('optionsBtn'),
   openOptions: $('openOptions'),
   darkModeRow: $('darkModeRow'),
@@ -32,7 +36,6 @@ const el = {
   darkRestoreBtn: $<HTMLButtonElement>('darkRestoreBtn'),
   darkDevUnlockBtn: $<HTMLButtonElement>('darkDevUnlockBtn'),
   darkHint: $('darkHint'),
-  darkAutoNote: $('darkAutoNote'),
 };
 
 function send(msg: Message): Promise<unknown> {
@@ -42,15 +45,22 @@ function send(msg: Message): Promise<unknown> {
 function render(data: PopupData): void {
   const blockingHere = !data.paused && !data.allowlisted && !!data.hostname;
   el.host.textContent = data.hostname ?? 'This page';
-  el.siteSub.textContent = data.paused
-    ? 'StampStack is paused'
-    : data.allowlisted
-      ? 'Blocking is off here'
-      : 'Blocking on this site';
+  // No hostname means chrome://, about:, file:, the PDF viewer, … — nothing is being blocked
+  // there and the toggle does nothing, so say that rather than claiming blocking is on.
+  el.siteSub.textContent = !data.hostname
+    ? 'StampStack does not run on this page'
+    : data.paused
+      ? 'StampStack is paused'
+      : data.allowlisted
+        ? 'Blocking is off here'
+        : 'Blocking on this site';
 
   el.siteToggle.checked = blockingHere;
   el.siteToggle.disabled = data.paused || !data.hostname;
-  if (data.allowlisted) el.siteToggleLabel.textContent = 'Blocking off (allowlisted)';
+  if (!data.hostname) el.siteToggleLabel.textContent = 'Not available on this page';
+  else if (data.coveredBy)
+    el.siteToggleLabel.textContent = `Blocking off (via ${data.coveredBy})`;
+  else if (data.allowlisted) el.siteToggleLabel.textContent = 'Blocking off (allowlisted)';
   else if (data.paused) el.siteToggleLabel.textContent = 'Paused globally';
   else el.siteToggleLabel.textContent = 'Block on this site';
 
@@ -62,10 +72,19 @@ function render(data: PopupData): void {
   el.ytShortsToggle.disabled = data.paused;
   el.ytSponsorBlockToggle.disabled = data.paused;
 
-  el.tabBlocked.textContent = data.statsReliable ? String(data.tabBlocked) : '—';
-  el.totalBlocked.textContent = data.statsReliable
-    ? data.blockedTotal.toLocaleString()
-    : 'n/a';
+  // Chrome only exposes per-request match events to unpacked/dev builds, so in a store build
+  // both counters can only ever read "—" and "n/a". Show what we do know instead: how many
+  // rules are actually live.
+  el.stats.hidden = !data.statsReliable;
+  el.ruleCount.hidden = data.statsReliable;
+  if (data.statsReliable) {
+    el.tabBlocked.textContent = String(data.tabBlocked);
+    el.totalBlocked.textContent = data.blockedTotal.toLocaleString();
+  } else {
+    el.ruleCount.textContent = data.paused
+      ? 'Paused — no rules active'
+      : `${data.activeRuleCount.toLocaleString()} blocking rules active`;
+  }
 
   el.statusDot.classList.toggle('off', !blockingHere);
   document.body.classList.toggle('paused', data.paused);
@@ -82,7 +101,6 @@ function renderDarkMode(data: DarkModeData): void {
     el.darkSiteRow.hidden = true;
     el.darkResetBtn.hidden = true;
     el.darkModeRow.hidden = true;
-    el.darkAutoNote.hidden = true;
     el.darkUpsell.hidden = false;
     el.darkBuyBtn.disabled = !data.license.configured && !data.license.unpacked;
     el.darkRestoreBtn.hidden = false;
@@ -116,7 +134,6 @@ function renderDarkMode(data: DarkModeData): void {
   if (data.restricted) {
     el.darkSiteRow.hidden = true;
     el.darkResetBtn.hidden = true;
-    el.darkAutoNote.hidden = true;
     el.darkHint.hidden = false;
     el.darkHint.textContent =
       'Not available on Chrome Web Store pages — Chrome blocks extensions from modifying these.';
@@ -135,7 +152,6 @@ function renderDarkMode(data: DarkModeData): void {
   }
   // Show the reset link only when this page overrides the global default.
   el.darkResetBtn.hidden = !(hasHost && data.override != null);
-  el.darkAutoNote.hidden = !(hasHost && data.autoOff && data.override === 'off');
 }
 
 let current: PopupData | null = null;
@@ -157,6 +173,19 @@ async function refresh(): Promise<void> {
   }
 }
 
+// Allowlist and pause changes only affect requests made from now on: the page in front of the
+// user keeps whatever was already blocked (or already loaded). Prompt rather than reloading
+// automatically — a silent reload would discard half-written form input.
+function promptReload(): void {
+  el.reloadNote.hidden = false;
+}
+
+el.reloadBtn.addEventListener('click', async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (tab?.id != null) await chrome.tabs.reload(tab.id);
+  window.close();
+});
+
 el.siteToggle.addEventListener('change', async () => {
   if (!current?.hostname) return;
   const data = (await send({
@@ -166,12 +195,14 @@ el.siteToggle.addEventListener('change', async () => {
   })) as PopupData;
   current = data;
   render(data);
+  promptReload();
 });
 
 el.pauseToggle.addEventListener('change', async () => {
   const data = (await send({ type: 'popup:setPaused', paused: el.pauseToggle.checked })) as PopupData;
   current = data;
   render(data);
+  promptReload();
 });
 
 async function saveYoutubeOptions(): Promise<void> {

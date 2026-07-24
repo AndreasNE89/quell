@@ -155,7 +155,13 @@ export function isPublicSuffixDomain(host) {
   if (MULTI_TENANT_SUFFIXES.has(lower)) return true;
   const parts = lower.split('.').filter(Boolean);
   if (parts.length <= 1) return true;
-  if (parts.length === 2 && MULTI_TLD_SECONDS.has(parts[0])) return true;
+  // `co.uk`, `com.au`, `go.jp`, `ne.kr` — these seconds are only registry labels under a
+  // ccTLD. Requiring a 2-letter TLD keeps ordinary domains that happen to start with one
+  // of them (`go.com`, `ne.com`) out: those are real sites, and treating them as suffixes
+  // silently deletes the domain scope of any exception written against them.
+  if (parts.length === 2 && MULTI_TLD_SECONDS.has(parts[0]) && /^[a-z]{2}$/.test(parts[1])) {
+    return true;
+  }
   return false;
 }
 
@@ -261,6 +267,69 @@ export function isUniversallyMatchingRegexFilter(regexFilter) {
   if (body.includes('|')) {
     const alts = body.split('|');
     if (alts.some((a) => /^(?:\.\*|\.\+|\.\*\?|\.\{\d*,\d*\}\??)$/.test(a))) return true;
+  }
+  return false;
+}
+
+/**
+ * Strip regex syntax from a `regexFilter`, leaving only the literal characters.
+ * Character classes, quantifiers, groups, anchors and class escapes (`\w`, `\d`, …)
+ * become spaces; escaped literals (`\.`, `\/`) keep their character.
+ */
+export function regexFilterLiteralCore(pattern) {
+  let out = '';
+  for (let i = 0; i < pattern.length; i++) {
+    const c = pattern[i];
+    if (c === '\\') {
+      const n = pattern[i + 1];
+      i++;
+      if (!n) break;
+      // Class shorthands, anchors, backrefs and numeric escapes match text we cannot see.
+      out += /[dDwWsSbBnrtvfkpPux0-9]/.test(n) ? ' ' : n;
+      continue;
+    }
+    if (c === '[') {
+      i++;
+      for (; i < pattern.length; i++) {
+        if (pattern[i] === '\\') {
+          i++;
+          continue;
+        }
+        if (pattern[i] === ']') break;
+      }
+      out += ' ';
+      continue;
+    }
+    if (c === '{') {
+      while (i < pattern.length && pattern[i] !== '}') i++;
+      out += ' ';
+      continue;
+    }
+    out += '()|^$*+?.'.includes(c) ? ' ' : c;
+    }
+  return out;
+}
+
+/**
+ * Structural postcondition for exception (`@@`) rules that carry a `regexFilter`.
+ *
+ * `isUniversallyMatchingRegexFilter` enumerates known match-all *shapes*, and has had to be
+ * extended seven times (PRs #17→#28) as new encodings of "match everything" showed up in
+ * upstream lists. This is the shape-independent invariant behind all of them: a regex that
+ * contains no literal text beyond scheme boilerplate cannot possibly be scoped to anything,
+ * so it must never become an `allow` / `allowAllRequests`. `^(.*)$`, `(?:.*)`, `^[^ ]+` and
+ * `^https?:\/\/\w` all fail this check without needing to be listed anywhere.
+ */
+export function regexFilterHasLiteralScope(pattern) {
+  if (!pattern) return false;
+  const tokens = regexFilterLiteralCore(pattern)
+    .split(/[^a-z0-9.-]+/i)
+    .map((t) => t.replace(/^[.-]+|[.-]+$/g, '').toLowerCase())
+    .filter((t) => t && t !== 'http' && t !== 'https' && t !== 'www');
+  for (const t of tokens) {
+    // A bare public suffix (`*.com`) is TLD-wide, not scope.
+    if (t.includes('.') && isPublicSuffixDomain(t)) continue;
+    if (t.length >= 3) return true;
   }
   return false;
 }
@@ -520,6 +589,14 @@ export function toDnrRule(f) {
     // and rewrite the condition (under-match is safe; public-suffix-only → skip).
     const scopedInit = stripPublicSuffixDomains(initDomains);
     const scopedReq = stripPublicSuffixDomains(reqDomains);
+    // Narrowing an exception is safe; silently *removing* its only scope is not. Deleting a
+    // suffix-only list turns `@@$script,domain=com` into an unscoped global script allow —
+    // the exact outcome these guards exist to prevent. Remember that the scope was destroyed
+    // so the emit guards below can refuse it; a rule that still has other scope (a real
+    // `from=` host, a scoped urlFilter) keeps emitting as before.
+    const scopeWasStripped =
+      (initDomains.length > 0 && scopedInit.length === 0) ||
+      (reqDomains.length > 0 && scopedReq.length === 0);
     if (scopedInit.length !== initDomains.length) {
       if (scopedInit.length) condition.initiatorDomains = scopedInit;
       else delete condition.initiatorDomains;
@@ -540,7 +617,10 @@ export function toDnrRule(f) {
         !isUniversallyMatchingUrlFilter(condition.urlFilter) &&
         !urlAnchorIsSuffix) ||
       (condition.regexFilter &&
-        !isUniversallyMatchingRegexFilter(condition.regexFilter));
+        !isUniversallyMatchingRegexFilter(condition.regexFilter) &&
+        // Shape enumeration above catches known match-all encodings; this catches the rest
+        // by requiring the regex to contain some literal text it is actually scoped to.
+        regexFilterHasLiteralScope(condition.regexFilter));
     const hasAnyUrlConstraint = !!(condition.urlFilter || condition.regexFilter);
 
     if (rt.includes('main_frame')) {
@@ -570,7 +650,9 @@ export function toDnrRule(f) {
     // urlFilter/regexFilter with no real host scope (`@@|http*`, `@@/.*/`, …)
     // disables network blocking globally — skip those. Type-only allows (no URL
     // constraint) still emit.
-    if (hasAnyUrlConstraint && !hasScopedUrl && !hasDomainScope) {
+    // `scopeWasStripped` closes the type-only hole: with no URL constraint at all this guard
+    // used to fall through, so `@@$script,domain=com` emitted a global allow for every script.
+    if ((hasAnyUrlConstraint || scopeWasStripped) && !hasScopedUrl && !hasDomainScope) {
       return { skip: 'too-broad-allow' };
     }
     return {

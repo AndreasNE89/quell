@@ -493,28 +493,37 @@ function hookXhrTextTransform(transform: (url: string, body: string) => string):
     return open.call(this, method, url as string, async ?? true, username, password);
   };
   proto.send = function (this: XMLHttpRequest, body?: Document | XMLHttpRequestBodyInit | null) {
-    this.addEventListener(
-      'readystatechange',
-      () => {
-        if (this.readyState !== 4) return;
+    // An XHR object can be reused across open()/send() cycles. Any override left by the
+    // previous response shadows the browser's own accessor, so without this the next cycle
+    // would read (and re-transform) last cycle's rewritten body instead of the fresh one.
+    delete (this as unknown as { responseText?: unknown }).responseText;
+    delete (this as unknown as { response?: unknown }).response;
+    // NOT `{ once: true }`: an async XHR fires readystatechange at 2 (HEADERS_RECEIVED) and 3
+    // (LOADING) before 4 (DONE), so `once` would discard the listener on the first non-DONE
+    // event and the transform would never run. Unhook by hand once DONE is reached instead.
+    const onDone = (): void => {
+      if (this.readyState !== 4) return;
+      this.removeEventListener('readystatechange', onDone);
+      try {
+        const url = (this as unknown as { __quellUrl?: string }).__quellUrl || '';
+        const raw = this.responseText;
+        if (typeof raw !== 'string' || !raw) return;
+        const next = transform(url, raw);
+        if (next === raw) return;
+        // configurable: an XHR object can be reused across open()/send() cycles; without this
+        // the second response would stay pinned to the first transformed body and the redefine
+        // would throw into the silent catch below.
+        Object.defineProperty(this, 'responseText', { get: () => next, configurable: true });
         try {
-          const url = (this as unknown as { __quellUrl?: string }).__quellUrl || '';
-          const raw = this.responseText;
-          if (typeof raw !== 'string' || !raw) return;
-          const next = transform(url, raw);
-          if (next === raw) return;
-          Object.defineProperty(this, 'responseText', { get: () => next });
-          try {
-            Object.defineProperty(this, 'response', { get: () => next });
-          } catch {
-            /* ignore */
-          }
+          Object.defineProperty(this, 'response', { get: () => next, configurable: true });
         } catch {
           /* ignore */
         }
-      },
-      { once: true },
-    );
+      } catch {
+        /* ignore */
+      }
+    };
+    this.addEventListener('readystatechange', onDone);
     return send.call(this, body as never);
   };
 }
@@ -851,4 +860,16 @@ export function installYoutubeEarlyHooks(): void {
     }
     return transform(url, body);
   });
+}
+
+/** Every accepted scriptlet name (canonical + uBO short forms). Used by the compile-time
+ *  drift guard in test/scriptlets.test.mjs so the packaged filter never silently diverges. */
+export function scriptletAliasNames(): string[] {
+  return Object.keys(ALIASES);
+}
+
+/** True when this name (alias or canonical) maps to a handler that actually runs. */
+export function scriptletIsImplemented(name: string): boolean {
+  const canonical = ALIASES[String(name ?? '').trim()];
+  return !!canonical && !!SCRIPTLETS[canonical];
 }

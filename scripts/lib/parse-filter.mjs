@@ -268,7 +268,13 @@ function parseNetwork(line) {
           options.badfilter = true;
           break;
         case 'all':
-          // matches all resource types — leave resourceTypes empty (DNR default = all)
+          // uBO's `$all` means every type INCLUDING the top-level document. DNR's default when
+          // resourceTypes is omitted is every type EXCEPT main_frame, so the types must be
+          // listed explicitly or `$all` never blocks a navigation. ubo-badware ships 1368 of
+          // these (phishing/malware hosts) and is enabled by default.
+          for (const t of ALL_RESOURCE_TYPES) {
+            if (!options.resourceTypes.includes(t)) options.resourceTypes.push(t);
+          }
           break;
         case 'reason':
           // uBO strict-block page metadata only — ignore so the network rule still emits.
@@ -310,6 +316,13 @@ function parseNetwork(line) {
           unsupported.push(token);
       }
     }
+  }
+
+  // A typeless `$removeparam` must strip the param from the top-level URL too. Same DNR
+  // default-excludes-main_frame trap as `$all` above — without this every $removeparam rule
+  // is inert for the one request type users actually see in the address bar.
+  if (options.removeParams.length && !options.resourceTypes.length) {
+    options.resourceTypes.push(...ALL_RESOURCE_TYPES);
   }
 
   return {

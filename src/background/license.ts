@@ -13,6 +13,23 @@ export type LicensePaidListener = (license: LicenseState) => void | Promise<void
 let paidListener: LicensePaidListener | null = null;
 let backgroundStarted = false;
 
+/**
+ * Serializes every read-modify-write of the license blob.
+ *
+ * `refreshLicense` reads the cache, awaits a network round trip, then writes. Without a lock
+ * an ExtPay `onPaid` callback that lands mid-flight is overwritten by the in-flight refresh's
+ * stale `paid: false` — the customer pays, dark mode unlocks, then silently re-locks.
+ */
+let licenseChain: Promise<unknown> = Promise.resolve();
+function withLicenseLock<T>(fn: () => Promise<T>): Promise<T> {
+  const next = licenseChain.then(fn, fn);
+  licenseChain = next.then(
+    () => undefined,
+    () => undefined,
+  );
+  return next;
+}
+
 /** Cached from chrome.management.getSelf(); null until probeInstallEnvironment(). */
 let runtimeInstallType: string | null = null;
 
@@ -63,8 +80,14 @@ export function isUnpackedInstall(): boolean {
   return true;
 }
 
+// One instance for the life of the worker. ExtPay tracks the paid transition on the instance
+// it polls, so a throwaway `ExtPay(...)` created for a getUser() call can consume the
+// false->true edge and the onPaid listener registered in initLicense never fires — the
+// customer pays and nothing happens until they find the toggle themselves.
+let extPayInstance: ReturnType<typeof ExtPay> | null = null;
 function getExtPay() {
-  return ExtPay(EXTPAY_EXTENSION_ID);
+  if (!extPayInstance) extPayInstance = ExtPay(EXTPAY_EXTENSION_ID);
+  return extPayInstance;
 }
 
 /** Call once from the service worker. Registers ExtPay background + onPaid when configured. */
@@ -83,7 +106,7 @@ export function initLicense(onPaidUnlocked: LicensePaidListener): void {
           verifiedAt: Date.now(),
           email: user.email ?? undefined,
         };
-        await saveLicense(next);
+        await withLicenseLock(() => saveLicense(next));
         if (paidListener) await paidListener(next);
       })();
     });
@@ -114,7 +137,18 @@ export function toLicenseData(license: LicenseState, nowMs: number = Date.now())
  * Returns the license state that should be used for gating.
  */
 export async function refreshLicense(): Promise<LicenseState> {
+  const before = await loadLicense();
+  const next = await withLicenseLock(() => refreshLicenseLocked());
+  // Restore-purchase and any refresh that observes the unlock before ExtPay's own onPaid does
+  // must still light up the paid features. The listener is idempotent (it re-syncs state), so
+  // firing here as well as from onPaid is safe.
+  if (!before.paid && next.paid && paidListener) await paidListener(next);
+  return next;
+}
+
+async function refreshLicenseLocked(): Promise<LicenseState> {
   const cached = await loadLicense();
+  const startedAt = Date.now();
 
   // Unpacked QA: don't let ExtensionPay getUser() wipe a dev-unlock license.
   if (isUnpackedInstall() && isDevUnlockLicense(cached)) {
@@ -138,6 +172,13 @@ export async function refreshLicense(): Promise<LicenseState> {
 
   try {
     const user = await getExtPay().getUser();
+    // A purchase that completed while this request was in flight has already been written with
+    // a newer verifiedAt. Never let this response downgrade it — that is the "I paid and it
+    // locked itself again" report.
+    if (!user.paid) {
+      const now = await loadLicense();
+      if (now.paid && now.verifiedAt != null && now.verifiedAt >= startedAt) return now;
+    }
     const next: LicenseState = {
       paid: !!user.paid,
       provider: 'extensionpay',

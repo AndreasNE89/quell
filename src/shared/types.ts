@@ -134,7 +134,6 @@ export type Message =
       override: DarkModeSiteOverride | null;
     }
   /** Content script: page looks already dark — persist force-off if allowed. */
-  | { type: 'darkmode:autoSkip'; hostname: string; reason?: string }
   /** SW → content: re-apply or remove dark styles without reloading the tab. */
   | { type: 'darkmode:refresh' }
   | { type: 'license:get' }
@@ -172,6 +171,10 @@ export interface PopupData {
   blockedTotal: number;
   /** False in packaged/CWS builds where onRuleMatchedDebug is unavailable. */
   statsReliable: boolean;
+  /** Rules across the currently enabled lists — shown instead of the dead counters. */
+  activeRuleCount: number;
+  /** An allowlist entry that covers this host without being equal to it (parent domain). */
+  coveredBy: string | null;
   youtubeBlockSponsored: boolean;
   youtubeBlockShorts: boolean;
   youtubeSponsorBlock: boolean;
@@ -225,10 +228,6 @@ export interface DarkModeData {
   override: DarkModeSiteOverride | null;
   /** Chrome blocks injection on Web Store / gallery hosts — dark mode cannot apply. */
   restricted?: boolean;
-  /** True when this host’s force-off was auto-detected (site looked dark). */
-  autoOff: boolean;
-  /** All hosts marked auto-off (for options list labels). */
-  autoOffHosts: Record<string, boolean>;
   siteOverrides: Record<string, DarkModeSiteOverride>;
   license: LicenseData;
 }

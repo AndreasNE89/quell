@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>StampStack — Attributions</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --fg: #1a1a1a;
+      --muted: #555;
+      --bg: #fafafa;
+      --card: #fff;
+      --border: #e5e5e5;
+      --accent: #0d9488;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --fg: #f0f0f0;
+        --muted: #aaa;
+        --bg: #121212;
+        --card: #1e1e1e;
+        --border: #333;
+      }
+    }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      line-height: 1.6;
+    }
+    main {
+      max-width: 40rem;
+      margin: 0 auto;
+      padding: 2rem 1.25rem 4rem;
+    }
+    h1 { font-size: 1.75rem; margin: 0 0 0.25rem; }
+    .meta { color: var(--muted); font-size: 0.9rem; margin-bottom: 2rem; }
+    h2 { font-size: 1.15rem; margin-top: 2rem; }
+    a { color: var(--accent); }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.95rem; }
+    th, td { text-align: left; padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { color: var(--muted); font-weight: 600; }
+    .wrap { overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Attributions</h1>
+    <p class="meta">Third-party data and services used by StampStack.</p>
+
+    <p>
+      StampStack compiles third-party filter lists into its packaged rulesets at build time.
+      Those lists are the work of their respective projects and remain under their own
+      licenses. StampStack does not modify their intent — it translates the rules into
+      Chrome's Declarative Net Request format, dropping any rule the format cannot express.
+    </p>
+
+    <h2>Filter lists</h2>
+    <div class="wrap">
+      <table>
+        <thead>
+          <tr><th>List</th><th>Project</th><th>License</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>EasyList</td>
+            <td><a href="https://easylist.to" rel="noopener">easylist.to</a></td>
+            <td>GPLv3 / CC BY-SA 3.0</td>
+          </tr>
+          <tr>
+            <td>EasyPrivacy</td>
+            <td><a href="https://easylist.to" rel="noopener">easylist.to</a></td>
+            <td>GPLv3 / CC BY-SA 3.0</td>
+          </tr>
+          <tr>
+            <td>EasyList Cookie List</td>
+            <td><a href="https://easylist.to" rel="noopener">easylist.to</a></td>
+            <td>GPLv3 / CC BY-SA 3.0</td>
+          </tr>
+          <tr>
+            <td>uBlock Origin filters (Ads/Privacy)</td>
+            <td><a href="https://github.com/uBlockOrigin/uAssets" rel="noopener">uBlock Origin</a></td>
+            <td>GPLv3</td>
+          </tr>
+          <tr>
+            <td>uBlock Origin Badware risks</td>
+            <td><a href="https://github.com/uBlockOrigin/uAssets" rel="noopener">uBlock Origin</a></td>
+            <td>GPLv3</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2>Scriptlets and redirect resources</h2>
+    <p>
+      StampStack's scriptlet library and redirect stubs are original implementations written
+      against the behavior documented by
+      <a href="https://github.com/gorhill/uBlock/wiki/Resources-Library" rel="noopener">uBlock Origin's
+      resources library</a>; no uBO source is copied into this extension.
+    </p>
+
+    <h2>Sponsor segment data</h2>
+    <p>
+      Sponsor segment data is provided by the
+      <a href="https://sponsor.ajay.app" rel="noopener">SponsorBlock</a> community project and is
+      licensed CC BY-NC-SA 4.0. StampStack queries it only with a 4-character hash prefix of the
+      video id — never the video id or the page URL.
+    </p>
+
+    <h2>Payments</h2>
+    <p>
+      The optional one-time dark-mode purchase is processed by
+      <a href="https://extensionpay.com" rel="noopener">ExtensionPay</a> (Stripe).
+    </p>
+  </main>
+</body>
+</html>

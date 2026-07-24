@@ -55,12 +55,18 @@ let withShell = false;
 const marked = { set: new WeakSet<Element>() }; // wrapper so stop() can swap in a fresh WeakSet
 const saved = new WeakMap<Element, SavedProp[]>();
 const registry = new Set<WeakRef<Element>>(); // every element we actually overrode
+// One ref per element, reused across reprocess cycles. Without this a long-lived element on an
+// SPA that flips classes repeatedly adds a fresh WeakRef on every re-apply, and none of them
+// are collectable while the element is alive — the Set grows for the life of the page.
+const refFor = new WeakMap<Element, WeakRef<Element>>();
 const cleanup = new FinalizationRegistry<WeakRef<Element>>((ref) => registry.delete(ref));
 // Elements whose colors may have changed (class/style flipped on them or an ancestor) and must
 // be rolled back + recomputed. Rollback happens lazily inside the drain, never in the observer.
 const needsReprocess = new WeakSet<Element>();
 
 const pending = new Set<Element>();
+// Subtree-reprocess roots, expanded in the drain rather than in the observer callback.
+const pendingRoots = new Set<Element>();
 let drainScheduled = false;
 let initialStormDone = false;
 
@@ -211,9 +217,13 @@ function applyPlan(plan: Plan): void {
   }
   if (saves.length && !saved.has(el)) {
     saved.set(el, saves);
-    const ref = new WeakRef<Element>(el);
+    let ref = refFor.get(el);
+    if (!ref) {
+      ref = new WeakRef<Element>(el);
+      refFor.set(el, ref);
+      cleanup.register(el, ref);
+    }
     registry.add(ref);
-    cleanup.register(el, ref);
   }
 }
 
@@ -256,7 +266,8 @@ function enqueue(els: Iterable<Element>): void {
 }
 
 function scheduleDrain(): void {
-  if (drainScheduled || !active || pending.size === 0) return;
+  if (drainScheduled || !active) return;
+  if (pending.size === 0 && pendingRoots.size === 0) return;
   drainScheduled = true;
   const gen = engineGen;
   const cb = (): void => {
@@ -269,7 +280,30 @@ function scheduleDrain(): void {
   else requestAnimationFrame(cb);
 }
 
+/**
+ * Expand subtree-reprocess roots queued by the observer.
+ *
+ * The walk used to run synchronously inside the MutationObserver callback, so a site that
+ * assigns `document.documentElement.className` from a scroll handler (an unconditional
+ * assignment emits a record on every event) queued `querySelectorAll('*')` over the whole
+ * document per scroll tick. Deferring to the drain lets a burst of records collapse into one
+ * walk, and dropping roots contained by another root avoids re-walking the same nodes.
+ */
+function expandPendingRoots(): void {
+  if (!pendingRoots.size) return;
+  const roots = [...pendingRoots];
+  pendingRoots.clear();
+  const out: Element[] = [];
+  for (const root of roots) {
+    if (!root.isConnected) continue;
+    if (roots.some((other) => other !== root && other.contains(root))) continue;
+    collectForReprocess(root, out);
+  }
+  for (const el of out) pending.add(el);
+}
+
 function drain(): void {
+  expandPendingRoots();
   const batch: Element[] = [];
   for (const el of pending) {
     batch.push(el);
@@ -297,7 +331,7 @@ function drain(): void {
   // …then WRITE phase.
   for (const plan of plans) applyPlan(plan);
 
-  if (pending.size > 0) {
+  if (pending.size > 0 || pendingRoots.size > 0) {
     scheduleDrain();
   } else if (!initialStormDone) {
     // Initial styling storm is over — stop suppressing transitions (which would otherwise
@@ -366,6 +400,9 @@ function restoreElement(el: Element): void {
       else style.removeProperty(s.prop);
     }
     saved.delete(el);
+    // Nothing of ours is on the element any more, so it does not belong in the restore set.
+    const ref = refFor.get(el);
+    if (ref) registry.delete(ref);
   }
 }
 
@@ -391,7 +428,7 @@ function onMutations(records: MutationRecord[]): void {
         el === document.documentElement ||
         el === document.body ||
         (r.attributeName === 'style' && el.getAttribute('style')?.includes('--') === true);
-      if (subtree) collectForReprocess(el, added);
+      if (subtree) pendingRoots.add(el); // walked in the drain, not here — see expandPendingRoots
       else {
         needsReprocess.add(el);
         added.push(el);
@@ -399,6 +436,7 @@ function onMutations(records: MutationRecord[]): void {
     }
   }
   if (added.length) enqueue(added);
+  else if (pendingRoots.size) scheduleDrain();
 }
 
 let lastHover = 0;
@@ -498,6 +536,7 @@ export function stopDynamicDark(): void {
   observer = null;
   document.removeEventListener('mouseover', onHover, true);
   pending.clear();
+  pendingRoots.clear();
   drainScheduled = false;
   document.querySelector(`style[data-stampstack="${SHELL_STYLE}"]`)?.remove();
 

@@ -9,7 +9,7 @@ Breakage from CWS reviews → triage with [`SUPPORT_TRIAGE.md`](./SUPPORT_TRIAGE
 | Site | Notes |
 |------|--------|
 | Wikipedia | Article pages; media cancels correctly |
-| Hacker News | Dense text; already-dark auto-off rarely triggers |
+| Hacker News | Dense text; check contrast on the beige canvas |
 | GitHub | Repo / issues; watch code blocks for contrast |
 | example.com | Baseline smoke host |
 
@@ -21,11 +21,11 @@ Breakage from CWS reviews → triage with [`SUPPORT_TRIAGE.md`](./SUPPORT_TRIAGE
 | CNN / Forbes article | Ads may leave light boxes when blocking is partial |
 | weather.com | CMP overlays + leftover iframes can look wrong under dark |
 
-## Known awkward / expected auto-off
+## Known awkward cases
 
 | Situation | Behavior |
 |-----------|----------|
-| Site already ships dark theme | Smart detector force-off; user can Force on from popup |
+| Site already ships dark theme | Engine leaves already-dark surfaces alone (per-surface luminance check). Nothing is persisted — use **off on this page** if it still looks wrong |
 | Chrome Web Store / Web Store pages | Restricted — Chrome blocks page modification |
 | PDF / non-HTML viewers | Out of scope |
 
@@ -34,7 +34,7 @@ Breakage from CWS reviews → triage with [`SUPPORT_TRIAGE.md`](./SUPPORT_TRIAGE
 1. Enable dark globally → open Wikipedia → readable.
 2. Toggle **off on this page** → page restores light without reload loop.
 3. **Reset to global default** → follows global again.
-4. Open a site that already looks dark → auto-off note appears; Force on works.
+4. Open a site that already ships a dark theme → it does not get inverted into a light page.
 5. **Pause** StampStack ad blocking → dark mode still applies.
 6. **Allowlist** the current site for ads → dark mode still applies.
 7. Unpaid popup: Buy + Restore visible; hint mentions receipt email; **Dev unlock** absent in store builds.

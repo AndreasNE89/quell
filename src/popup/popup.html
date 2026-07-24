@@ -28,7 +28,12 @@
       </span>
     </label>
 
-    <div class="stats">
+    <p class="reload-note" id="reloadNote" hidden>
+      <span>Reload the page to apply this.</span>
+      <button type="button" id="reloadBtn" class="link-btn">Reload</button>
+    </p>
+
+    <div class="stats" id="stats">
       <div class="stat">
         <div class="stat-num" id="tabBlocked">0</div>
         <div class="stat-label">blocked here</div>
@@ -38,6 +43,10 @@
         <div class="stat-label">blocked total</div>
       </div>
     </div>
+
+    <!-- Shown instead of .stats in store builds, where onRuleMatchedDebug does not exist and
+         both counters would read "—" / "n/a". -->
+    <p class="rule-count" id="ruleCount" hidden></p>
 
     <label class="switch-row subtle">
       <span>Pause StampStack everywhere</span>
@@ -114,10 +123,6 @@
         </button>
       </div>
 
-      <p class="dark-hint" id="darkAutoNote" hidden>
-        This site already looks dark, so dark mode stays off here — inverting it would make
-        it light.
-      </p>
       <p class="dark-hint" id="darkHint" hidden></p>
     </section>
 
