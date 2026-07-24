@@ -154,6 +154,17 @@ body {
   opacity: 0.55;
   cursor: not-allowed;
 }
+.btn-buy.btn-secondary {
+  margin-top: 6px;
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  font-weight: 500;
+}
+.btn-buy.btn-secondary:hover {
+  filter: none;
+  border-color: var(--muted);
+}
 .btn-buy.btn-dev {
   margin-top: 6px;
   background: transparent;

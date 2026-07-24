@@ -1,7 +1,7 @@
 # StampStack Privacy Policy
 
 **Effective date:** July 13, 2026  
-**Last updated:** July 15, 2026
+**Last updated:** July 24, 2026
 
 **Host this HTML for the Chrome Web Store:** publish [`privacy-policy.html`](./privacy-policy.html) at a stable HTTPS URL (GitHub Pages, your site, etc.) and paste that URL into the Store’s Privacy practices form.
 
@@ -23,6 +23,7 @@ StampStack is a browser extension that blocks ads and trackers using Declarative
 | Settings & allowlist | Stored locally via `chrome.storage`. Not uploaded. |
 | Statistics | On-device only when available. Not synced to a StampStack server. |
 | Optional purchase | If you buy dark mode, ExtensionPay / Stripe process payment and may collect an email for receipt and restore. StampStack caches a local paid flag; **browsing history and allowlist are not sent** to the payment provider. |
+| Optional SponsorBlock | If you enable **Auto-skip sponsor segments**, StampStack requests segment schedules from the community SponsorBlock API (`sponsor.ajay.app`) using the YouTube **video id** only. Turn the toggle off to stop those requests. |
 
 ## Permissions
 
@@ -39,6 +40,8 @@ StampStack is a browser extension that blocks ads and trackers using Declarative
 Filter lists may be downloaded from their publishers when you update lists. StampStack does not send browsing history to list publishers as part of filtering.
 
 **Optional payments:** Dark mode unlock uses [ExtensionPay](https://extensionpay.com) (Stripe under the hood). Contacting ExtensionPay happens only when you open checkout, restore a purchase, or the extension refreshes license status. We do not sell or share browsing data.
+
+**Optional SponsorBlock:** When enabled, segment lookups go to the [SponsorBlock](https://sponsor.ajay.app) community service (video id only). This is off unless you turn on the YouTube skip toggle.
 
 ## Contact
 

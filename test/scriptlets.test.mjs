@@ -21,6 +21,8 @@ before(async () => {
           parsePrunePaths,
           pruneObject,
           stripYoutubeAdKeys,
+          scrubInlineYoutubePlayerResponse,
+          tickYoutubeAdSkipAssist,
           abortCurrentInlineScript,
           runScriptlet,
           urlMatchesNeedle,
@@ -74,14 +76,62 @@ test('stripYoutubeAdKeys clears nested player ad fields to empty arrays', () => 
   const obj = {
     videoDetails: { title: 'ok' },
     adPlacements: [{ id: 'a' }],
-    nested: { playerAds: [{ x: 1 }], adSlots: [1], ok: true },
+    nested: { playerAds: [{ x: 1 }], adSlots: [1], adParams: { z: 1 }, ok: true },
   };
   mod.stripYoutubeAdKeys(obj);
   assert.deepEqual(obj.adPlacements, []);
   assert.deepEqual(obj.nested.playerAds, []);
   assert.deepEqual(obj.nested.adSlots, []);
+  assert.equal(obj.nested.adParams, undefined);
   assert.equal(obj.nested.ok, true);
   assert.equal(obj.videoDetails.title, 'ok');
+});
+
+test('should scrub inline ytInitialPlayerResponse without replacing the object', () => {
+  const g = globalThis;
+  const prev = g.ytInitialPlayerResponse;
+  const blob = {
+    videoDetails: { title: 'watch' },
+    adPlacements: [{ renderer: {} }],
+    adSlots: [1],
+  };
+  g.ytInitialPlayerResponse = blob;
+  try {
+    mod.scrubInlineYoutubePlayerResponse();
+    assert.equal(g.ytInitialPlayerResponse, blob);
+    assert.deepEqual(blob.adPlacements, []);
+    assert.deepEqual(blob.adSlots, []);
+    assert.equal(blob.videoDetails.title, 'watch');
+  } finally {
+    if (prev === undefined) delete g.ytInitialPlayerResponse;
+    else g.ytInitialPlayerResponse = prev;
+  }
+});
+
+test('should seek video to end when html5 player is ad-showing', () => {
+  const g = globalThis;
+  const prevDoc = Object.getOwnPropertyDescriptor(g, 'document');
+  const player = {
+    classList: { contains: (c) => c === 'ad-showing' },
+  };
+  const video = { duration: 15, currentTime: 1 };
+  const doc = {
+    querySelector: (sel) => {
+      const s = String(sel);
+      if (s.includes('ytp-ad-skip') || s.includes('skip-ad')) return null;
+      if (s === '.html5-video-player') return player;
+      if (s.includes('html5-main-video') || s.includes('video-player video')) return video;
+      return null;
+    },
+  };
+  Object.defineProperty(g, 'document', { value: doc, configurable: true });
+  try {
+    mod.tickYoutubeAdSkipAssist();
+    assert.equal(video.currentTime, 15);
+  } finally {
+    if (prevDoc) Object.defineProperty(g, 'document', prevDoc);
+    else delete g.document;
+  }
 });
 
 test('urlMatchesNeedle treats path needles as literals, not broken regexes', () => {

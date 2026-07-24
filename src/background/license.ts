@@ -13,6 +13,9 @@ export type LicensePaidListener = (license: LicenseState) => void | Promise<void
 let paidListener: LicensePaidListener | null = null;
 let backgroundStarted = false;
 
+/** Cached from chrome.management.getSelf(); null until probeInstallEnvironment(). */
+let runtimeInstallType: string | null = null;
+
 export function defaultLicense(): LicenseState {
   return {
     paid: false,
@@ -33,17 +36,31 @@ export async function saveLicense(license: LicenseState): Promise<void> {
 }
 
 /**
- * Dev / unpacked build (not a `--store` Chrome Web Store build).
+ * Probe Chrome install type once at SW startup.
+ * CWS installs are `normal`; unpacked Load unpacked is `development`.
+ * getSelf() does not require the management permission.
+ */
+export async function probeInstallEnvironment(): Promise<void> {
+  try {
+    const self = await chrome.management.getSelf();
+    runtimeInstallType = self.installType;
+  } catch {
+    // Tests / odd hosts: leave null and fall back to DEV_BUILD only.
+    runtimeInstallType = null;
+  }
+}
+
+/**
+ * True only for local unpacked QA builds — never for Chrome Web Store installs.
  *
- * Uses the compile-time DEV_BUILD flag rather than `chrome.runtime.getManifest().update_url`:
- * whether getManifest() exposes `update_url` for store installs is undocumented and has been
- * reported inconsistent across Chromium versions (w3c/webextensions#400). A compile-time
- * constant is unambiguous — the dev-unlock / test-license paths simply do not evaluate to
- * true in a packaged store build, regardless of runtime browser behavior. Name kept for
- * call-site stability.
+ * Requires compile-time DEV_BUILD (from `npm run build`, not `--store`) AND, when
+ * known, Chrome installType `development`. A store zip accidentally built without
+ * `--store` still reports installType `normal`, so Dev unlock stays hidden.
  */
 export function isUnpackedInstall(): boolean {
-  return DEV_BUILD;
+  if (!DEV_BUILD) return false;
+  if (runtimeInstallType != null) return runtimeInstallType === 'development';
+  return true;
 }
 
 function getExtPay() {
@@ -141,35 +158,50 @@ export async function refreshLicense(): Promise<LicenseState> {
   }
 }
 
+function extPayMisconfiguredError(action: 'checkout' | 'restore'): string {
+  if (isUnpackedInstall()) {
+    return (
+      `ExtensionPay is not configured — cannot open ${action}. ` +
+      'Set EXTPAY_EXTENSION_ID_TRACKED (or extpay-config.local.ts), or use Dev unlock for local testing.'
+    );
+  }
+  return (
+    `Purchase ${action} is temporarily unavailable. ` +
+    'Try again later, or use Restore purchase from Options if you already paid.'
+  );
+}
+
 export async function openCheckout(): Promise<{ ok: boolean; error?: string }> {
   if (!isExtPayConfigured()) {
-    return {
-      ok: false,
-      error: 'ExtensionPay is not configured. Set EXTPAY_EXTENSION_ID or extpay-config.local.ts.',
-    };
+    return { ok: false, error: extPayMisconfiguredError('checkout') };
   }
   try {
     await getExtPay().openPaymentPage();
     return { ok: true };
   } catch (e) {
     console.error('[StampStack] openCheckout failed', e);
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    const detail = e instanceof Error ? e.message : String(e);
+    return {
+      ok: false,
+      error: `Checkout failed (${detail}). Confirm the ExtensionPay project is linked to the Chrome Web Store item.`,
+    };
   }
 }
 
 export async function openRestore(): Promise<{ ok: boolean; error?: string }> {
   if (!isExtPayConfigured()) {
-    return {
-      ok: false,
-      error: 'ExtensionPay is not configured. Set EXTPAY_EXTENSION_ID or extpay-config.local.ts.',
-    };
+    return { ok: false, error: extPayMisconfiguredError('restore') };
   }
   try {
     await getExtPay().openLoginPage();
     return { ok: true };
   } catch (e) {
     console.error('[StampStack] openRestore failed', e);
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    const detail = e instanceof Error ? e.message : String(e);
+    return {
+      ok: false,
+      error: `Restore failed (${detail}). Use the email from your ExtensionPay / Stripe receipt.`,
+    };
   }
 }
 

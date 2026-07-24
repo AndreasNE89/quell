@@ -52,7 +52,7 @@
 <body>
   <main>
     <h1>StampStack Privacy Policy</h1>
-    <p class="meta">Effective date: July 13, 2026 · Last updated: July 15, 2026</p>
+    <p class="meta">Effective date: July 13, 2026 · Last updated: July 24, 2026</p>
 
     <div class="box">
       <strong>Short version:</strong> StampStack does not collect, sell, or transmit your browsing history.
@@ -79,6 +79,7 @@
       <li><strong>Settings &amp; allowlist:</strong> Stored locally via <code>chrome.storage</code> on your device. Not uploaded.</li>
       <li><strong>Statistics:</strong> Any on-device counters (e.g. badge hints) stay local when available. StampStack does not sync them to a server.</li>
       <li><strong>Optional purchase:</strong> If you buy dark mode, ExtensionPay / Stripe process payment and may collect an email for receipt and restore. StampStack caches a local paid flag; <strong>browsing history and allowlist are not sent</strong> to the payment provider.</li>
+      <li><strong>Optional SponsorBlock:</strong> If you enable Auto-skip sponsor segments, StampStack requests segment schedules from the community SponsorBlock API (<code>sponsor.ajay.app</code>) using the YouTube <strong>video id</strong> only. Turn the toggle off to stop those requests.</li>
     </ul>
 
     <h2>Permissions</h2>
@@ -102,6 +103,11 @@
       <a href="https://extensionpay.com" rel="noopener">ExtensionPay</a> (Stripe under the hood).
       Contacting ExtensionPay happens only when you open checkout, restore a purchase, or the
       extension refreshes license status. We do not sell or share browsing data.
+    </p>
+    <p>
+      <strong>Optional SponsorBlock:</strong> When enabled, segment lookups go to the
+      <a href="https://sponsor.ajay.app" rel="noopener">SponsorBlock</a> community service
+      (video id only). This is off unless you turn on the YouTube skip toggle.
     </p>
 
     <h2>Children</h2>

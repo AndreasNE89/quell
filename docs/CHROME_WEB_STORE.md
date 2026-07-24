@@ -2,13 +2,16 @@
 
 Use this when uploading StampStack to the [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole).
 
+**Biweekly cadence (ExtPay + obfuscation + version bump):** see [RELEASE_CHECKLIST.md](./RELEASE_CHECKLIST.md).
+
 ## Done in-repo (no dashboard login)
 
 | Item | Status / path |
 |------|----------------|
-| Version `1.1.0` | `package.json` + `src/manifest.json` (synced on build) |
-| Store zip | `npm run package` → `release/stampstack-1.1.0.zip` |
-| Store build flags | No `declarativeNetRequestFeedback`, no `tabs` |
+| Version | `package.json` (synced to `manifest.json` on build) |
+| Store zip | `npm run package` → `release/stampstack-<version>.zip` |
+| Store build flags | No `declarativeNetRequestFeedback`, no `tabs`; `DEV_BUILD=false` |
+| ExtPay smoke | `npm run smoke-extpay` |
 | Listing copy | [store/LISTING.md](../store/LISTING.md) |
 | Permission justifications | [store/PERMISSIONS.md](../store/PERMISSIONS.md) |
 | Privacy policy source | [docs/privacy-policy.html](./privacy-policy.html) (+ `.md`) |
@@ -21,7 +24,8 @@ Use this when uploading StampStack to the [Chrome Web Store Developer Dashboard]
 1. Bump `version` in `package.json` when releasing a new version (manifest is synced on build).
 2. Confirm filter lists are current: `npm run update-lists` (or let `npm run package` do it).
 3. Run tests: `npm test` and `npm run typecheck`.
-4. Build store zip: `npm run package` → `release/stampstack-<version>.zip`.
+4. Run `npm run smoke-extpay`.
+5. Build store zip: `npm run package` → `release/stampstack-<version>.zip`.
 
 ## Package validation (automatic in `npm run package`)
 
@@ -29,7 +33,9 @@ Use this when uploading StampStack to the [Chrome Web Store Developer Dashboard]
 - At least one DNR ruleset
 - Icons including 128×128
 - `privacy.html` bundled
+- Obfuscation scan (`atob` / long base64)
 - **Fails** if `declarativeNetRequestFeedback` or `tabs` is present
+- **Fails** if ExtensionPay id is still a placeholder
 
 ---
 

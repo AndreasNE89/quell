@@ -52,6 +52,7 @@ import {
   devUnlock,
   ensureUnpackedTestLicense,
   isUnpackedInstall,
+  probeInstallEnvironment,
   toLicenseData,
 } from './license.js';
 import {
@@ -423,6 +424,9 @@ function withSettings<T>(fn: (s: Settings) => Promise<T>): Promise<T> {
 // ---------------------------------------------------------------------------
 
 async function init(): Promise<void> {
+  // Must run before license.unpacked / Dev unlock decisions.
+  await probeInstallEnvironment();
+
   // Refresh provider state first; then ensure unpacked dev license (ExtPay may report unpaid).
   let license = await refreshLicense();
   license = await ensureUnpackedTestLicense();

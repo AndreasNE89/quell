@@ -29,6 +29,7 @@ const el = {
   darkUpsell: $('darkUpsell'),
   darkPrice: $('darkPrice'),
   darkBuyBtn: $<HTMLButtonElement>('darkBuyBtn'),
+  darkRestoreBtn: $<HTMLButtonElement>('darkRestoreBtn'),
   darkDevUnlockBtn: $<HTMLButtonElement>('darkDevUnlockBtn'),
   darkHint: $('darkHint'),
   darkAutoNote: $('darkAutoNote'),
@@ -83,7 +84,9 @@ function renderDarkMode(data: DarkModeData): void {
     el.darkModeRow.hidden = true;
     el.darkAutoNote.hidden = true;
     el.darkUpsell.hidden = false;
-    el.darkBuyBtn.disabled = false;
+    el.darkBuyBtn.disabled = !data.license.configured && !data.license.unpacked;
+    el.darkRestoreBtn.hidden = false;
+    el.darkRestoreBtn.disabled = !data.license.configured;
     el.darkDevUnlockBtn.hidden = !data.license.unpacked;
     if (data.license.unpacked) {
       el.darkHint.hidden = false;
@@ -92,15 +95,19 @@ function renderDarkMode(data: DarkModeData): void {
         : 'ExtensionPay not configured — use Dev unlock here, or Options.';
     } else if (!data.license.configured) {
       el.darkHint.hidden = false;
-      el.darkHint.textContent = 'Set ExtensionPay id in Options / extpay-config before buying.';
+      el.darkHint.textContent = 'Purchases unavailable in this build — update StampStack from the store.';
     } else {
-      el.darkHint.hidden = true;
+      // Production unpaid: nudge restore so reinstalls convert without support tickets.
+      el.darkHint.hidden = false;
+      el.darkHint.textContent =
+        'Already paid? Restore purchase with the email from your receipt. Ad blocking stays free.';
     }
     return;
   }
 
   // Paid: global (all-sites) default toggle is always shown.
   el.darkUpsell.hidden = true;
+  el.darkRestoreBtn.hidden = true;
   el.darkDevUnlockBtn.hidden = true;
   el.darkModeRow.hidden = false;
   el.darkModeToggle.checked = data.enabled;
@@ -210,9 +217,21 @@ el.darkBuyBtn.addEventListener('click', async () => {
       r?.error ??
       (darkCurrent?.license.unpacked
         ? 'Checkout unavailable — use Dev unlock or set ExtensionPay id in Options.'
-        : 'Checkout unavailable. Configure ExtensionPay in Options.');
+        : 'Checkout unavailable. Try Restore purchase, or open Options.');
   }
   el.darkBuyBtn.disabled = false;
+  void refresh();
+});
+
+el.darkRestoreBtn.addEventListener('click', async () => {
+  el.darkRestoreBtn.disabled = true;
+  const r = (await send({ type: 'license:openRestore' })) as { ok: boolean; error?: string };
+  if (!r?.ok) {
+    el.darkHint.hidden = false;
+    el.darkHint.textContent =
+      r?.error ?? 'Restore unavailable. Open Options → Restore purchase.';
+  }
+  el.darkRestoreBtn.disabled = !darkCurrent?.license.configured;
   void refresh();
 });
 

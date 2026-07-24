@@ -1,4 +1,6 @@
-# Chrome Web Store upload checklist (StampStack 1.1.0)
+# Chrome Web Store upload checklist (first publish)
+
+For recurring biweekly releases, prefer **[docs/RELEASE_CHECKLIST.md](../docs/RELEASE_CHECKLIST.md)** (version bump, ExtPay, obfuscation scan, reviewer notes).
 
 Use your **normal Chrome** at: https://chrome.google.com/webstore/devconsole
 

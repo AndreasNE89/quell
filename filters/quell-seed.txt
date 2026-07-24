@@ -145,32 +145,55 @@ weather.com##.ad-wrapper
 weather.com##.AdUnit
 weather.com##.sp_bx
 weather.com##iframe[id*="google_ads"]
+weather.com##iframe[id^="google_ads_iframe"]
 weather.com##iframe[src*="safeframe"]
 weather.com##iframe[src*="doubleclick"]
+weather.com##iframe[src*="googlesyndication"]
 weather.com##div[class*="Ads"]
 weather.com##div[data-testid*="Ad"]
+weather.com##div[class*="adWrapper"]
+weather.com##div[id*="WxuAd"]
+weather.com##.wx-adWrapper
+weather.com##iframe[src*="taboola"]
+weather.com##div[id*="taboola"]
+weather.com##div[class*="tbl-"]
+weather.com##aside[data-testid*="Ad"]
+weather.com##div[data-testid*="AdsCard"]
+weather.com##div[class*="AdPlaceholder"]
 imdb.com##.ipc-ad-slot
 imdb.com##.ad-banner-click
 imdb.com##div[id^="google_ads"]
 imdb.com##iframe[id^="google_ads"]
+imdb.com##.ipc-page-section--base .rendered-ad-container
 ! Twitch overlays (native :has is fine in Chrome CSS)
 twitch.tv##.video-player__overlay .player-ad-overlay
 twitch.tv##[data-a-target="video-ad-label"]
 twitch.tv##.avp-ad-overlay
 twitch.tv##div[class*="InjectLayout"][class*="player-ad"]
+twitch.tv##[data-test-selector="sad-overlay"]
+twitch.tv##.persistent-player [aria-label*="Advertisement"]
 
 ! Google Search / SERP sponsored blocks (first-party HTML — cosmetics only)
 www.google.com##.uEierd
 www.google.com##.commercial-unit-desktop-rhs
 www.google.com##.commercial-unit-desktop-top
+www.google.com##.commercial-unit-mobile-top
+www.google.com##.commercial-unit-mobile-bottom
 www.google.com###tads
 www.google.com###tadsb
 www.google.com###bottomads
+www.google.com###tvcap
 www.google.com##div[data-text-ad="1"]
+www.google.com##div[data-text-ad]
 www.google.com##div[aria-label="Ads"]
+www.google.com##div[aria-label="Sponsored"]
+www.google.com##.cu-container
 google.com##.uEierd
 google.com###tads
 google.com###tadsb
+google.com###tvcap
+google.com##.commercial-unit-desktop-top
+google.com##.commercial-unit-desktop-rhs
 
 ! YouTube leftover UI (player pre-roll still partly first-party; see docs/AD_AUDIT.md)
 youtube.com##ytd-ad-slot-renderer
@@ -186,6 +209,15 @@ www.youtube.com##ytd-ad-slot-renderer
 www.youtube.com##ytd-display-ad-renderer
 www.youtube.com##ytd-promoted-sparkles-web-renderer
 m.youtube.com##.ad-container
+! In-player chrome leftovers (skip assist also seeks when .ad-showing)
+youtube.com,www.youtube.com,m.youtube.com##.ytp-ad-module
+youtube.com,www.youtube.com,m.youtube.com##.ytp-ad-overlay-slot
+youtube.com,www.youtube.com,m.youtube.com##.ytp-ad-text-overlay
+youtube.com,www.youtube.com##.ytp-ad-player-overlay
+youtube.com,www.youtube.com##.ytp-ad-player-overlay-layout
+youtube.com,www.youtube.com##.ytp-ad-image-overlay
+youtube.com,www.youtube.com##ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-ads"]
+youtube.com,www.youtube.com##.ytp-ad-action-interstitial
 
 ! ==========================================================================
 ! COSMETIC — procedural (need the JS engine; :has / :matches-css / etc.)
@@ -194,8 +226,15 @@ imgur.com##.Gallery-Sidebar-PostContainer:has(> a[href*="/ad/"])
 example.org##div.container:has(> .sponsored-label)
 
 ! ==========================================================================
+! NETWORK — YouTube ad media (narrow patterns; do not touch normal videoplayback)
+! ==========================================================================
+||googlevideo.com/initplayback?*oad=$domain=youtube.com|www.youtube.com|m.youtube.com|youtubekids.com|youtube-nocookie.com
+||googlevideo.com/initplayback?source=youtube&*oad=$domain=youtube.com|www.youtube.com|m.youtube.com
+||googlevideo.com/*&ctier=L&*$media,domain=youtube.com|www.youtube.com|m.youtube.com|music.youtube.com
+
+! ==========================================================================
 ! SCRIPTLETS — illustrative; YouTube player ads use scriptlets-youtube.js
-!   (fetch/XHR scrub). Avoid set-constant on ytInitial* — hangs Chromium player.
+!   (inline + fetch/XHR scrub). Avoid set-constant on ytInitial* — hangs player.
 ! ==========================================================================
 example.com##+js(set-constant, canRunAds, true)
 example.com##+js(abort-on-property-read, adblockDetector)

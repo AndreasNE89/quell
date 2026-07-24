@@ -168,20 +168,30 @@ async function loadDarkMode(): Promise<void> {
     if (data.license.email) statusText += ` · ${data.license.email}`;
     status.textContent = statusText;
     hint.textContent = data.license.configured
-      ? ''
-      : 'ExtensionPay id not set yet — using local license cache.';
+      ? 'License refreshes from ExtensionPay when online. Offline grace lasts up to 14 days.'
+      : 'Using a local license cache (ExtensionPay id missing in this build).';
   } else {
     status.textContent = 'Free — purchase required to enable';
     hint.textContent = data.license.configured
-      ? 'Checkout opens ExtensionPay / Stripe. Restore uses the email from your receipt.'
-      : 'Set EXTPAY_EXTENSION_ID in src/shared/extpay-config.ts before shipping. Unpacked: use Dev unlock.';
+      ? 'Buy opens ExtensionPay / Stripe ($2 one-time). Already paid? Restore with the email from your receipt. Ad blocking stays free either way.'
+      : data.license.unpacked
+        ? 'ExtensionPay not configured in this build. Unpacked: use Dev unlock to test dark mode.'
+        : 'Purchases unavailable in this build — update StampStack from the Chrome Web Store.';
   }
 
   buy.disabled = !data.license.configured && !data.license.unpacked;
-  if (!data.license.configured) buy.title = 'ExtensionPay not configured';
-  else buy.title = '';
+  const restore = $<HTMLButtonElement>('darkRestore');
+  restore.disabled = !data.license.configured;
+  if (!data.license.configured) {
+    buy.title = 'ExtensionPay not configured';
+    restore.title = 'ExtensionPay not configured';
+  } else {
+    buy.title = '';
+    restore.title = '';
+  }
 
-  dev.hidden = !data.license.unpacked;
+  // Store / CWS: never show. Also hide once paid (popup already does).
+  dev.hidden = !data.license.unpacked || data.paid;
   renderDarkOverrides(data);
 }
 

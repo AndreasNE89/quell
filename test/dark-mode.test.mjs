@@ -151,6 +151,18 @@ test('should force on even when global disabled', () => {
   assert.equal(r.override, 'on');
 });
 
+// resolveDarkModeForHost has no pause/allowlist inputs — paid dark mode is gated only by
+// license + enabled + per-host override (SW registers dark CSS independently of ad pause).
+test('should apply when paid+enabled regardless of unrelated blocking state', () => {
+  const r = mod.resolveDarkModeForHost({
+    paid: true,
+    enabled: true,
+    overrides: {},
+    hostname: 'wikipedia.org',
+  });
+  assert.equal(r.apply, true);
+});
+
 test('should list force-on and force-off hosts', () => {
   const overrides = { 'a.com': 'on', 'b.com': 'off', 'c.com': 'on' };
   assert.deepEqual(mod.hostsWithForceOn(overrides).sort(), ['a.com', 'c.com']);

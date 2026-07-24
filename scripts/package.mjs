@@ -95,27 +95,32 @@ function validateDist() {
 
 console.log('== StampStack store package ==');
 if (!skipLists) {
-  console.log('\n[1/3] Updating filter lists…');
+  console.log('\n[1/4] Updating filter lists…');
   run('npm', ['run', 'update-lists']);
 } else {
-  console.log('\n[1/3] Skipping list update (--skip-lists)');
+  console.log('\n[1/4] Skipping list update (--skip-lists)');
 }
 
-console.log('\n[2/3] Store build…');
+console.log('\n[2/4] Store build…');
 run('npm', ['run', 'compile-filters']);
 run('node', ['scripts/build.mjs', '--store']);
 
 const { man, rules } = validateDist();
+
+console.log('\n[3/4] Obfuscation scan…');
+run('node', ['scripts/scan-package-obfuscation.mjs']);
+
 const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
 const version = man.version || pkg.version || '0.0.0';
 mkdirSync(OUT_DIR, { recursive: true });
 const zipPath = join(OUT_DIR, `stampstack-${version}.zip`);
 
-console.log('\n[3/3] Zipping…');
+console.log('\n[4/4] Zipping…');
 const n = await zipDist(zipPath);
 const size = statSync(zipPath).size;
 console.log(`\n✓ ${zipPath}`);
 console.log(`  files≈${n}  size=${(size / 1024 / 1024).toFixed(2)} MiB  version=${version}`);
 console.log(`  rulesets=${rules.length}: ${rules.map((r) => r.id).join(', ')}`);
 console.log('\nUpload this zip in Chrome Web Store Developer Dashboard → Package.');
+console.log('Release checklist: docs/RELEASE_CHECKLIST.md');
 console.log('Follow docs/CHROME_WEB_STORE.md for listing fields and review notes.');

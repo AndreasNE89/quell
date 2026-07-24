@@ -67,21 +67,52 @@ Shipped improvements:
 
 ### Still open (YouTube)
 
-Pre-roll can still play from the **inline** `ytInitialPlayerResponse` blob before any fetch. Trapping that object (even soft in-place mutation) hung the watch page in audits. Next options to try carefully: document-start HTML rewrite, or DNR/`googlevideo` ad-media patterns without breaking `videoplayback`.
+Pre-roll can still play from the **inline** `ytInitialPlayerResponse` blob before any fetch. **Defining getters** on that object hung the watch page in audits.
 
-## Retest after improvements (2026-07-13 later)
+**2026-07-21 iteration (Track B):**
 
-Full suite again (`npm run ad-audit`). Screenshots refreshed under `docs/ad-audit-shots/`.
+- Passive in-place scrub of `ytInitialPlayerResponse` / `ytplayer.config.args` for ~4s at document_start (no getters)
+- Broader youtubei player URL match + `adBreakHeartbeatParams` strip
+- Seed DNR for narrow `googlevideo` `initplayback?*oad=` and `ctier=L` media (must not break normal `videoplayback`)
+- Skip/seek assist for `.ad-showing` + Skip button clicks
+- Seed cosmetics for in-player overlay slots
+- Ad-audit YouTube detector tightened (ignore empty `.ytp-ad-module` shells)
+
+## Retest after improvements (2026-07-21)
+
+Full suite (`npm run ad-audit`). Results in `docs/ad-audit-results.json`.
 
 | Site | Network ON→OFF | Verdict |
 |------|----------------|---------|
-| YouTube | 5→7 (+ BLOCKED_BY_CLIENT≈9) | **Still missing:** Sponsored pre-roll visible with StampStack ON (Extra gum). Player no longer hangs. |
-| Google Search | n/a | **Inconclusive** — reCAPTCHA again |
-| CNN | 7→226 | Strong |
-| Forbes | 5→694 | Strong |
-| weather.com | 6→35 | Network good; leftover iframe + CMP overlay |
-| Speedtest | 4→356 | Strong / visually clean |
-| IMDb | 4→4 (+32 blocks) | Partial — Amazon ad hosts still contacted |
-| Twitch homepage | 1→1 | Weak signal (need live channel for mid-rolls) |
+| YouTube | ~9→10–14 (+ BLOCKED_BY_CLIENT≈13–14) | Network improved; player usable (no hang). Automated audit can still flag visible pre-roll/companion UI — continue skip/scrub iteration. |
+| Google Search | n/a | First-party SERP — limited DNR |
+| CNN | 7→249 | Strong |
+| Forbes | 5→659 | Strong |
+| weather.com | 6→33 | Network good; leftover iframe (medium) |
+| Speedtest | 1→187 | Strong |
+| IMDb | 2→4 (+22 blocks) | Partial |
+| Twitch homepage | 1→1 | Weak signal (need live channel) |
 
-**Priority gaps unchanged:** YouTube inline pre-roll, Google SERP (manual), weather leftover iframe/CMP, richer Twitch/IMDb coverage.
+**Still watch:** YouTube visible pre-roll edge cases, Google SERP cosmetics (manual), weather leftover iframe, richer Twitch/IMDb.
+
+## Post-release blocking slice (2026-07-24)
+
+Odd-release improvements (seed + YouTube early hooks):
+
+- Extra YouTube player ad keys stripped (`adParams`, `adBreakParams`); Shorts reel player URL match
+- Faster skip/seek assist (more Skip selectors + MutationObserver on `.ad-showing`)
+- Seed cosmetics: Google SERP (`#tvcap`, mobile commercial units, Sponsored aria); weather iframes/`WxuAd`; IMDb/Twitch overlay selectors; YouTube interstitial/overlay leftovers
+
+Re-run `npm run ad-audit` after bundling when validating a store zip. Manual: commercial Google query + one YouTube watch with known pre-roll.
+
+### Ad-audit retest (2026-07-24)
+
+| Site | Verdict |
+|------|---------|
+| YouTube | Effective — ON adReqs 1 vs OFF 15; no ad-showing UI flagged |
+| Google Search | Limited DNR (expected); cosmetics still the lever |
+| CNN / Forbes / Speedtest | Strong network + iframe cuts |
+| weather.com | Cleared — prior “1 ad iframe” was an audit **false positive** (`/ad/` matching “Radar”); detector tightened + Taboola cosmetics added |
+| IMDb / Twitch homepage | Light signal; live Twitch still recommended |
+
+Results: `docs/ad-audit-results.json`. Weather-only recheck after detector fix: `adIframes=0` ON/OFF, no medium issues.

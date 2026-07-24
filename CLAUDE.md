@@ -7,9 +7,10 @@ StampStack is a private Manifest V3 Chromium extension (`stampstack-adblock`) th
 - `npm run build` — compile filters + bundle to `dist/`
 - `npm run typecheck` — TypeScript strict check
 - `npm run update-lists` — refresh downloadable lists under `filters/`
+- `npm run smoke-extpay` — ExtPay id + store Dev-unlock gate (restores `[dev]` dist)
 - `npm run watch` — JS rebuild only (re-run compile-filters after list/parser changes)
 
-Load unpacked from `dist/`.
+Load unpacked from `dist/`. Store cadence: `docs/RELEASE_CHECKLIST.md`. Breakage inbox: `docs/SUPPORT_TRIAGE.md`.
 
 ## Where to edit
 

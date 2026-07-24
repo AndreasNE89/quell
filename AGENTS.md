@@ -10,11 +10,17 @@ npm run update-lists      # download lists from filters/lists.json URLs into fil
 npm run compile-filters   # filters/*.txt → src/generated/
 npm run bundle            # esbuild → dist/ (needs generated/)
 npm run build             # compile-filters && bundle
+npm run build:store       # store build (DEV_BUILD=false, ExtPay required)
+npm run package           # update-lists + store build + obfuscation scan + zip
+npm run smoke-extpay      # ExtPay id + store Dev-unlock gate + obfuscation scan
+npm run scan-package      # atob / long-base64 scan of dist/
 npm run watch             # rebuild JS on change (does not recompile filters)
 npm run typecheck         # tsc --noEmit
 npm test                  # node --test (add tests next to code when touching logic)
 npm run clean
 ```
+
+Store release steps: `docs/RELEASE_CHECKLIST.md`. Support / breakage triage: `docs/SUPPORT_TRIAGE.md`.
 
 Load the extension: Chrome → `chrome://extensions` → Developer mode → **Load unpacked** → `dist/`.
 

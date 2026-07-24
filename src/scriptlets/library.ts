@@ -376,7 +376,15 @@ export function pruneObject(obj: unknown, paths: JsonPath[]): unknown {
   return obj;
 }
 
-const YT_AD_KEYS = new Set(['adPlacements', 'playerAds', 'adSlots', 'adBreakHeartbeatParams']);
+const YT_AD_KEYS = new Set([
+  'adPlacements',
+  'playerAds',
+  'adSlots',
+  'adBreakHeartbeatParams',
+  // Present on some player payloads; emptying is safer than leaving mid-roll hooks.
+  'adParams',
+  'adBreakParams',
+]);
 
 /** Defensive deep strip of known YouTube player ad keys (used by early boot + prune). */
 export function stripYoutubeAdKeys(obj: unknown, depth = 0): unknown {
@@ -662,6 +670,143 @@ export function runScriptlet(name: string, args: string[]): void {
 
 export const SUPPORTED_SCRIPTLETS = Object.keys(SCRIPTLETS);
 
+const YT_PLAYER_API_RE =
+  /youtubei\/v1\/(?:player|get_watch|next|player_streaming|reel\/reel_item_watch)|\/player\?|get_watch\?|playlist\?list=/i;
+
+/**
+ * Passive in-place scrub of the inline player blob. Never redefine getters on
+ * ytInitialPlayerResponse — that hung the Chromium watch player in audits.
+ */
+export function scrubInlineYoutubePlayerResponse(): void {
+  const g = globalThis as typeof globalThis & {
+    ytInitialPlayerResponse?: unknown;
+    ytplayer?: { config?: { args?: { player_response?: string; raw_player_response?: unknown } } };
+  };
+  try {
+    if (g.ytInitialPlayerResponse && typeof g.ytInitialPlayerResponse === 'object') {
+      stripYoutubeAdKeys(g.ytInitialPlayerResponse);
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    const raw = g.ytplayer?.config?.args?.raw_player_response;
+    if (raw && typeof raw === 'object') stripYoutubeAdKeys(raw);
+  } catch {
+    /* ignore */
+  }
+  try {
+    const encoded = g.ytplayer?.config?.args?.player_response;
+    if (typeof encoded === 'string' && encoded.includes('adPlacements')) {
+      const obj = JSON.parse(encoded);
+      stripYoutubeAdKeys(obj);
+      g.ytplayer!.config!.args!.player_response = JSON.stringify(obj);
+    }
+  } catch {
+    /* ignore — leave original string if rewrite fails */
+  }
+}
+
+function installInlinePlayerScrub(): void {
+  scrubInlineYoutubePlayerResponse();
+  try {
+    queueMicrotask(scrubInlineYoutubePlayerResponse);
+  } catch {
+    /* ignore */
+  }
+  const started = Date.now();
+  const iv = setInterval(() => {
+    scrubInlineYoutubePlayerResponse();
+    // Cover the early bootstrap window without staying forever.
+    if (Date.now() - started > 4000) clearInterval(iv);
+  }, 25);
+}
+
+const YT_SKIP_SEL =
+  [
+    '.ytp-ad-skip-button',
+    '.ytp-ad-skip-button-modern',
+    '.ytp-skip-ad-button',
+    '.ytp-ad-skip-button-container button',
+    '.ytp-ad-overlay-close-button',
+    'button.ytp-ad-skip-button-modern',
+    '.ytp-ad-skip-button-slot button',
+    // Newer player chrome (attribute / id variants).
+    'button[id*="skip-button"]',
+    '.ytp-skip-ad button',
+  ].join(', ');
+
+/**
+ * Click Skip when YouTube shows it; if the player is in `.ad-showing` with a
+ * finite ad duration, seek to the end. Does not redefine player getters.
+ */
+export function tickYoutubeAdSkipAssist(): void {
+  try {
+    const skips = document.querySelectorAll(YT_SKIP_SEL);
+    for (const node of skips) {
+      const skip = node as HTMLElement;
+      if (skip.getAttribute('disabled') != null) continue;
+      if (typeof (skip as HTMLButtonElement).disabled === 'boolean' && (skip as HTMLButtonElement).disabled) {
+        continue;
+      }
+      if (typeof skip.click === 'function') {
+        skip.click();
+        return;
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    const player = document.querySelector('.html5-video-player');
+    if (!player?.classList.contains('ad-showing')) return;
+    const video = document.querySelector('video.html5-main-video, .html5-video-player video') as
+      | HTMLVideoElement
+      | null;
+    if (!video) return;
+    const dur = video.duration;
+    if (Number.isFinite(dur) && dur > 0 && video.currentTime < dur - 0.25) {
+      video.currentTime = dur;
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+function installYoutubeAdSkipAssist(): void {
+  const started = Date.now();
+  const tick = () => {
+    tickYoutubeAdSkipAssist();
+    // Fast while the watch page boots; then keep a light watch for mid-rolls.
+    const age = Date.now() - started;
+    const delay = age < 30_000 ? 200 : 1000;
+    if (age > 10 * 60_000) return; // stop after 10 minutes on this document
+    setTimeout(tick, delay);
+  };
+  tickYoutubeAdSkipAssist();
+  setTimeout(tick, 50);
+
+  // React faster when the player enters `.ad-showing` than the poll alone.
+  try {
+    const root = document.documentElement;
+    const mo = new MutationObserver(() => {
+      if (Date.now() - started > 10 * 60_000) {
+        mo.disconnect();
+        return;
+      }
+      tickYoutubeAdSkipAssist();
+    });
+    mo.observe(root, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ['class'],
+    });
+  } catch {
+    /* ignore */
+  }
+}
+
 /**
  * Install document_start YouTube hooks before the player bootstrap runs.
  * Safe to call multiple times (idempotent).
@@ -671,11 +816,14 @@ export function installYoutubeEarlyHooks(): void {
   if (g.__quellYtEarly) return;
   g.__quellYtEarly = true;
 
-  // Fetch/XHR scrub only. Defining getters on ytInitialPlayerResponse / ytInitialData
-  // has hung the Chromium watch player in audits even when mutating in place.
+  // Inline blob scrub (passive) + fetch/XHR scrub + skip/seek assist.
+  // Avoid Object.defineProperty traps on ytInitialPlayerResponse.
+
+  installInlinePlayerScrub();
+  installYoutubeAdSkipAssist();
 
   const transform = (url: string, body: string): string => {
-    if (!/youtubei\/v1\/(?:player|get_watch|next)|\/player\?|get_watch\?|playlist\?list=/i.test(url)) {
+    if (!YT_PLAYER_API_RE.test(url)) {
       return body;
     }
     try {
@@ -688,14 +836,17 @@ export function installYoutubeEarlyHooks(): void {
         body
           .replace(/"adPlacements"/g, '"no_ads"')
           .replace(/"adSlots"/g, '"no_ads"')
-          .replace(/"playerAds"/g, '"no_ads"'),
+          .replace(/"playerAds"/g, '"no_ads"')
+          .replace(/"adBreakHeartbeatParams"/g, '"no_ads"')
+          .replace(/"adParams"/g, '"no_ads"')
+          .replace(/"adBreakParams"/g, '"no_ads"'),
       );
     }
   };
 
   hookFetchTextTransform(transform);
   hookXhrTextTransform((url, body) => {
-    if (!/youtubei\/v1\/(?:player|get_watch|next)|\/player\?|get_watch\?|playlist\?list=/i.test(url)) {
+    if (!YT_PLAYER_API_RE.test(url)) {
       return body;
     }
     return transform(url, body);

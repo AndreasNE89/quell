@@ -1,17 +1,30 @@
 /**
- * ExtensionPay extension id — replace after registering at https://extensionpay.com
+ * ExtensionPay extension id — register at https://extensionpay.com and link to the
+ * Chrome Web Store item below. Plan: $2 USD one-time (no trial).
  *
- * Setup (pick one):
+ * Setup:
  * 1. Create an ExtensionPay account and register StampStack
- * 2. Set a one-time plan to $2 USD (no trial for MVP)
- * 3a. Paste the ExtensionPay extension id below (not the Chrome Web Store id), OR
- * 3b. Copy `extpay-config.local.example.ts` → `extpay-config.local.ts` (gitignored)
- *     and set `EXTPAY_EXTENSION_ID_OVERRIDE` there
- * 4. Rebuild (`npm run bundle`) and reload the unpacked extension
+ * 2. Link ExtensionPay → CWS item id `CWS_ITEM_ID`
+ * 3. Confirm the $2 one-time plan
+ * 4. Keep `EXTPAY_EXTENSION_ID_TRACKED` in sync with the ExtensionPay dashboard slug
+ * 5. Optional: override via `extpay-config.local.ts` (gitignored) for experiments
+ * 6. Rebuild (`npm run bundle` / `npm run build:store`) and reload
  *
- * Until configured, checkout/restore no-op; unpacked builds can use license:devUnlock.
+ * Until configured (placeholder only), checkout/restore no-op; unpacked builds can use
+ * license:devUnlock. Store builds refuse to package while the resolved id is a placeholder
+ * (see scripts/build.mjs).
  */
 import { EXTPAY_EXTENSION_ID_OVERRIDE } from './extpay-config.local.js';
+
+/** Chrome Web Store item id (dashboard / listing). Not the ExtensionPay slug. */
+export const CWS_ITEM_ID = 'hfioggmggaefiiaehnfoiaajcdodnkkd';
+
+/**
+ * Production ExtensionPay slug linked to {@link CWS_ITEM_ID}.
+ * ExtensionPay ids are developer-chosen and may end with `-`.
+ * Typed as `string` so a temporary placeholder still typechecks during setup.
+ */
+export const EXTPAY_EXTENSION_ID_TRACKED: string = 'stampstack-';
 
 const PLACEHOLDER = 'YOUR_EXTENSIONPAY_ID';
 
@@ -22,12 +35,15 @@ const fromLocal =
     ? EXTPAY_EXTENSION_ID_OVERRIDE
     : null;
 
-/** Resolved ExtensionPay id (local override wins when set). */
-export const EXTPAY_EXTENSION_ID: string = fromLocal ?? PLACEHOLDER;
+const fromTracked =
+  EXTPAY_EXTENSION_ID_TRACKED.length > 0 && EXTPAY_EXTENSION_ID_TRACKED !== PLACEHOLDER
+    ? EXTPAY_EXTENSION_ID_TRACKED
+    : null;
 
-/** True when a real ExtensionPay id has been set (tracked or local). "Configured" only means
- *  it isn't the placeholder — ExtensionPay ids are developer-chosen slugs and can legitimately
- *  end with '-' (e.g. 'stampstack-'), so we don't second-guess the value's shape. */
+/** Resolved ExtensionPay id (local override wins when set). */
+export const EXTPAY_EXTENSION_ID: string = fromLocal ?? fromTracked ?? PLACEHOLDER;
+
+/** True when a real ExtensionPay id has been set (tracked or local). */
 export function isExtPayConfigured(): boolean {
   return (
     typeof EXTPAY_EXTENSION_ID === 'string' &&

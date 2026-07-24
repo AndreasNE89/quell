@@ -31,7 +31,7 @@ const SITES = [
   {
     id: 'youtube',
     url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-    waitMs: 8000,
+    waitMs: 12000,
     notes: 'YouTube first-party ads often bypass EasyList; expect weak network blocking',
   },
   {
@@ -192,10 +192,13 @@ async function measurePage(context, site, mode, extensionId) {
     };
 
     const iframes = [...document.querySelectorAll('iframe')].filter(visible);
+    // Avoid bare `/ad/` — it false-positives on "radar", "header", "loading", etc.
     const adIframes = iframes.filter((f) => {
-      const s = `${f.src} ${f.id} ${f.className} ${f.title}`.toLowerCase();
-      return /ad|sponsor|doubleclick|googlesyndication|adservice|taboola|outbrain|amazon-adsystem/.test(
-        s,
+      const s = `${f.src} ${f.id} ${f.className} ${f.title} ${f.name || ''}`.toLowerCase();
+      return (
+        /(?:^|[^a-z])ads?(?:[^a-z]|$)|sponsor|doubleclick|googlesyndication|adservice|google_ads|taboola|outbrain|amazon-adsystem|safeframe|pagead|adsystem|adsrvr|adnxs/.test(
+          s,
+        ) || /\/ad[s]?(?:\/|$|\?)/.test(s)
       );
     });
 
@@ -203,18 +206,22 @@ async function measurePage(context, site, mode, extensionId) {
       visible,
     );
 
-    // YouTube player ad cues
-    const ytAd =
-      !!document.querySelector('.ad-showing, .ytp-ad-module, .video-ads, ytd-ad-slot-renderer, ytd-promoted-sparkles-web-renderer, ytd-display-ad-renderer');
-
-    const ytAdShowing = !!document.querySelector('.ad-showing');
+    // YouTube: `.ytp-ad-module` / `.video-ads` exist even with no ad — only count
+    // visible player ad chrome or `.ad-showing` on the html5 player.
+    const ytAdShowing = !!document.querySelector('.html5-video-player.ad-showing, .ad-showing');
+    const ytUiCandidates = [
+      ...document.querySelectorAll(
+        '.ytp-ad-player-overlay, .ytp-ad-text, .ytp-ad-preview-container, ytd-ad-slot-renderer, ytd-promoted-sparkles-web-renderer, ytd-display-ad-renderer, .ytp-ad-skip-button-container',
+      ),
+    ];
+    const ytAdUi = ytUiCandidates.some(visible);
 
     return {
       title: document.title,
       iframeCount: iframes.length,
       adIframeCount: adIframes.length,
       adLikeVisible: adLike.length,
-      ytAdUi: ytAd,
+      ytAdUi,
       ytAdShowing,
       bodyTextSample: (document.body?.innerText || '').slice(0, 200),
     };
