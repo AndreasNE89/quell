@@ -236,9 +236,13 @@ export function isUniversallyMatchingRegexFilter(regexFilter) {
   if (/^\^?\.(?:\*|\+|\{\d*,\d*\})\??\$?$/.test(p)) return true;
   if (/^\^?\.\$?$/.test(p)) return true;
   if (p === '^' || p === '$' || p === '^$') return true;
-  // Any-char classes used as `.*` equivalents: [\s\S]* / [\d\D]* / [\w\W]*.
+  // Any-char classes used as `.*` equivalents: [\s\S]* / [\s\S]+ / [\d\D]{1,} / …
+  // Quantifier must include + / {1,} — otherwise @@/[\s\S]+/$document slips past
+  // the too-broad skip and emits a global allowAllRequests.
   if (
-    /^\^?\[(?:\\s\\S|\\S\\s|\\d\\D|\\D\\d|\\w\\W|\\W\\w)\](?:\*|\{0,\})\??\$?$/.test(p)
+    /^\^?\[(?:\\s\\S|\\S\\s|\\d\\D|\\D\\d|\\w\\W|\\W\\w)\](?:\+|\*|\{0,\}|\{1,\})\??\$?$/.test(
+      p,
+    )
   ) {
     return true;
   }
@@ -246,7 +250,10 @@ export function isUniversallyMatchingRegexFilter(regexFilter) {
   // Filter source literally contains `?` after `s` (`https?:\/\/`), so escape it.
   if (/^\^?https\?:\\\/\\\/(?:\.\*|\.\+|\.\*\?)?\$?$/.test(p)) return true;
   // Any-host origin (`^https?:\/\/[^\/]+` ± trailing .*) — every http(s) site.
-  if (/^\^?https\?:\\\/\\\/\[\^\\\/\](?:\+|\*|\{0,\})(?:\.\*)?\$?$/.test(p)) return true;
+  // Include {1,} (same class as +); previously only + / * / {0,} were caught.
+  if (/^\^?https\?:\\\/\\\/\[\^\\\/\](?:\+|\*|\{0,\}|\{1,\})(?:\.\*)?\$?$/.test(p)) {
+    return true;
+  }
   // Bare / wildcarded scheme prefix in filter source: ^http, ^https.*, ^http$
   if (/^\^?https?\.\*[\$]?$/.test(p) || /^\^?https?\$?$/.test(p)) return true;
   // Alternation with a match-all branch (`.*|a`, `a|.*`) still matches everything.
