@@ -42,6 +42,7 @@ import {
   DARK_MODE_CSS_PATH,
 } from '../shared/constants.js';
 import { loadSettings, saveSettings, isListEnabled } from './settings.js';
+import { syncOneRegisteredScript } from './registered-scripts.js';
 import {
   defaultLicense,
   initLicense,
@@ -192,8 +193,9 @@ async function syncAllowlist(settings: Settings): Promise<void> {
  */
 async function syncRegisteredScripts(settings: Settings): Promise<void> {
   const shouldExist = !settings.paused;
-  const allowlistMatches = [...new Set(settings.allowlist.flatMap(allowlistMatchPatterns))];
-  const allowlistExclude = allowlistMatches.length ? allowlistMatches : undefined;
+  // Always an array, never undefined: syncOneRegisteredScript compares against the live
+  // registration, and an absent property would read as "leave whatever is there".
+  const allowlistExclude = [...new Set(settings.allowlist.flatMap(allowlistMatchPatterns))];
 
   // Generic cosmetic CSS is additionally excluded on hosts with a $generichide/$elemhide
   // network exception, so those hosts never receive the sheet (and need no per-page revert
@@ -208,7 +210,7 @@ async function syncRegisteredScripts(settings: Settings): Promise<void> {
       ].flatMap(allowlistMatchPatterns),
     ),
   ];
-  const cosmeticExclude = cosmeticMatches.length ? cosmeticMatches : undefined;
+  const cosmeticExclude = cosmeticMatches;
 
   const ids = enabledListIds(settings);
   const cssFiles = ids
@@ -218,7 +220,7 @@ async function syncRegisteredScripts(settings: Settings): Promise<void> {
 
   const cosmetic: chrome.scripting.RegisteredContentScript = {
     id: GENERIC_CSS_SCRIPT_ID,
-    css: cssFiles.length ? cssFiles : undefined,
+    css: cssFiles,
     matches: ['<all_urls>'],
     excludeMatches: cosmeticExclude,
     runAt: 'document_start',
@@ -263,25 +265,6 @@ async function syncRegisteredScripts(settings: Settings): Promise<void> {
   }
 }
 
-async function syncOneRegisteredScript(
-  script: chrome.scripting.RegisteredContentScript,
-  enabled: boolean,
-): Promise<void> {
-  const existing = await chrome.scripting.getRegisteredContentScripts({ ids: [script.id] });
-  if (!enabled) {
-    if (existing.length) await chrome.scripting.unregisterContentScripts({ ids: [script.id] });
-    return;
-  }
-  if (existing.length) {
-    await chrome.scripting.updateContentScripts([script]);
-  } else {
-    try {
-      await chrome.scripting.registerContentScripts([script]);
-    } catch {
-      await chrome.scripting.updateContentScripts([script]);
-    }
-  }
-}
 
 /**
  * Paid dark mode — independent of pause/allowlist cosmetics.
@@ -308,7 +291,7 @@ async function syncDarkModeScripts(
     id: DARK_MODE_SCRIPT_ID,
     css: [DARK_MODE_CSS_PATH],
     matches: ['http://*/*', 'https://*/*'],
-    excludeMatches: forceOffExclude.length ? forceOffExclude : undefined,
+    excludeMatches: forceOffExclude,
     runAt: 'document_start',
     allFrames: false,
     persistAcrossSessions: true,
@@ -605,9 +588,6 @@ async function handleMessage(msg: Message, sender: chrome.runtime.MessageSender)
     case 'darkmode:setSiteOverride':
       return handleDarkModeSetSiteOverride(msg.hostname, msg.override);
 
-    case 'darkmode:autoSkip':
-      return handleDarkModeAutoSkip(msg.hostname, sender.frameId, msg.reason);
-
     case 'darkmode:refresh':
       // SW → content only; tabs should not message the SW with this type.
       return null;
@@ -717,6 +697,14 @@ async function handlePopupGet(): Promise<PopupData> {
     }
   }
   const allowlisted = !!hostname && isAllowlistedHost(hostname, settings.allowlist);
+  // A parent entry (example.com) allowlists sub.example.com, but removing the *sub* host from
+  // the list cannot undo it. The popup needs to say so instead of offering a dead toggle.
+  const coveredBy =
+    hostname && allowlisted
+      ? settings.allowlist
+          .map(normalizeHostname)
+          .find((h) => h !== normalizeHostname(hostname) && isAllowlistedHost(hostname, [h])) ?? null
+      : null;
   return {
     hostname,
     url,
@@ -725,6 +713,11 @@ async function handlePopupGet(): Promise<PopupData> {
     tabBlocked: tab?.id != null ? tabBlocked.get(tab.id) ?? 0 : 0,
     blockedTotal: settings.blockedTotal,
     statsReliable: STATS_RELIABLE,
+    activeRuleCount: enabledListIds(settings).reduce(
+      (n, id) => n + (META.lists.find((l) => l.id === id)?.ruleCount ?? 0),
+      0,
+    ),
+    coveredBy,
     youtubeBlockSponsored: settings.youtubeBlockSponsored !== false,
     youtubeBlockShorts: !!settings.youtubeBlockShorts,
     youtubeSponsorBlock: settings.youtubeSponsorBlock !== false,
@@ -769,8 +762,14 @@ async function handleToggleSite(hostname: string, enabled: boolean): Promise<Pop
     const set = new Set(
       s.allowlist.map(normalizeHostname).filter((h) => isSafeAllowlistHost(h)),
     );
-    if (enabled) set.delete(host);
-    else if (isSafeAllowlistHost(host)) set.add(host);
+    if (enabled) {
+      // Deleting the exact host is not enough: a parent entry (example.com) also allowlists
+      // sub.example.com, so the toggle would spring straight back with no explanation. Drop
+      // every entry that covers this host.
+      for (const h of [...set]) {
+        if (isAllowlistedHost(host, [h])) set.delete(h);
+      }
+    } else if (isSafeAllowlistHost(host)) set.add(host);
     s.allowlist = [...set];
   });
   await withSettings((s) => Promise.all([syncAllowlist(s), syncRegisteredScripts(s)]));
@@ -839,8 +838,6 @@ async function buildDarkModeData(
     hostname: host,
     override: resolved.override,
     restricted,
-    autoOff: !!(host && settings.darkModeAutoOff?.[host]),
-    autoOffHosts: { ...(settings.darkModeAutoOff ?? {}) },
     siteOverrides: { ...settings.darkModeSiteOverrides },
     license: licenseData,
   };
@@ -905,45 +902,6 @@ async function handleDarkModeSetSiteOverride(
  * Content script detected a confidently already-dark page.
  * Persist force-off (exclude from registered invert) unless user Force on.
  */
-async function handleDarkModeAutoSkip(
-  hostname: string,
-  frameId: number | undefined,
-  _reason?: string,
-): Promise<{ ok: boolean; skipped: boolean }> {
-  // Only the top frame may persist a per-host force-off. Without this, a dark-themed
-  // cross-origin embed (YouTube/Vimeo/Disqus/CodePen) would auto-skip for its OWN host and
-  // silently disable dark mode when that host is later visited directly. The content script
-  // already guards this (top-frame only), but keep a defense-in-depth check on the SW side.
-  if (frameId != null && frameId !== 0) return { ok: true, skipped: false };
-
-  const host = normalizeHostname(hostname);
-  if (!host) return { ok: false, skipped: false };
-
-  const license = await loadLicense();
-  if (!isLicenseEffectivelyPaid(license)) return { ok: true, skipped: false };
-
-  let skipped = false;
-  const settings = await mutateSettings((s) => {
-    if (!s.darkModeAutoOff) s.darkModeAutoOff = {};
-    // Force on always wins — never auto-skip.
-    if (s.darkModeSiteOverrides[host] === 'on') return;
-    // Already force-off (user or prior auto) — keep; refresh auto marker only if unset user intent.
-    if (s.darkModeSiteOverrides[host] === 'off') {
-      skipped = true;
-      return;
-    }
-    s.darkModeSiteOverrides[host] = 'off';
-    s.darkModeAutoOff[host] = true;
-    skipped = true;
-  });
-
-  if (skipped) {
-    // Update registration excludes; content script already reset invert on this page.
-    await syncDarkModeScripts(settings, license);
-  }
-  return { ok: true, skipped };
-}
-
 async function handleLicenseGet(): Promise<LicenseData> {
   const license = await loadLicense();
   return toLicenseData(license);

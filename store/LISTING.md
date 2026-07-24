@@ -33,7 +33,7 @@ Privacy
 • No analytics or telemetry to StampStack servers
 • Settings stay in your browser’s local storage
 • Optional dark-mode purchase is handled by ExtensionPay / Stripe (email for receipt and restore only)
-• Optional SponsorBlock skip contacts the community SponsorBlock API with video ids only (when that toggle is on)
+• Auto-skip sponsor segments is on by default; it asks the community SponsorBlock API using only a 4-character hash prefix of the video id — never the video id or page URL — and can be turned off in Options
 • We do not send browsing history to the payment provider
 • See the privacy policy linked on the store listing
 
@@ -88,6 +88,6 @@ When answering Chrome Web Store privacy practices, disclose:
 
 - Optional one-time in-extension purchase via ExtensionPay (Stripe)
 - Email may be collected by the payment provider for receipt / restore
-- Optional SponsorBlock: video ids sent to sponsor.ajay.app only when that toggle is enabled
+- SponsorBlock: on by default; sends a 4-character SHA-256 hash prefix of the video id to sponsor.ajay.app (never the video id or page URL, no cookies), and can be turned off in Options
 - No browsing history shared with the payment provider
 - Update the hosted privacy policy URL after publishing `docs/privacy-policy.html`

@@ -9,6 +9,7 @@ import type {
   DarkModeData,
   DarkModeSiteOverride,
 } from '../shared/types.js';
+import { STORAGE_KEY } from '../shared/constants.js';
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -130,12 +131,7 @@ function renderDarkOverrides(data: DarkModeData): void {
     title.textContent = host;
     const meta = document.createElement('div');
     meta.className = 'list-meta';
-    meta.textContent =
-      override === 'on'
-        ? 'Force on'
-        : data.autoOffHosts?.[host]
-          ? 'Auto-disabled (site looks dark)'
-          : 'Force off';
+    meta.textContent = override === 'on' ? 'Force on' : 'Force off';
     info.append(title, meta);
     const clear = document.createElement('button');
     clear.type = 'button';
@@ -248,6 +244,25 @@ $<HTMLFormElement>('darkOverrideForm').addEventListener('submit', async (e) => {
   const override: DarkModeSiteOverride = raw === 'off' ? 'off' : 'on';
   await send({ type: 'darkmode:setSiteOverride', hostname: host, override });
   $<HTMLInputElement>('darkOverrideHost').value = '';
+  void loadDarkMode();
+});
+
+// The Options page is long-lived — a user typically leaves it open in a tab and changes the
+// same toggles from the popup. Without this the stale form would silently write its old values
+// back on the next edit (re-enabling SponsorBlock's network calls, for instance).
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local' || !changes[STORAGE_KEY]) return;
+  void loadStats();
+  void loadLists();
+  void loadYoutubeOptions();
+  void loadDarkMode();
+});
+
+// Storage events do not fire while the page is hidden in some cases; re-sync on return.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  void loadStats();
+  void loadYoutubeOptions();
   void loadDarkMode();
 });
 

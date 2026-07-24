@@ -10,13 +10,29 @@
 // Run via `npm run compile-filters`. Prints a coverage report so we can see what
 // fraction of each list converted to DNR vs. what MV3 can't express.
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync, readdirSync } from 'node:fs';
+import {
+  readFileSync,
+  writeFileSync,
+  mkdirSync,
+  existsSync,
+  rmSync,
+  readdirSync,
+  statSync,
+} from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseLine, hostsFromPattern } from './lib/parse-filter.mjs';
-import { toDnrRule, ruleKey, networkFilterIdentity } from './lib/to-dnr.mjs';
+import {
+  toDnrRule,
+  ruleKey,
+  networkFilterIdentity,
+  hasMeaningfulDomainScope,
+  isUniversallyMatchingUrlFilter,
+  isUniversallyMatchingRegexFilter,
+  regexFilterHasLiteralScope,
+} from './lib/to-dnr.mjs';
 import { DNR } from './lib/limits.mjs';
-import { scriptletLooksObfuscated } from './lib/scriptlet-safe.mjs';
+import { scriptletLooksObfuscated, scriptletUnsupported } from './lib/scriptlet-safe.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -31,7 +47,20 @@ function loadRegistry() {
     console.error(`No filter registry at ${p}. Nothing to compile.`);
     return { lists: [] };
   }
-  return JSON.parse(readFileSync(p, 'utf8'));
+  const registry = JSON.parse(readFileSync(p, 'utf8'));
+  // UTF-8 read back as cp1252 leaves "â€”" (U+00E2 U+20AC …) where a dash or quote belongs.
+  // These titles are the visible labels in Options, so a mojibake round-trip ships garbage to
+  // users; catch it here rather than in a screenshot.
+  for (const l of registry.lists || []) {
+    if (/â€|Ã©|�/.test(l.title || '')) {
+      console.error(
+        `  ✗ list "${l.id}" title is mis-encoded: ${JSON.stringify(l.title)}\n` +
+          '    filters/lists.json must be saved as UTF-8.',
+      );
+      process.exit(1);
+    }
+  }
+  return registry;
 }
 
 function emptyCosmeticBucket() {
@@ -153,6 +182,15 @@ function applyCosmetic(c, cos, stats, skips) {
       skips['scriptlet-obfuscated'] = (skips['scriptlet-obfuscated'] || 0) + 1;
       return;
     }
+    // No handler for this name — the rule would be bundled, shipped, injected and then
+    // dropped by runScriptlet. Exceptions are kept regardless: an exception for an
+    // unimplemented scriptlet is already a no-op, but keeping them costs nothing and avoids
+    // an exception silently disappearing if the scriptlet is implemented later.
+    if (!c.isException && scriptletUnsupported(c.scriptlet.name)) {
+      skips[`scriptlet-unimplemented:${c.scriptlet.name}`] =
+        (skips[`scriptlet-unimplemented:${c.scriptlet.name}`] || 0) + 1;
+      return;
+    }
     if (c.isException) {
       cos.scriptletExceptions.push({
         domains: c.domains,
@@ -238,6 +276,70 @@ function writeGenericCss(listId, bucket) {
   return generic.length;
 }
 
+/**
+ * Build-time backstop against a globally-unblocking exception.
+ *
+ * The `@@` guards in to-dnr.mjs have been patched seven times as upstream lists invented new
+ * ways to spell "match everything" (PRs #17→#28). Each patch was a heuristic, so each could be
+ * out-argued by the next list update. This checks the *emitted rules* instead: every allow /
+ * allowAllRequests must carry real scope, or the build fails loudly rather than shipping a
+ * ruleset that switches blocking off. `npm test` staying green is not enough — the lists change
+ * underneath the tests.
+ */
+function assertNoGlobalAllow(listId, rules) {
+  const bad = [];
+  for (const r of rules) {
+    const type = r.action?.type;
+    if (type !== 'allow' && type !== 'allowAllRequests') continue;
+    const c = r.condition || {};
+    const domainScoped = hasMeaningfulDomainScope(c.initiatorDomains, c.requestDomains);
+    const urlScoped = !!(c.urlFilter && !isUniversallyMatchingUrlFilter(c.urlFilter));
+    const regexScoped = !!(
+      c.regexFilter &&
+      !isUniversallyMatchingRegexFilter(c.regexFilter) &&
+      regexFilterHasLiteralScope(c.regexFilter)
+    );
+    if (domainScoped || urlScoped || regexScoped) continue;
+    // Deliberate exception: a type-only plain allow for a narrow resource type (EasyPrivacy
+    // ships `@@$ping`). Frame types are never allowed to reach here — those disable blocking
+    // for the whole document.
+    const types = c.resourceTypes || [];
+    if (
+      type === 'allow' &&
+      !c.urlFilter &&
+      !c.regexFilter &&
+      types.length > 0 &&
+      !types.includes('main_frame') &&
+      !types.includes('sub_frame')
+    ) {
+      continue;
+    }
+    bad.push(r);
+  }
+  if (!bad.length) return;
+  console.error(
+    `\n  ✗ list "${listId}" emitted ${bad.length} unscoped allow rule(s) — each would disable blocking globally:`,
+  );
+  for (const r of bad.slice(0, 5)) console.error(`      ${JSON.stringify(r)}`);
+  console.error(
+    '    Tighten the exception guards in scripts/lib/to-dnr.mjs. Refusing to write this ruleset.',
+  );
+  process.exit(1);
+}
+
+/** Newest mtime across the compiled filter files, as an ISO string (null if none exist). */
+function newestFilterMtime() {
+  let newest = 0;
+  for (const name of readdirSync(FILTERS_DIR)) {
+    if (!name.endsWith('.txt')) continue;
+    const t = statSync(join(FILTERS_DIR, name)).mtimeMs;
+    if (t > newest) newest = t;
+  }
+  // Second resolution: filesystems disagree on sub-second mtime, and it would be the only
+  // thing left making two builds of the same sources differ.
+  return newest ? new Date(Math.floor(newest / 1000) * 1000).toISOString() : null;
+}
+
 function main() {
   const registry = loadRegistry();
 
@@ -296,6 +398,8 @@ function main() {
       );
       dnrRules.length = DNR.MAX_STATIC_RULES_PER_LIST;
     }
+
+    assertNoGlobalAllow(list.id, dnrRules);
 
     const rulesetPath = join(RULESET_DIR, `${list.id}.json`);
     writeFileSync(rulesetPath, JSON.stringify(dnrRules));
@@ -367,7 +471,11 @@ function main() {
     join(OUT_DIR, 'meta.json'),
     JSON.stringify(
       {
-        generatedAt: new Date().toISOString(),
+        // Derived from the newest filter list, never from the wall clock: a build timestamp
+        // gets inlined into background.js and makes two builds of identical sources produce
+        // different bytes, so a store zip can't be diffed or reproduced. This value is also
+        // more truthful — it dates the filter data, which is what "generated" means to a user.
+        generatedAt: newestFilterMtime(),
         lists: metaLists,
         regexRulesUsed: ctx.regexCount,
       },

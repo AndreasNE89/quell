@@ -20,3 +20,49 @@ export function scriptletLooksObfuscated(scriptlet) {
   if (LONG_BASE64.test(blob)) return true;
   return false;
 }
+
+/**
+ * Scriptlet names the runtime can actually execute — every key of `ALIASES` in
+ * `src/scriptlets/library.ts`, including the uBO short forms.
+ *
+ * Filter lists reference far more scriptlets than we implement. Shipping a rule whose name has
+ * no handler costs package size and runtime work for nothing: `runScriptlet` looks the name up,
+ * finds no function, and returns — but the rule was still bundled into `scriptlets.json` and
+ * still caused the domain to receive a MAIN-world injection. Dropping them at compile time is
+ * purely a saving; behavior is identical.
+ *
+ * `test/scriptlets.test.mjs` asserts this set matches the runtime alias map exactly, so adding
+ * a scriptlet without updating this list fails the build's tests rather than silently
+ * discarding rules that would now work.
+ */
+export const SUPPORTED_SCRIPTLET_NAMES = new Set([
+  'set',
+  'set-constant',
+  'aopr',
+  'abort-on-property-read',
+  'aopw',
+  'abort-on-property-write',
+  'acs',
+  'acis',
+  'abort-current-inline-script',
+  'nostif',
+  'no-setTimeout-if',
+  'prevent-setTimeout',
+  'nosiif',
+  'no-setInterval-if',
+  'prevent-setInterval',
+  'ra',
+  'remove-attr',
+  'rc',
+  'remove-class',
+  'json-prune',
+  'json-prune-fetch-response',
+  'json-prune-xhr-response',
+  'trusted-replace-fetch-response',
+  'trusted-replace-xhr-response',
+]);
+
+/** True when no handler exists for this scriptlet name, so the rule is inert. */
+export function scriptletUnsupported(name) {
+  return !SUPPORTED_SCRIPTLET_NAMES.has(String(name ?? '').trim());
+}

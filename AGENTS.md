@@ -56,7 +56,9 @@ Messages are a single discriminated union in `src/shared/types.ts`. Keep handler
 
 - Config: `src/shared/extpay-config.ts` (placeholder) or gitignored `extpay-config.local.ts` (from `.example`).
 - Unpacked QA: popup/options **Dev unlock**.
-- Smart: already-dark hosts auto force-off; user Force on/off wins.
+- Already-dark hosts are handled at runtime by the engine's per-surface luminance check
+  (`siteCanvasIsDark`), not by a persisted override. The old `darkmode:autoSkip` message that
+  auto-wrote a force-off was removed in 1.4.0 — only the user sets an override now.
 - After bundle, confirm `dist/dark-mode.css` + `extpay-bridge.js`.
 
 ## Hard rules for agents

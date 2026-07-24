@@ -384,3 +384,66 @@ test('quote-aware paren reading: a ) inside a string does not truncate the arg',
   assert.equal(r.ops[0].name, 'xpath');
   assert.equal(r.ops[0].arg, '//a[text()=")"]');
 });
+
+test('mergeCosmeticLists is memoized per (dataset, enabled lists)', () => {
+  const data = {
+    byList: {
+      a: {
+        hideGeneric: ['.a'],
+        unhideGeneric: [],
+        hideSpecific: {},
+        unhideSpecific: {},
+        procedural: [],
+      },
+      b: {
+        hideGeneric: ['.b'],
+        unhideGeneric: [],
+        hideSpecific: {},
+        unhideSpecific: {},
+        procedural: [],
+      },
+    },
+    networkExceptions: { generichide: [], elemhide: [], specifichide: [] },
+  };
+
+  // Same inputs -> same object, so matchCosmetic stops rebuilding ~29k selectors per frame.
+  const first = mod.mergeCosmeticLists(data, ['a']);
+  assert.equal(mod.mergeCosmeticLists(data, ['a']), first, 'identical inputs should hit cache');
+
+  // Changing the enabled set must NOT serve the stale merge — this is the failure mode a
+  // naive cache introduces: toggling a list off in Options would keep hiding its selectors.
+  const both = mod.mergeCosmeticLists(data, ['a', 'b']);
+  assert.notEqual(both, first);
+  assert.deepEqual([...both.hideGeneric].sort(), ['.a', '.b']);
+  assert.deepEqual(mod.mergeCosmeticLists(data, ['a']).hideGeneric, ['.a']);
+
+  // A different dataset object is a different cache identity too.
+  const other = { ...data, byList: { a: data.byList.a } };
+  assert.notEqual(mod.mergeCosmeticLists(other, ['a']), first);
+});
+
+test('memoized merge is not mutated by matchCosmetic', () => {
+  const data = {
+    byList: {
+      a: {
+        hideGeneric: ['.gen'],
+        unhideGeneric: [],
+        hideSpecific: { 'example.com': ['.spec'] },
+        unhideSpecific: {},
+        procedural: [
+          { selector: '.p', domains: { include: ['example.com'], exclude: [] }, op: 'has', arg: 'x' },
+        ],
+      },
+    },
+    networkExceptions: { generichide: ['example.com'], elemhide: [], specifichide: [] },
+  };
+  const merged = mod.mergeCosmeticLists(data, ['a']);
+  const snapshot = JSON.stringify(merged);
+
+  // generichide pushes the whole generic set into `unhide`; if that path mutated the shared
+  // merge, the next page would inherit a corrupted dataset.
+  mod.matchCosmetic('example.com', data, ['a']);
+  mod.matchCosmetic('other.example', data, ['a']);
+
+  assert.equal(JSON.stringify(mod.mergeCosmeticLists(data, ['a'])), snapshot);
+});

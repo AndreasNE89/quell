@@ -58,11 +58,11 @@ These steps require your Google account, developer registration, and (usually) p
 
 ### Product / listing
 
-- [ ] **Upload package:** `release/stampstack-1.1.0.zip` (Package tab)
+- [ ] **Upload package:** `release/stampstack-<version>.zip` (Package tab) - the path `npm run package` printed
 - [ ] **Item name:** StampStack
 - [ ] **Summary:** from [store/LISTING.md](../store/LISTING.md) (≤132 chars)
 - [ ] **Description:** from LISTING.md
-- [ ] **Category:** Productivity (or Tools)
+- [ ] **Category:** Privacy & Security
 - [ ] **Language:** English
 - [ ] **Official URL / Homepage:** leave blank until a public homepage exists (do **not** paste a private GitHub URL)
 - [ ] **Support URL:** leave blank until a public support channel exists (do **not** paste a private GitHub issues URL)
@@ -75,8 +75,9 @@ These steps require your Google account, developer registration, and (usually) p
 
 ### Privacy practices form
 
-- [ ] Single purpose (short purpose only — do **not** paste host-permission text):  
-  `Block ads and trackers using Declarative Net Request, cosmetic filters, and scriptlets.`
+- [ ] Single purpose (short purpose only — do **not** paste host-permission text): paste the
+  "Single purpose" block from [store/LISTING.md](../store/LISTING.md) verbatim. That is the only
+  variant that covers the dark-mode theming; do not retype a shorter one.
 - [ ] Declare you **do not** collect user data (no remote analytics)
 - [ ] Remote code: **No** (extension does not load remote code)
 - [ ] Paste permission justifications from [store/PERMISSIONS.md](../store/PERMISSIONS.md) — each field once, matching that permission
@@ -90,7 +91,7 @@ These steps require your Google account, developer registration, and (usually) p
 ### After publish
 
 - [ ] Save the item ID and public listing URL
-- [ ] Tag the git release: `git tag v1.1.0 && git push origin v1.1.0` (when you choose to push)
+- [ ] Tag the git release: `git tag v<version> && git push origin v<version>` (when you choose to push)
 - [ ] Update README with the Chrome Web Store badge/link
 - [ ] Respond to any review follow-ups within the deadline
 
@@ -101,13 +102,12 @@ These steps require your Google account, developer registration, and (usually) p
 ```
 StampStack is a Manifest V3 ad/tracker blocker.
 
-Single purpose: Block ads and trackers using Declarative Net Request, cosmetic filters, and scriptlets.
+Single purpose: Block ads and trackers using Declarative Net Request, cosmetic filters, and scriptlets. Optional related browsing aids: YouTube cleanup toggles and a paid dark-mode theme.
 
 Permissions:
 - declarativeNetRequest: apply packaged EasyList-style rulesets
 - scripting: inject cosmetic CSS and allowlisted scriptlets
 - storage: local settings and site allowlist only
-- webNavigation: apply filters on navigations
 - host <all_urls>: required for general-purpose blocking on websites
 
 No remote code execution. No analytics. Privacy policy: <PASTE_YOUR_HTTPS_URL>

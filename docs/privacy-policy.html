@@ -75,11 +75,11 @@
       or remote logging of browsing activity.
     </p>
     <ul>
-      <li><strong>Browsing activity:</strong> Not sent to us. Network blocking is applied by Chrome’s Declarative Net Request engine using rules shipped in the extension package (and optional updates you enable).</li>
+      <li><strong>Browsing activity:</strong> Not sent to us. Network blocking is applied by Chrome’s Declarative Net Request engine using rules shipped in the extension package.</li>
       <li><strong>Settings &amp; allowlist:</strong> Stored locally via <code>chrome.storage</code> on your device. Not uploaded.</li>
       <li><strong>Statistics:</strong> Any on-device counters (e.g. badge hints) stay local when available. StampStack does not sync them to a server.</li>
       <li><strong>Optional purchase:</strong> If you buy dark mode, ExtensionPay / Stripe process payment and may collect an email for receipt and restore. StampStack caches a local paid flag; <strong>browsing history and allowlist are not sent</strong> to the payment provider.</li>
-      <li><strong>Optional SponsorBlock:</strong> If you enable Auto-skip sponsor segments, StampStack requests segment schedules from the community SponsorBlock API (<code>sponsor.ajay.app</code>) using the YouTube <strong>video id</strong> only. Turn the toggle off to stop those requests.</li>
+      <li><strong>SponsorBlock (on by default):</strong> The Auto-skip sponsor segments toggle is <strong>on by default</strong>. While it is on, StampStack asks the community SponsorBlock API (<code>sponsor.ajay.app</code>) which segments to skip. It sends only the <strong>first 4 characters of a SHA-256 hash of the YouTube video id</strong> — never the video id itself, the page URL, or any account identifier — and the request is made without cookies or credentials. The API answers with every video sharing that 4-character prefix, and the right one is selected on your device. Turn the toggle off in Options to stop these requests entirely.</li>
     </ul>
 
     <h2>Permissions</h2>
@@ -88,15 +88,14 @@
       <li><code>declarativeNetRequest</code> — apply filter rules without reading page content on the network path.</li>
       <li><code>scripting</code> — inject cosmetic filters, approved scriptlets, and optional dark-mode CSS.</li>
       <li><code>storage</code> — save preferences, site allowlist, and license cache.</li>
-      <li><code>webNavigation</code> — know when navigations occur so filters can be applied consistently.</li>
       <li><code>&lt;all_urls&gt;</code> host access — required so blocking, cosmetics, and optional page darkening can work on websites generally.</li>
     </ul>
 
     <h2>Third parties</h2>
     <p>
-      Filter lists (e.g. EasyList and related community lists) may be downloaded from their
-      publishers when you update lists. Those downloads are list files only; StampStack does not
-      send your browsing history to list publishers as part of filtering.
+      Filter lists (e.g. EasyList and related community lists) are compiled into the extension
+      when a release is built. StampStack does <strong>not</strong> download filter lists while you
+      browse, and never contacts a list publisher from your browser.
     </p>
     <p>
       <strong>Optional payments:</strong> Dark mode unlock uses
@@ -105,9 +104,11 @@
       extension refreshes license status. We do not sell or share browsing data.
     </p>
     <p>
-      <strong>Optional SponsorBlock:</strong> When enabled, segment lookups go to the
-      <a href="https://sponsor.ajay.app" rel="noopener">SponsorBlock</a> community service
-      (video id only). This is off unless you turn on the YouTube skip toggle.
+      <strong>SponsorBlock:</strong> Segment lookups go to the
+      <a href="https://sponsor.ajay.app" rel="noopener">SponsorBlock</a> community service.
+      Auto-skip is <strong>on by default</strong>; while it is on, each lookup sends a 4-character
+      SHA-256 hash prefix of the video id (not the video id, not the page URL) with no cookies
+      attached. Turn off <em>Auto-skip sponsor segments</em> in Options to stop these requests.
     </p>
 
     <h2>Children</h2>

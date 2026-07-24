@@ -8,8 +8,8 @@ Use your **normal Chrome** at: https://chrome.google.com/webstore/devconsole
 
 | Field | Value |
 |-------|--------|
-| Zip | `C:\Users\hakka\WebstormProjects\Extensions\quell\release\stampstack-1.1.0.zip` |
-| Version | 1.1.0 |
+| Zip | `release/stampstack-<version>.zip` (whatever `npm run package` just printed) |
+| Version | matches `package.json` / `src/manifest.json` |
 | Icon 128 | `C:\Users\hakka\WebstormProjects\Extensions\quell\src\icons\icon-128.png` |
 | Promo 440×280 | `C:\Users\hakka\WebstormProjects\Extensions\quell\store\promo-small.png` |
 
@@ -29,7 +29,7 @@ Block ads and trackers with EasyList-style filters, cosmetics, and scriptlets �
 
 **Detailed description** — copy from `store/LISTING.md` (Detailed description section).
 
-**Category:** Productivity  
+**Category:** Privacy & Security  
 
 **Homepage:** leave blank (private repo — do not paste GitHub until public)  
 
@@ -40,16 +40,14 @@ Block ads and trackers with EasyList-style filters, cosmetics, and scriptlets �
 - `declarativeNetRequest` — DNR rulesets for ads/trackers  
 - `scripting` — cosmetic CSS + scriptlets  
 - `storage` — local settings / allowlist only  
-- `webNavigation` — apply cosmetics/scriptlets on navigations  
 - Host `<all_urls>` — general-purpose blocker across sites  
 
 ## Privacy practices (critical paste targets)
 
-**Single purpose** (purpose only — never paste host-permission text here):
-
-```
-Block ads and trackers using Declarative Net Request, cosmetic filters, and scriptlets.
-```
+**Single purpose** (purpose only — never paste host-permission text here).
+Single source of truth: the "Single purpose" block in [LISTING.md](./LISTING.md). Paste that text
+verbatim — it is the only variant that covers the dark-mode theming, and a narrower one has been
+submitted before.
 
 **Remote code:** No (this extension does not load remote code).
 

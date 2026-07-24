@@ -2,7 +2,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseLine } from '../scripts/lib/parse-filter.mjs';
-import { toDnrRule } from '../scripts/lib/to-dnr.mjs';
+import {
+  toDnrRule,
+  isPublicSuffixDomain,
+  regexFilterHasLiteralScope,
+} from '../scripts/lib/to-dnr.mjs';
 import { PRIORITY } from '../scripts/lib/limits.mjs';
 
 /** Parse a single line and convert it (if network). */
@@ -749,4 +753,118 @@ test('AdGuard scriptlet syntax parses', () => {
   assert.equal(p.kind, 'scriptlet');
   assert.equal(p.scriptlet.name, 'abort-on-property-read');
   assert.deepEqual(p.scriptlet.args, ['ads']);
+});
+
+// --- $all / $removeparam must reach main_frame -------------------------------
+// DNR omits main_frame when resourceTypes is absent, but uBO's `$all` means "every type
+// INCLUDING the document". ubo-badware ships 1368 `$all` phishing/malware host blocks and is
+// enabled by default, so an omitted type list silently lets every one of them be navigated to.
+
+test('$all block covers main_frame (DNR default would exclude it)', () => {
+  const { parsed, dnr } = convert('||buzzadnetwork.com^$all');
+  assert.ok(parsed.options.resourceTypes.includes('main_frame'));
+  assert.equal(dnr.rule.action.type, 'block');
+  assert.ok(
+    dnr.rule.condition.resourceTypes.includes('main_frame'),
+    'a $all rule that omits main_frame cannot block a top-level navigation',
+  );
+  for (const t of ['sub_frame', 'script', 'image', 'xmlhttprequest', 'websocket']) {
+    assert.ok(dnr.rule.condition.resourceTypes.includes(t), t);
+  }
+});
+
+test('$all keeps working alongside other options', () => {
+  const { dnr } = convert('||ads.example^$all,third-party');
+  assert.ok(dnr.rule.condition.resourceTypes.includes('main_frame'));
+  assert.equal(dnr.rule.condition.domainType, 'thirdParty');
+});
+
+test('typeless $removeparam strips the param from top-level URLs too', () => {
+  const { dnr } = convert('||example.com^$removeparam=fbclid');
+  assert.ok(
+    dnr.rule.condition.resourceTypes.includes('main_frame'),
+    'a $removeparam that skips main_frame can never clean the address bar',
+  );
+});
+
+test('an explicit resource type still wins over the $all default', () => {
+  const { dnr } = convert('||ads.example^$script');
+  assert.deepEqual(dnr.rule.condition.resourceTypes, ['script']);
+});
+
+// --- exceptions may never become a global unblock ----------------------------
+// This class has been patched seven times (PRs #17→#28) by adding literal regex shapes to a
+// list. These cases are the shapes that guard missed; they are caught structurally now
+// (regexFilterHasLiteralScope), so a novel encoding fails without a new literal being added.
+
+test('match-all regex exceptions never emit allowAllRequests', () => {
+  const lines = [
+    '@@/^(.*)$/$document',
+    '@@/(?:.*)/$document',
+    '@@/^[^ ]+/$document',
+    String.raw`@@/^https?:\/\/\w/$document`,
+    '@@/.*/$document',
+    String.raw`@@/^https?:\/\/[^\/]+/$document`,
+  ];
+  for (const line of lines) {
+    const { dnr } = convert(line);
+    assert.equal(dnr.skip, 'too-broad-allow-all', line);
+  }
+});
+
+test('match-all regex plain allows are dropped too', () => {
+  for (const line of ['@@/^[^ ]+/', '@@/(?:.*)/', '@@/^(.*)$/']) {
+    const { dnr } = convert(line);
+    assert.equal(dnr.skip, 'too-broad-allow', line);
+  }
+});
+
+test('a regex exception with a real literal host still emits', () => {
+  const { dnr } = convert(String.raw`@@/^https?:\/\/([^\/]+\.)?good\.example\//$document`);
+  assert.equal(dnr.rule.action.type, 'allowAllRequests');
+});
+
+test('regexFilterHasLiteralScope separates scoped regexes from match-all ones', () => {
+  for (const p of ['^(.*)$', '(?:.*)', '^[^ ]+', String.raw`^https?:\/\/\w`, '.*', '[\s\S]+']) {
+    assert.equal(regexFilterHasLiteralScope(p), false, p);
+  }
+  for (const p of [String.raw`doubleclick\.net\/pagead`, String.raw`^https?:\/\/good\.example\/`]) {
+    assert.equal(regexFilterHasLiteralScope(p), true, p);
+  }
+});
+
+test('suffix-only domain scope is dropped, not silently widened', () => {
+  // Stripping `com` used to delete initiatorDomains entirely, turning a domain-scoped
+  // exception into a global allow for every script on the web.
+  assert.equal(convert('@@$script,domain=com').dnr.skip, 'too-broad-allow');
+  assert.equal(convert('@@$document,domain=com').dnr.skip, 'too-broad-allow-all');
+  assert.equal(convert('@@$xhr,to=com|net').dnr.skip, 'too-broad-allow');
+});
+
+test('an exception keeps emitting when some scope survives the strip', () => {
+  // `to=` is suffix-only here, but `from=` names real hosts — the rule is still scoped.
+  const { dnr } = convert('@@*$xhr,script,3p,from=real.example|other.example,to=shop|autos');
+  assert.equal(dnr.rule.action.type, 'allow');
+  assert.deepEqual(dnr.rule.condition.initiatorDomains, ['real.example', 'other.example']);
+  assert.equal(dnr.rule.condition.requestDomains, undefined);
+});
+
+test('a two-label domain under a non-ccTLD is not a public suffix', () => {
+  // `go` is a registry label under ccTLDs (go.jp), but go.com is an ordinary site. Treating
+  // it as a suffix deleted the scope of every exception written against it.
+  assert.equal(isPublicSuffixDomain('go.com'), false);
+  assert.equal(isPublicSuffixDomain('ne.com'), false);
+  assert.equal(isPublicSuffixDomain('co.uk'), true);
+  assert.equal(isPublicSuffixDomain('com.au'), true);
+  assert.equal(isPublicSuffixDomain('go.jp'), true);
+  assert.equal(isPublicSuffixDomain('com'), true);
+
+  const { dnr } = convert('@@||adm.example^*/Renderer.$object,domain=go.com');
+  assert.deepEqual(dnr.rule.condition.initiatorDomains, ['go.com']);
+});
+
+test('type-only allows for narrow resource types still emit', () => {
+  const { dnr } = convert('@@$ping');
+  assert.equal(dnr.rule.action.type, 'allow');
+  assert.deepEqual(dnr.rule.condition.resourceTypes, ['ping']);
 });

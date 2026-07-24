@@ -170,6 +170,11 @@ code {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+/* A disabled switch must not look identical to an enabled one. */
+.switch input:disabled + .slider {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 
 .subhead {
   font-size: 14px;

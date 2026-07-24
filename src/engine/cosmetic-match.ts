@@ -36,11 +36,21 @@ function emptyList(): CosmeticListData {
   };
 }
 
-/** Merge enabled list buckets into one CosmeticListData view. */
+// mergeCosmeticLists materializes the whole dataset (Sets over ~29k generic selectors and
+// ~28k domain keys holding ~43k specific selectors). matchCosmetic runs once per frame per
+// page load, so rebuilding it per call is tens of milliseconds of blocking service-worker
+// work on every navigation. The inputs are a module constant and the enabled-list array, so
+// the result is stable until settings change — cache on the two identities.
+let mergeCache: { data: CosmeticData; key: string; value: CosmeticListData } | null = null;
+
+/** Merge enabled list buckets into one CosmeticListData view (memoized). */
 export function mergeCosmeticLists(
   data: CosmeticData,
   enabledListIds: string[],
 ): CosmeticListData {
+  const key = enabledListIds.join('\0');
+  if (mergeCache && mergeCache.data === data && mergeCache.key === key) return mergeCache.value;
+
   const merged = emptyList();
   const hideGeneric = new Set<string>();
   const unhideGeneric = new Set<string>();
@@ -69,7 +79,13 @@ export function mergeCosmeticLists(
   for (const [k, v] of Object.entries(hideSpecific)) merged.hideSpecific[k] = [...v];
   for (const [k, v] of Object.entries(unhideSpecific)) merged.unhideSpecific[k] = [...v];
   merged.procedural = procedural;
+  mergeCache = { data, key, value: merged };
   return merged;
+}
+
+/** Drop the memoized merge. Only needed by tests that mutate a dataset in place. */
+export function clearCosmeticMergeCache(): void {
+  mergeCache = null;
 }
 
 /** Exception hosts that can be expressed as Chrome match patterns (concrete, non-entity). */

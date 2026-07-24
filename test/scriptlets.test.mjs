@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { rmSync } from 'node:fs';
+import { SUPPORTED_SCRIPTLET_NAMES } from '../scripts/lib/scriptlet-safe.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 let mod;
@@ -26,6 +27,8 @@ before(async () => {
           abortCurrentInlineScript,
           runScriptlet,
           urlMatchesNeedle,
+          scriptletAliasNames,
+          scriptletIsImplemented,
         } from './src/scriptlets/library.js';
       `,
       resolveDir: ROOT,
@@ -207,5 +210,36 @@ test('acs short name aliases to abort-current-inline-script (uBO lists use acs, 
     else delete g.document;
     if (prevHTMLScript) g.HTMLScriptElement = prevHTMLScript;
     else delete g.HTMLScriptElement;
+  }
+});
+
+test('the compile-time supported list matches the runtime alias map exactly', () => {
+  // compile-filters.mjs drops scriptlet rules whose name has no handler. If that list drifts
+  // from the runtime map, either working rules get discarded (list too small) or dead rules
+  // keep shipping (list too large). Both are silent, so assert equality here.
+  const runtime = new Set(mod.scriptletAliasNames());
+  const compile = SUPPORTED_SCRIPTLET_NAMES;
+
+  const missingFromCompile = [...runtime].filter((n) => !compile.has(n));
+  const staleInCompile = [...compile].filter((n) => !runtime.has(n));
+
+  assert.deepEqual(
+    missingFromCompile,
+    [],
+    'implemented scriptlets missing from SUPPORTED_SCRIPTLET_NAMES — their rules are being dropped',
+  );
+  assert.deepEqual(
+    staleInCompile,
+    [],
+    'SUPPORTED_SCRIPTLET_NAMES lists scriptlets the runtime cannot run',
+  );
+});
+
+test('every supported alias resolves to a real handler', () => {
+  for (const name of SUPPORTED_SCRIPTLET_NAMES) {
+    assert.equal(mod.scriptletIsImplemented(name), true, name);
+  }
+  for (const name of ['nowoif', 'rmnt', 'aeld', 'no-fetch-if', 'definitely-not-real']) {
+    assert.equal(mod.scriptletIsImplemented(name), false, name);
   }
 });

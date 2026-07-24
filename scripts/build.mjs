@@ -153,6 +153,11 @@ function copyStatic() {
   const privacySrc = join(ROOT, 'docs', 'privacy-policy.html');
   if (existsSync(privacySrc)) cpSync(privacySrc, join(DIST, 'privacy.html'));
 
+  // Filter-list attribution must ship with the package: the compiled rulesets are derived
+  // from EasyList / uBO data under GPLv3 / CC BY-SA.
+  const attribSrc = join(ROOT, 'docs', 'attributions.html');
+  if (existsSync(attribSrc)) cpSync(attribSrc, join(DIST, 'attributions.html'));
+
   mkdirSync(join(DIST, 'generated', 'rulesets'), { recursive: true });
   mkdirSync(join(DIST, 'generated', 'generic-cosmetic'), { recursive: true });
   for (const f of readdirSync(join(GEN, 'rulesets'))) {
@@ -164,9 +169,9 @@ function copyStatic() {
       cpSync(join(genericDir, f), join(DIST, 'generated', 'generic-cosmetic', f));
     }
   }
-  if (existsSync(join(GEN, 'generic-cosmetic.css'))) {
-    cpSync(join(GEN, 'generic-cosmetic.css'), join(DIST, 'generated', 'generic-cosmetic.css'));
-  }
+  // NOT copied: generated/generic-cosmetic.css. syncRegisteredScripts injects the per-list
+  // sheets under generated/generic-cosmetic/, so the combined file is ~530 KB of package
+  // weight nothing ever loads. It stays in src/generated for local inspection.
 }
 
 async function run() {
