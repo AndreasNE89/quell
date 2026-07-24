@@ -84,7 +84,12 @@ test('match-all URL/regex $document exceptions are dropped (residual global AAR)
     '@@*.github.io^$document',
     // Regex any-char / any-host residuals
     '@@/[\\s\\S]*/$document',
+    '@@/[\\s\\S]+/$document',
+    '@@/[\\s\\S]{1,}/$document',
+    '@@/[\\d\\D]+/$document',
+    '@@/[\\w\\W]+/$document',
     '@@/^https?:\\/\\/[^\\/]+/$document',
+    '@@/^https?:\\/\\/[^\\/]{1,}/$document',
     '@@/^https?:\\/\\/[^\\/]+.*/$document',
   ]) {
     const { dnr } = convert(line);
@@ -171,7 +176,11 @@ test('match-all plain allow exceptions are dropped (global ALLOW over BLOCK)', (
     '@@|http*://*',
     '@@||*.com^$script',
     '@@/[\\s\\S]*/',
+    '@@/[\\s\\S]+/',
+    '@@/[\\s\\S]{1,}/',
+    '@@/[\\d\\D]+/',
     '@@/^https?:\\/\\/[^\\/]+/',
+    '@@/^https?:\\/\\/[^\\/]{1,}/',
   ]) {
     const { dnr } = convert(line);
     assert.equal(dnr.skip, 'too-broad-allow', line);
