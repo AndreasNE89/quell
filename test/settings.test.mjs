@@ -62,3 +62,47 @@ test('should keep darkModeAutoOff as a plain object when merging', () => {
   assert.equal(s.darkModeAutoOff['example.com'], true);
   assert.equal(s.darkModeSiteOverrides['example.com'], 'off');
 });
+
+// --- siteFixes + hostile input --------------------------------------------------------------
+// mergeSettings is now the validation boundary for user-supplied import files, not just for
+// storage we wrote ourselves. Anything it lets through reaches the rest of the worker.
+
+test('siteFixes defaults to empty and round-trips valid levels', () => {
+  assert.deepEqual(mod.defaultSettings().siteFixes, {});
+  const s = mod.mergeSettings({
+    siteFixes: { 'a.example': 'cosmetics', 'b.example': 'injection' },
+  });
+  assert.deepEqual(s.siteFixes, { 'a.example': 'cosmetics', 'b.example': 'injection' });
+});
+
+test('unknown siteFixes levels and bad keys are dropped, not stored', () => {
+  const s = mod.mergeSettings({
+    siteFixes: {
+      'ok.example': 'injection',
+      'bad.example': 'everything',
+      'null.example': null,
+      'num.example': 3,
+      '': 'cosmetics',
+    },
+  });
+  assert.deepEqual(s.siteFixes, { 'ok.example': 'injection' });
+});
+
+test('siteFixes of the wrong shape falls back to the default', () => {
+  assert.deepEqual(mod.mergeSettings({ siteFixes: 'nope' }).siteFixes, {});
+  assert.deepEqual(mod.mergeSettings({ siteFixes: null }).siteFixes, {});
+  assert.deepEqual(mod.mergeSettings({}).siteFixes, {});
+});
+
+test('non-string allowlist entries are filtered out', () => {
+  // A single non-string entry used to reach normalizeHostname and throw, which took down
+  // cosmetic filtering for every page — reachable via an imported settings file.
+  const s = mod.mergeSettings({
+    allowlist: ['good.example', null, 42, { host: 'x' }, '', 'also.example', undefined],
+  });
+  assert.deepEqual(s.allowlist, ['good.example', 'also.example']);
+});
+
+test('an allowlist of the wrong type does not wipe the default', () => {
+  assert.deepEqual(mod.mergeSettings({ allowlist: 'example.com' }).allowlist, []);
+});

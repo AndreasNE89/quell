@@ -28,6 +28,11 @@ import type {
   DarkModeSiteOverride,
   LicenseData,
   LicenseState,
+  SiteFixLevel,
+  SiteRulesData,
+  PageReport,
+  TrackerIndex,
+  CustomFiltersData,
 } from '../shared/types.js';
 import { fetchSponsorSegments } from './sponsorblock-api.js';
 import {
@@ -41,7 +46,7 @@ import {
   DARK_MODE_FORCE_ON_SCRIPT_ID,
   DARK_MODE_CSS_PATH,
 } from '../shared/constants.js';
-import { loadSettings, saveSettings, isListEnabled } from './settings.js';
+import { loadSettings, saveSettings, isListEnabled, mergeSettings } from './settings.js';
 import { syncOneRegisteredScript } from './registered-scripts.js';
 import {
   defaultLicense,
@@ -56,6 +61,19 @@ import {
   probeInstallEnvironment,
   toLicenseData,
 } from './license.js';
+import { classifyHosts } from '../shared/page-report.js';
+import {
+  customCosmeticsFor,
+  parseCustomFilters,
+  appendFilterLine,
+} from '../shared/custom-filters.js';
+import {
+  resolveSiteFix,
+  fixDisablesCosmetics,
+  fixDisablesScriptlets,
+  hostsWithCosmeticsOff,
+  hostsWithScriptletsOff,
+} from '../shared/site-fix.js';
 import {
   isLicenseEffectivelyPaid,
   resolveDarkModeForHost,
@@ -77,10 +95,12 @@ import {
 import cosmeticJson from '../generated/cosmetic.json';
 import scriptletJson from '../generated/scriptlets.json';
 import metaJson from '../generated/meta.json';
+import trackerJson from '../generated/trackers.json';
 
 const COSMETIC = cosmeticJson as CosmeticData;
 const SCRIPTLETS = scriptletJson as ScriptletData;
 const META = metaJson as GeneratedMeta;
+const TRACKERS = trackerJson as TrackerIndex;
 
 const STATS_RELIABLE = !!chrome.declarativeNetRequest.onRuleMatchedDebug;
 
@@ -195,7 +215,15 @@ async function syncRegisteredScripts(settings: Settings): Promise<void> {
   const shouldExist = !settings.paused;
   // Always an array, never undefined: syncOneRegisteredScript compares against the live
   // registration, and an absent property would read as "leave whatever is there".
-  const allowlistExclude = [...new Set(settings.allowlist.flatMap(allowlistMatchPatterns))];
+  // The YouTube MAIN-world hooks are scriptlets, so an `injection`-level fix must exclude
+  // them too or "scriptlets off" would not actually be off on YouTube.
+  const allowlistExclude = [
+    ...new Set(
+      [...settings.allowlist, ...hostsWithScriptletsOff(settings.siteFixes)].flatMap(
+        allowlistMatchPatterns,
+      ),
+    ),
+  ];
 
   // Generic cosmetic CSS is additionally excluded on hosts with a $generichide/$elemhide
   // network exception, so those hosts never receive the sheet (and need no per-page revert
@@ -205,6 +233,10 @@ async function syncRegisteredScripts(settings: Settings): Promise<void> {
     ...new Set(
       [
         ...settings.allowlist,
+        // Breakage fixes must also drop the registered generic sheet — it is injected by
+        // chrome.scripting, so suppressing the per-page payload in handleCosmetic is not
+        // enough to stop generic hiding on that host.
+        ...hostsWithCosmeticsOff(settings.siteFixes),
         ...COSMETIC.networkExceptions.generichide,
         ...COSMETIC.networkExceptions.elemhide,
       ].flatMap(allowlistMatchPatterns),
@@ -546,6 +578,37 @@ async function handleMessage(msg: Message, sender: chrome.runtime.MessageSender)
     case 'popup:setPaused':
       return handleSetPaused(msg.paused);
 
+    case 'report:get':
+      return handleReportGet();
+
+    case 'picker:start':
+      return handlePickerStart();
+
+    case 'customfilters:add':
+      return handleCustomFilterAdd(msg.line, sender);
+
+    case 'customfilters:get':
+      return handleCustomFiltersGet();
+
+    case 'customfilters:set':
+      return handleCustomFiltersSet(msg.text);
+
+    case 'page:collect':
+      // SW → content script only; a tab must never answer this to itself.
+      return null;
+
+    case 'sitefix:set':
+      return handleSiteFixSet(msg.hostname, msg.level);
+
+    case 'sitefix:list':
+      return handleSiteFixList();
+
+    case 'settings:export':
+      return handleSettingsExport();
+
+    case 'settings:import':
+      return handleSettingsImport(msg.json);
+
     case 'popup:setYoutubeOptions':
       return handleSetYoutubeOptions(
         msg.youtubeBlockSponsored,
@@ -588,6 +651,10 @@ async function handleMessage(msg: Message, sender: chrome.runtime.MessageSender)
     case 'darkmode:setSiteOverride':
       return handleDarkModeSetSiteOverride(msg.hostname, msg.override);
 
+    case 'cosmetic:refresh':
+      // SW → content only.
+      return null;
+
     case 'darkmode:refresh':
       // SW → content only; tabs should not message the SW with this type.
       return null;
@@ -615,7 +682,14 @@ async function handleMessage(msg: Message, sender: chrome.runtime.MessageSender)
 
 async function handleCosmetic(hostname: string): Promise<CosmeticResponse> {
   const settings = await loadSettings();
-  if (settings.paused || isAllowlistedHost(hostname, settings.allowlist)) {
+  // A breakage fix suppresses element hiding while leaving network blocking in place. The
+  // registered generic stylesheet is excluded separately in syncRegisteredScripts — returning
+  // nothing here only covers the per-page specific/procedural payload.
+  if (
+    settings.paused ||
+    isAllowlistedHost(hostname, settings.allowlist) ||
+    fixDisablesCosmetics(resolveSiteFix(hostname, settings.siteFixes))
+  ) {
     return {
       allowlisted: true,
       hide: [],
@@ -626,10 +700,17 @@ async function handleCosmetic(hostname: string): Promise<CosmeticResponse> {
     };
   }
   const m = matchCosmetic(hostname, COSMETIC, enabledListIds(settings));
+  // The user's own rules ride along with the list-derived ones. Their exceptions are applied
+  // inside customCosmeticsFor, and their unhides also cancel list hides below — a user must be
+  // able to override a filter list, not just their own picks.
+  const custom = customCosmeticsFor(settings.customFilters, hostname);
+  const hide = [...new Set([...m.hide, ...custom.hide])].filter(
+    (s) => !custom.unhide.includes(s),
+  );
   return {
     allowlisted: false,
-    hide: m.hide,
-    unhide: m.unhide,
+    hide,
+    unhide: [...new Set([...m.unhide, ...custom.unhide])],
     procedural: m.procedural,
     disableGeneric: m.disableGeneric,
     disableSpecific: m.disableSpecific,
@@ -638,7 +719,11 @@ async function handleCosmetic(hostname: string): Promise<CosmeticResponse> {
 
 async function handleScriptlets(hostname: string): Promise<ScriptletsResponse> {
   const settings = await loadSettings();
-  if (settings.paused || isAllowlistedHost(hostname, settings.allowlist)) {
+  if (
+    settings.paused ||
+    isAllowlistedHost(hostname, settings.allowlist) ||
+    fixDisablesScriptlets(resolveSiteFix(hostname, settings.siteFixes))
+  ) {
     return { allowlisted: true, scriptlets: [] };
   }
   return {
@@ -718,6 +803,7 @@ async function handlePopupGet(): Promise<PopupData> {
       0,
     ),
     coveredBy,
+    siteFix: resolveSiteFix(hostname, settings.siteFixes),
     youtubeBlockSponsored: settings.youtubeBlockSponsored !== false,
     youtubeBlockShorts: !!settings.youtubeBlockShorts,
     youtubeSponsorBlock: settings.youtubeSponsorBlock !== false,
@@ -774,6 +860,197 @@ async function handleToggleSite(hostname: string, enabled: boolean): Promise<Pop
   });
   await withSettings((s) => Promise.all([syncAllowlist(s), syncRegisteredScripts(s)]));
   return handlePopupGet();
+}
+
+/**
+ * Per-page report. Asks the content script what the page reached for, then names the hosts.
+ *
+ * The naming index is compiled (`trackers.json`, ~9 KB): 171 domains for organizations a user
+ * recognizes, each flagged with whether a shipped rule actually matches it. Hosts outside the
+ * index are counted but not named — better than mislabeling an asset CDN as a tracker.
+ */
+async function handleReportGet(): Promise<PageReport> {
+  const settings = await loadSettings();
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const url = tab?.url ?? null;
+  const hostname = url && isHttpOrHttpsUrl(url) ? new URL(url).hostname : null;
+
+  const empty = (reason: PageReport['reason']): PageReport => ({
+    available: false,
+    reason,
+    hostname,
+    trackers: [],
+    unnamedThirdParty: 0,
+    hiddenElements: 0,
+    truncated: false,
+  });
+
+  if (!hostname || tab?.id == null) return empty('restricted');
+  if (settings.paused) return empty('paused');
+  if (isAllowlistedHost(hostname, settings.allowlist)) return empty('allowlisted');
+
+  let page: { hosts?: unknown; hiddenCount?: unknown; truncated?: unknown } | undefined;
+  try {
+    page = await chrome.tabs.sendMessage(tab.id, { type: 'page:collect' });
+  } catch {
+    // No content script in this tab: a restricted page, or the tab predates the install.
+    return empty('no-content-script');
+  }
+  if (!page || !Array.isArray(page.hosts)) return empty('no-content-script');
+
+  const { trackers, unnamedThirdParty } = classifyHosts(page.hosts, TRACKERS);
+
+  return {
+    available: true,
+    hostname,
+    trackers,
+    unnamedThirdParty,
+    hiddenElements: typeof page.hiddenCount === 'number' ? page.hiddenCount : 0,
+    truncated: page.truncated === true,
+  };
+}
+
+/** Inject the picker into the active tab. Not part of the always-on content script. */
+async function handlePickerStart(): Promise<{ ok: boolean; error?: string }> {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (tab?.id == null || !tab.url || !isHttpOrHttpsUrl(tab.url)) {
+    return { ok: false, error: 'The picker only works on ordinary web pages.' };
+  }
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      files: ['picker.js'],
+    });
+    return { ok: true };
+  } catch (e) {
+    console.error('[StampStack] picker injection failed', e);
+    return { ok: false, error: 'Chrome would not let the picker run on this page.' };
+  }
+}
+
+/**
+ * Append one filter line from the picker.
+ *
+ * The line is re-parsed before it is stored: it arrives from a content script, and a content
+ * script is only as trustworthy as the page it runs in. A malformed or unsafe selector is
+ * rejected rather than persisted where it would break every later parse.
+ */
+async function handleCustomFilterAdd(
+  line: string,
+  sender: chrome.runtime.MessageSender,
+): Promise<{ ok: boolean; error?: string }> {
+  if (typeof line !== 'string' || !line.trim()) return { ok: false, error: 'Empty filter.' };
+  const { filters, errors } = parseCustomFilters(line);
+  if (errors.length || filters.length !== 1) {
+    return { ok: false, error: errors[0]?.reason ?? 'Could not parse that filter.' };
+  }
+  await mutateSettings((s) => {
+    s.customFilters = appendFilterLine(s.customFilters ?? '', line.trim());
+  });
+  // Re-push cosmetics to the tab that picked, so the element stays hidden after a reload
+  // without waiting for the next navigation.
+  if (sender.tab?.id != null) {
+    try {
+      await chrome.tabs.sendMessage(sender.tab.id, { type: 'cosmetic:refresh' });
+    } catch {
+      /* tab closed or navigated */
+    }
+  }
+  return { ok: true };
+}
+
+async function handleCustomFiltersGet(): Promise<CustomFiltersData> {
+  const settings = await loadSettings();
+  const text = settings.customFilters ?? '';
+  const { filters, errors } = parseCustomFilters(text);
+  return { text, count: filters.length, errors };
+}
+
+async function handleCustomFiltersSet(text: string): Promise<CustomFiltersData> {
+  if (typeof text !== 'string') return handleCustomFiltersGet();
+  await mutateSettings((s) => {
+    s.customFilters = text.slice(0, 100_000);
+  });
+  return handleCustomFiltersGet();
+}
+
+async function handleSiteFixSet(
+  hostname: string,
+  level: SiteFixLevel | null,
+): Promise<PopupData> {
+  const host = normalizeHostname(hostname);
+  if (!host || !isSafeAllowlistHost(host)) return handlePopupGet();
+  await mutateSettings((s) => {
+    if (!s.siteFixes) s.siteFixes = {};
+    // Clear every entry that covers this host, not just the exact key — otherwise a fix
+    // inherited from a parent domain could not be stepped back from the affected page.
+    for (const entry of Object.keys(s.siteFixes)) {
+      if (isAllowlistedHost(host, [entry])) delete s.siteFixes[entry];
+    }
+    if (level) s.siteFixes[host] = level;
+  });
+  // Cosmetic/scriptlet excludes are part of the registered scripts, so they must be resynced;
+  // network rules are untouched by a fix, which is the entire point of the ladder.
+  await withSettings((s) => syncRegisteredScripts(s));
+  return handlePopupGet();
+}
+
+async function handleSiteFixList(): Promise<SiteRulesData> {
+  const settings = await loadSettings();
+  return {
+    allowlist: [...settings.allowlist].sort(),
+    siteFixes: { ...(settings.siteFixes ?? {}) },
+  };
+}
+
+/** Settings as a portable JSON document (no license state — that is tied to the purchase). */
+async function handleSettingsExport(): Promise<{ json: string }> {
+  const s = await loadSettings();
+  return {
+    json: JSON.stringify(
+      {
+        format: 'stampstack-settings',
+        version: 1,
+        settings: {
+          paused: s.paused,
+          enabledLists: s.enabledLists,
+          allowlist: s.allowlist,
+          siteFixes: s.siteFixes ?? {},
+          youtubeBlockSponsored: s.youtubeBlockSponsored,
+          youtubeBlockShorts: s.youtubeBlockShorts,
+          youtubeSponsorBlock: s.youtubeSponsorBlock,
+          darkModeEnabled: s.darkModeEnabled,
+          darkModeSiteOverrides: s.darkModeSiteOverrides,
+        },
+      },
+      null,
+      2,
+    ),
+  };
+}
+
+async function handleSettingsImport(json: string): Promise<{ ok: boolean; error?: string }> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    return { ok: false, error: 'That file is not valid JSON.' };
+  }
+  const doc = parsed as { format?: unknown; settings?: unknown };
+  if (doc?.format !== 'stampstack-settings' || !doc.settings || typeof doc.settings !== 'object') {
+    return { ok: false, error: 'That is not a StampStack settings export.' };
+  }
+  // mergeSettings validates every field and drops anything unrecognized, so a hand-edited or
+  // hostile file cannot inject state the rest of the worker would trip over.
+  await mutateSettings((s) => {
+    const next = mergeSettings(doc.settings as Partial<Settings>);
+    // Never import a paid flag or counters — the license lives outside settings, and adopting
+    // someone else's blockedTotal would just be wrong.
+    next.blockedTotal = s.blockedTotal;
+    Object.assign(s, next);
+  });
+  await withSettings((s) => applyAll(s));
+  return { ok: true };
 }
 
 async function handleSetPaused(paused: boolean): Promise<PopupData> {

@@ -51,6 +51,70 @@ export interface Settings {
    * Cleared when the user changes that host’s override.
    */
   darkModeAutoOff: Record<string, boolean>;
+  /**
+   * Breakage repair, per host. Absent = everything on. The full disable step is the
+   * existing `allowlist`, so the ladder is: none → cosmetics → injection → allowlist.
+   */
+  siteFixes: Record<string, SiteFixLevel>;
+  /** The user's own cosmetic filters, as raw editable text (one rule per line). */
+  customFilters: string;
+}
+
+/**
+ * How much filtering to switch off on a site that broke.
+ *
+ * Most breakage is caused by element hiding or by a scriptlet patching a page global — not by
+ * network blocking. Turning *everything* off (the allowlist) to fix a misplaced element also
+ * hands the site back its ads and trackers, so it is the last step, not the only one.
+ *
+ * - `cosmetics`  — element hiding off. Network blocking and scriptlets stay on.
+ * - `injection`  — element hiding and scriptlets off. Network blocking stays on.
+ */
+export type SiteFixLevel = 'cosmetics' | 'injection';
+
+/** One named third party observed on the page. */
+export interface ReportTracker {
+  host: string;
+  /** Organization a user would recognize, e.g. "Google Analytics". */
+  label: string;
+  /** True when a shipped block rule matches this domain. False = seen but not blocked. */
+  blocked: boolean;
+}
+
+/**
+ * What StampStack can honestly say about the current page.
+ *
+ * Deliberately not a "requests blocked" count: Chrome withholds per-request match events from
+ * store builds, so any such number would be invented. These are page observations instead —
+ * what the document reached for, and what our own rules hid.
+ */
+export interface PageReport {
+  available: boolean;
+  /** Why the report is empty, when it is. */
+  reason?: 'no-content-script' | 'restricted' | 'paused' | 'allowlisted';
+  hostname: string | null;
+  /** Named trackers/ad services, most notable first. */
+  trackers: ReportTracker[];
+  /** Third-party hosts we saw but cannot name. */
+  unnamedThirdParty: number;
+  /** Elements hidden by site-specific and procedural cosmetic rules on this page. */
+  hiddenElements: number;
+  /** The host cap was reached, so counts are a floor rather than exact. */
+  truncated: boolean;
+}
+
+/** The user's own filters plus whatever the parser could not use. */
+export interface CustomFiltersData {
+  text: string;
+  /** How many rules actually parsed. */
+  count: number;
+  errors: { line: number; text: string; reason: string }[];
+}
+
+/** Every per-site rule the user has set, for the Options manager. */
+export interface SiteRulesData {
+  allowlist: string[];
+  siteFixes: Record<string, SiteFixLevel>;
 }
 
 /** Cached license / purchase state (`stampstack.license`). */
@@ -115,6 +179,17 @@ export type Message =
   | { type: 'popup:get' }
   | { type: 'popup:toggleSite'; hostname: string; enabled: boolean }
   | { type: 'popup:setPaused'; paused: boolean }
+  | { type: 'report:get' }
+  | { type: 'picker:start' }
+  | { type: 'customfilters:add'; line: string }
+  | { type: 'customfilters:get' }
+  | { type: 'customfilters:set'; text: string }
+  /** SW → content script: hand back what this page has observed. */
+  | { type: 'page:collect' }
+  | { type: 'sitefix:set'; hostname: string; level: SiteFixLevel | null }
+  | { type: 'sitefix:list' }
+  | { type: 'settings:export' }
+  | { type: 'settings:import'; json: string }
   | {
       type: 'popup:setYoutubeOptions';
       youtubeBlockSponsored: boolean;
@@ -136,6 +211,8 @@ export type Message =
   /** Content script: page looks already dark — persist force-off if allowed. */
   /** SW → content: re-apply or remove dark styles without reloading the tab. */
   | { type: 'darkmode:refresh' }
+  /** SW → content: re-fetch cosmetics after the user's own filters changed. */
+  | { type: 'cosmetic:refresh' }
   | { type: 'license:get' }
   | { type: 'license:openCheckout' }
   | { type: 'license:openRestore' }
@@ -175,6 +252,8 @@ export interface PopupData {
   activeRuleCount: number;
   /** An allowlist entry that covers this host without being equal to it (parent domain). */
   coveredBy: string | null;
+  /** Active breakage-repair rung for this host, if any. */
+  siteFix: SiteFixLevel | null;
   youtubeBlockSponsored: boolean;
   youtubeBlockShorts: boolean;
   youtubeSponsorBlock: boolean;
@@ -230,4 +309,9 @@ export interface DarkModeData {
   restricted?: boolean;
   siteOverrides: Record<string, DarkModeSiteOverride>;
   license: LicenseData;
+}
+
+/** Compiled tracker-naming index (`src/generated/trackers.json`). */
+export interface TrackerIndex {
+  domains: Record<string, { label: string; blocked: boolean }>;
 }
