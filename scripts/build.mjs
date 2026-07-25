@@ -15,6 +15,7 @@ import {
   existsSync,
   cpSync,
   readdirSync,
+  statSync,
 } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -140,35 +141,66 @@ function buildManifest() {
   writeFileSync(join(DIST, 'manifest.json'), JSON.stringify(manifest, null, store ? 0 : 2));
 }
 
+/**
+ * Copy a text asset, normalizing CRLF to LF.
+ *
+ * On Windows git checks the working tree out with CRLF, so a plain copy bakes the local
+ * autocrlf setting into the package — the same commit produced two different zips depending on
+ * who built it. HTML and CSS do not care, but a store artifact whose bytes depend on the
+ * machine cannot be diffed or reproduced, so normalize on the way in.
+ */
+function copyText(src, dest) {
+  writeFileSync(dest, readFileSync(src, 'utf8').split('\r\n').join('\n'));
+}
+
+/** Extensions worth normalizing. Anything else (icons) is copied byte-for-byte. */
+const TEXT_EXT = new Set(['.html', '.css', '.js', '.txt', '.json', '.svg']);
+
+function copyTree(srcDir, destDir) {
+  mkdirSync(destDir, { recursive: true });
+  for (const name of readdirSync(srcDir)) {
+    const from = join(srcDir, name);
+    const to = join(destDir, name);
+    if (statSync(from).isDirectory()) {
+      copyTree(from, to);
+      continue;
+    }
+    const dot = name.lastIndexOf('.');
+    const ext = dot < 0 ? '' : name.slice(dot).toLowerCase();
+    if (TEXT_EXT.has(ext)) copyText(from, to);
+    else cpSync(from, to);
+  }
+}
+
 function copyStatic() {
   for (const [dir, files] of [
     ['popup', ['popup.html', 'popup.css']],
     ['options', ['options.html', 'options.css']],
   ]) {
-    for (const f of files) cpSync(join(SRC, dir, f), join(DIST, f));
+    for (const f of files) copyText(join(SRC, dir, f), join(DIST, f));
   }
-  cpSync(join(SRC, 'content', 'dark-mode.css'), join(DIST, 'dark-mode.css'));
+  copyText(join(SRC, 'content', 'dark-mode.css'), join(DIST, 'dark-mode.css'));
   cpSync(join(SRC, 'icons'), join(DIST, 'icons'), { recursive: true });
-  cpSync(join(SRC, 'redirects'), join(DIST, 'redirects'), { recursive: true });
+  copyTree(join(SRC, 'redirects'), join(DIST, 'redirects'));
 
   // In-extension privacy page (also publish docs/privacy-policy.html on the web).
   const privacySrc = join(ROOT, 'docs', 'privacy-policy.html');
-  if (existsSync(privacySrc)) cpSync(privacySrc, join(DIST, 'privacy.html'));
+  if (existsSync(privacySrc)) copyText(privacySrc, join(DIST, 'privacy.html'));
 
   // Filter-list attribution must ship with the package: the compiled rulesets are derived
   // from EasyList / uBO data under GPLv3 / CC BY-SA.
   const attribSrc = join(ROOT, 'docs', 'attributions.html');
-  if (existsSync(attribSrc)) cpSync(attribSrc, join(DIST, 'attributions.html'));
+  if (existsSync(attribSrc)) copyText(attribSrc, join(DIST, 'attributions.html'));
 
   mkdirSync(join(DIST, 'generated', 'rulesets'), { recursive: true });
   mkdirSync(join(DIST, 'generated', 'generic-cosmetic'), { recursive: true });
   for (const f of readdirSync(join(GEN, 'rulesets'))) {
-    cpSync(join(GEN, 'rulesets', f), join(DIST, 'generated', 'rulesets', f));
+    copyText(join(GEN, 'rulesets', f), join(DIST, 'generated', 'rulesets', f));
   }
   const genericDir = join(GEN, 'generic-cosmetic');
   if (existsSync(genericDir)) {
     for (const f of readdirSync(genericDir)) {
-      cpSync(join(genericDir, f), join(DIST, 'generated', 'generic-cosmetic', f));
+      copyText(join(genericDir, f), join(DIST, 'generated', 'generic-cosmetic', f));
     }
   }
   // NOT copied: generated/generic-cosmetic.css. syncRegisteredScripts injects the per-list
