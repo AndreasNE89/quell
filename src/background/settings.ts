@@ -16,6 +16,8 @@ export function defaultSettings(): Settings {
     darkModeEnabled: false,
     darkModeSiteOverrides: {},
     darkModeAutoOff: {},
+    siteFixes: {},
+    customFilters: '',
   };
 }
 
@@ -49,6 +51,8 @@ export function mergeSettings(partial: Partial<Settings>): Settings {
     enabledLists: { ...base.enabledLists },
     darkModeSiteOverrides: { ...base.darkModeSiteOverrides },
     darkModeAutoOff: { ...base.darkModeAutoOff },
+    siteFixes: { ...base.siteFixes },
+    customFilters: base.customFilters,
     allowlist: [...base.allowlist],
   };
 
@@ -64,7 +68,12 @@ export function mergeSettings(partial: Partial<Settings>): Settings {
     next.youtubeSponsorBlock = partial.youtubeSponsorBlock;
   }
   if (typeof partial.darkModeEnabled === 'boolean') next.darkModeEnabled = partial.darkModeEnabled;
-  if (Array.isArray(partial.allowlist)) next.allowlist = [...partial.allowlist];
+  // Element types are validated, not just the container: these settings can now arrive from a
+  // user-supplied import file, and a single non-string entry would throw inside
+  // normalizeHostname and take down cosmetic filtering for every page.
+  if (Array.isArray(partial.allowlist)) {
+    next.allowlist = partial.allowlist.filter((h): h is string => typeof h === 'string' && !!h);
+  }
   if (partial.enabledLists && typeof partial.enabledLists === 'object') {
     next.enabledLists = { ...partial.enabledLists };
   }
@@ -73,6 +82,17 @@ export function mergeSettings(partial: Partial<Settings>): Settings {
   }
   if (partial.darkModeAutoOff && typeof partial.darkModeAutoOff === 'object') {
     next.darkModeAutoOff = { ...partial.darkModeAutoOff };
+  }
+  if (typeof partial.customFilters === 'string') {
+    // Bounded so an imported file cannot wedge the parser or the Options textarea.
+    next.customFilters = partial.customFilters.slice(0, 100_000);
+  }
+  if (partial.siteFixes && typeof partial.siteFixes === 'object') {
+    next.siteFixes = {};
+    for (const [host, level] of Object.entries(partial.siteFixes)) {
+      if (typeof host !== 'string' || !host) continue;
+      if (level === 'cosmetics' || level === 'injection') next.siteFixes[host] = level;
+    }
   }
   return next;
 }

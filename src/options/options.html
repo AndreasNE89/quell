@@ -76,9 +76,9 @@
         <h2>Dark mode (paid)</h2>
         <p class="hint">
           Optional one-time unlock that darkens ordinary web pages (smart invert).
-          Sites that already look dark are auto-disabled. Independent of pause and
-          the site allowlist — ad blocking stays free. Reinstalling? Use Restore purchase
-          with the email from your ExtensionPay / Stripe receipt.
+          Surfaces that are already dark are left alone rather than inverted into light.
+          Independent of pause and the site allowlist — ad blocking stays free.
+          Reinstalling? Use Restore purchase with the email from your ExtensionPay / Stripe receipt.
         </p>
         <div class="lists">
           <div class="list-item">
@@ -92,7 +92,7 @@
             </label>
           </div>
         </div>
-        <div class="dark-actions" id="darkActions">
+        <div class="dark-actions">
           <button type="button" class="btn" id="darkBuy">Buy dark mode ($2)</button>
           <button type="button" class="btn btn-secondary" id="darkRestore">Restore purchase</button>
           <button type="button" class="btn btn-secondary" id="darkRefresh">Refresh license</button>
@@ -128,6 +128,70 @@
           updates arrive with new StampStack versions.
         </p>
         <div id="lists" class="lists">Loading…</div>
+      </section>
+
+      <section>
+        <h2>Site rules</h2>
+        <p class="hint">
+          Every site where you changed something, in one place. Repair steps keep ad blocking
+          on and only switch off the part that broke the page; allowlisted sites get no
+          blocking at all.
+        </p>
+        <div id="siteRules" class="lists">Loading…</div>
+
+        <h3 class="subhead">Add a site</h3>
+        <form id="siteRuleForm" class="override-form">
+          <input
+            type="text"
+            id="siteRuleHost"
+            placeholder="example.com"
+            aria-label="Site hostname"
+            autocomplete="off"
+          />
+          <select id="siteRuleLevel" aria-label="Rule">
+            <option value="cosmetics">Element hiding off</option>
+            <option value="injection">Element hiding + scriptlets off</option>
+            <option value="allowlist">No blocking at all</option>
+          </select>
+          <button type="submit">Add</button>
+        </form>
+      </section>
+
+      <section>
+        <h2>My filters</h2>
+        <p class="hint">
+          Your own element-hiding rules, one per line. The popup's element picker writes here.
+          Format: <code>example.com##.ad-slot</code> to hide, <code>example.com#@#.ad-slot</code>
+          to cancel a rule, <code>!</code> to start a comment. Network rules
+          (<code>||host^</code>) are not supported yet.
+        </p>
+        <textarea
+          id="customFilters"
+          class="filter-editor"
+          rows="8"
+          spellcheck="false"
+          aria-label="My filters"
+          placeholder="example.com##.sponsored-widget"
+        ></textarea>
+        <div class="backup-row">
+          <button type="button" id="customSave">Save filters</button>
+          <span class="hint" id="customStatus" role="status"></span>
+        </div>
+        <div id="customErrors" class="filter-errors"></div>
+      </section>
+
+      <section>
+        <h2>Backup</h2>
+        <p class="hint">
+          Export your lists, site rules and preferences as a file, or restore them on another
+          machine. Purchases are not included — restore those with the email from your receipt.
+        </p>
+        <div class="backup-row">
+          <button type="button" id="exportBtn">Export settings</button>
+          <button type="button" id="importBtn">Import settings…</button>
+          <input type="file" id="importFile" accept="application/json,.json" hidden />
+        </div>
+        <p class="hint" id="backupStatus" role="status"></p>
       </section>
 
       <footer class="page-foot">

@@ -33,6 +33,7 @@ import {
 } from './lib/to-dnr.mjs';
 import { DNR } from './lib/limits.mjs';
 import { scriptletLooksObfuscated, scriptletUnsupported } from './lib/scriptlet-safe.mjs';
+import { trackerDomainMap } from './lib/trackers.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -327,6 +328,44 @@ function assertNoGlobalAllow(listId, rules) {
   process.exit(1);
 }
 
+/**
+ * Build the page-report tracker index: curated domain → { label, blocked }.
+ *
+ * `blocked` is decided by looking for a real domain-anchored block rule in the emitted
+ * rulesets, so the popup can say "StampStack blocks these" without that being a guess. A
+ * curated domain with no matching rule still ships (naming it is useful) but is reported as
+ * seen-not-blocked, which is also a signal that a list has drifted.
+ */
+function buildTrackerIndex(rulesetsByList) {
+  const blockedHosts = new Set();
+  for (const rules of Object.values(rulesetsByList)) {
+    for (const r of rules) {
+      if (r.action?.type !== 'block') continue;
+      const uf = r.condition?.urlFilter;
+      if (!uf) continue;
+      const m = /^\|\|([a-z0-9.-]+)\^?/i.exec(uf);
+      if (m) blockedHosts.add(m[1].toLowerCase().replace(/\.$/, ''));
+    }
+  }
+  /** A curated domain counts as blocked if it, or any subdomain of it, has a rule. */
+  const hasRule = (domain) => {
+    if (blockedHosts.has(domain)) return true;
+    for (const h of blockedHosts) if (h.endsWith(`.${domain}`)) return true;
+    return false;
+  };
+
+  const domains = {};
+  let covered = 0;
+  for (const [domain, label] of Object.entries(trackerDomainMap())) {
+    const blocked = hasRule(domain);
+    if (blocked) covered++;
+    domains[domain] = { label, blocked };
+  }
+  const total = Object.keys(domains).length;
+  console.log(`  tracker index: ${total} named domains, ${covered} with a shipped block rule`);
+  return { domains };
+}
+
 /** Newest mtime across the compiled filter files, as an ISO string (null if none exist). */
 function newestFilterMtime() {
   let newest = 0;
@@ -367,6 +406,9 @@ function main() {
   };
 
   const metaLists = [];
+  // Kept so the tracker index can be cross-checked against what actually shipped, rather
+  // than against what the curated list claims.
+  const emittedRulesets = {};
   let totalEnabledRules = 0;
 
   // Collect $badfilter identities from every list before emit so later lists can
@@ -400,6 +442,7 @@ function main() {
     }
 
     assertNoGlobalAllow(list.id, dnrRules);
+    emittedRulesets[list.id] = dnrRules;
 
     const rulesetPath = join(RULESET_DIR, `${list.id}.json`);
     writeFileSync(rulesetPath, JSON.stringify(dnrRules));
@@ -457,6 +500,10 @@ function main() {
     },
   };
   writeFileSync(join(OUT_DIR, 'cosmetic.json'), JSON.stringify(cosmeticOut));
+  writeFileSync(
+    join(OUT_DIR, 'trackers.json'),
+    JSON.stringify(buildTrackerIndex(emittedRulesets)),
+  );
   writeFileSync(join(OUT_DIR, 'scriptlets.json'), JSON.stringify({ byList: scriptletsByList }));
 
   // Legacy combined sheet kept for older loaders / docs; runtime prefers per-list files.

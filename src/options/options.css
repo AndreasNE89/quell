@@ -208,6 +208,13 @@ code {
   color: var(--fg);
   border: 1px solid var(--line);
 }
+.backup-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 0;
+}
+
 .override-form {
   display: flex;
   flex-wrap: wrap;
@@ -257,4 +264,28 @@ code {
 }
 .page-foot a:hover {
   text-decoration: underline;
+}
+
+.filter-editor {
+  width: 100%;
+  margin: 12px 0 0;
+  padding: 10px;
+  background: var(--card);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  resize: vertical;
+}
+.filter-editor:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.filter-errors {
+  margin-top: 8px;
+}
+.filter-error {
+  padding: 4px 0;
+  color: var(--danger, #b4443a);
+  font-size: 12px;
 }

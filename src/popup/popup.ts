@@ -1,6 +1,13 @@
 // Popup controller: shows the active tab's status and wires the per-site + master toggles.
 
-import type { DarkModeData, Message, PopupData } from '../shared/types.js';
+import type {
+  DarkModeData,
+  Message,
+  PageReport,
+  PopupData,
+  SiteFixLevel,
+} from '../shared/types.js';
+import { nextSiteFix } from '../shared/site-fix.js';
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -20,6 +27,21 @@ const el = {
   ruleCount: $('ruleCount'),
   reloadNote: $('reloadNote'),
   reloadBtn: $<HTMLButtonElement>('reloadBtn'),
+  report: $('report'),
+  reportTitle: $('reportTitle'),
+  reportToggle: $<HTMLButtonElement>('reportToggle'),
+  reportSummary: $('reportSummary'),
+  reportList: $('reportList'),
+  reportFoot: $('reportFoot'),
+  pickBtn: $<HTMLButtonElement>('pickBtn'),
+  pickHint: $('pickHint'),
+  repair: $('repair'),
+  repairOpen: $<HTMLButtonElement>('repairOpen'),
+  repairPanel: $('repairPanel'),
+  repairState: $('repairState'),
+  repairNext: $<HTMLButtonElement>('repairNext'),
+  repairReset: $<HTMLButtonElement>('repairReset'),
+  repairHint: $('repairHint'),
   optionsBtn: $('optionsBtn'),
   openOptions: $('openOptions'),
   darkModeRow: $('darkModeRow'),
@@ -86,9 +108,45 @@ function render(data: PopupData): void {
       : `${data.activeRuleCount.toLocaleString()} blocking rules active`;
   }
 
+  el.pickBtn.disabled = !data.hostname;
+  renderRepair(data);
+
   el.statusDot.classList.toggle('off', !blockingHere);
   document.body.classList.toggle('paused', data.paused);
   document.body.classList.toggle('allowlisted', data.allowlisted);
+}
+
+/**
+ * The repair ladder. Each press turns off one more layer instead of jumping straight to a
+ * full allowlist, so a user fixing a collapsed menu keeps their ad blocking.
+ */
+function renderRepair(data: PopupData): void {
+  // Nothing to repair on a page we do not run on, or when already fully off.
+  el.repair.hidden = !data.hostname || data.paused || data.allowlisted;
+  if (el.repair.hidden) return;
+
+  const level = data.siteFix;
+  const next = nextSiteFix(level);
+
+  el.repairState.textContent =
+    level === 'injection'
+      ? 'Element hiding and scriptlets are off here. Ads are still blocked.'
+      : level === 'cosmetics'
+        ? 'Element hiding is off here. Ads and scriptlets are still active.'
+        : 'Everything is on for this site.';
+
+  if (next === 'cosmetics') {
+    el.repairNext.textContent = 'Stop hiding elements here';
+    el.repairHint.textContent = 'Fixes collapsed layouts, blank gaps and stuck menus.';
+  } else if (next === 'injection') {
+    el.repairNext.textContent = 'Also stop running scriptlets here';
+    el.repairHint.textContent = 'Fixes players and logins that break on anti-adblock patches.';
+  } else {
+    el.repairNext.textContent = 'Turn blocking off for this site';
+    el.repairHint.textContent = 'Last resort — this site gets its ads and trackers back.';
+  }
+  el.repairNext.dataset['level'] = next ?? 'allowlist';
+  el.repairReset.hidden = level == null;
 }
 
 function renderDarkMode(data: DarkModeData): void {
@@ -154,6 +212,86 @@ function renderDarkMode(data: DarkModeData): void {
   el.darkResetBtn.hidden = !(hasHost && data.override != null);
 }
 
+/**
+ * Page report.
+ *
+ * Every number here is something we watched happen, not something we inferred. The wording
+ * matters: "reached out to" is what the page did; "StampStack has rules for N" is what we can
+ * prove from the shipped rulesets. Neither claims a specific request was blocked, because a
+ * store build genuinely cannot know that.
+ */
+function renderReport(report: PageReport): void {
+  if (!report.available) {
+    // Pause / allowlist already say so elsewhere; only explain the non-obvious cases.
+    if (report.reason === 'no-content-script') {
+      el.report.hidden = false;
+      el.reportTitle.textContent = 'On this page';
+      el.reportSummary.textContent = 'Reload the page to see what it connects to.';
+      el.reportToggle.hidden = true;
+      el.reportList.hidden = true;
+      el.reportFoot.hidden = true;
+      return;
+    }
+    el.report.hidden = true;
+    return;
+  }
+
+  el.report.hidden = false;
+  el.reportToggle.hidden = report.trackers.length === 0;
+
+  const named = report.trackers.length;
+  const withRules = report.trackers.filter((t) => t.blocked).length;
+  const parts: string[] = [];
+
+  if (named) {
+    parts.push(
+      `Reached out to ${named} known ${named === 1 ? 'tracker' : 'trackers'}` +
+        (withRules ? ` — StampStack has rules for ${withRules}.` : '.'),
+    );
+  } else if (report.unnamedThirdParty) {
+    parts.push('No known trackers recognized here.');
+  } else {
+    parts.push('No third-party connections seen.');
+  }
+  if (report.hiddenElements) {
+    parts.push(`${report.hiddenElements} ad ${report.hiddenElements === 1 ? 'slot' : 'slots'} hidden.`);
+  }
+  el.reportSummary.textContent = parts.join(' ');
+
+  el.reportList.textContent = '';
+  for (const t of report.trackers) {
+    const li = document.createElement('li');
+    li.className = t.blocked ? 'report-item blocked' : 'report-item seen';
+    const name = document.createElement('span');
+    name.className = 'report-name';
+    name.textContent = t.label;
+    const state = document.createElement('span');
+    state.className = 'report-state';
+    // "not in our lists" is the honest phrasing: we know we have no rule, we do not know
+    // whether the request itself succeeded.
+    state.textContent = t.blocked ? 'blocked' : 'not in our lists';
+    li.append(name, state);
+    el.reportList.append(li);
+  }
+
+  const foot: string[] = [];
+  if (report.unnamedThirdParty) {
+    foot.push(
+      `${report.unnamedThirdParty} other third-party ${report.unnamedThirdParty === 1 ? 'host' : 'hosts'} not recognized by name`,
+    );
+  }
+  if (report.truncated) foot.push('list truncated');
+  el.reportFoot.textContent = foot.join(' · ');
+  el.reportFoot.hidden = foot.length === 0 || el.reportList.hidden;
+}
+
+el.reportToggle.addEventListener('click', () => {
+  const show = el.reportList.hidden;
+  el.reportList.hidden = !show;
+  el.reportFoot.hidden = !show || !el.reportFoot.textContent;
+  el.reportToggle.textContent = show ? 'Hide' : 'Details';
+});
+
 let current: PopupData | null = null;
 let darkCurrent: DarkModeData | null = null;
 
@@ -168,6 +306,10 @@ async function refresh(): Promise<void> {
       hostname: data.hostname,
     })) as DarkModeData | null;
     if (dark) renderDarkMode(dark);
+
+    // Last: it round-trips to the content script, so never let it delay the main UI.
+    const report = (await send({ type: 'report:get' })) as PageReport | null;
+    if (report) renderReport(report);
   } catch (e) {
     console.warn('[StampStack] popup refresh failed', e);
   }
@@ -184,6 +326,58 @@ el.reloadBtn.addEventListener('click', async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (tab?.id != null) await chrome.tabs.reload(tab.id);
   window.close();
+});
+
+// The picker needs the page in front of the user, so the popup must close for it to be usable.
+el.pickBtn.addEventListener('click', async () => {
+  const r = (await send({ type: 'picker:start' })) as { ok: boolean; error?: string } | null;
+  if (!r?.ok) {
+    el.pickHint.hidden = false;
+    el.pickHint.textContent = r?.error ?? 'The picker could not start here.';
+    return;
+  }
+  window.close();
+});
+
+el.repairOpen.addEventListener('click', () => {
+  el.repairPanel.hidden = !el.repairPanel.hidden;
+  el.repairOpen.textContent = el.repairPanel.hidden ? 'Site looks broken?' : 'Hide repair options';
+});
+
+async function setSiteFix(level: SiteFixLevel | null): Promise<void> {
+  if (!current?.hostname) return;
+  const data = (await send({
+    type: 'sitefix:set',
+    hostname: current.hostname,
+    level,
+  })) as PopupData;
+  current = data;
+  render(data);
+  el.repairPanel.hidden = false;
+  el.repairOpen.textContent = 'Hide repair options';
+  promptReload();
+}
+
+el.repairNext.addEventListener('click', async () => {
+  const step = el.repairNext.dataset['level'];
+  // The bottom rung is the existing allowlist, not another fix level.
+  if (step === 'allowlist') {
+    if (!current?.hostname) return;
+    const data = (await send({
+      type: 'popup:toggleSite',
+      hostname: current.hostname,
+      enabled: false,
+    })) as PopupData;
+    current = data;
+    render(data);
+    promptReload();
+    return;
+  }
+  await setSiteFix(step === 'injection' ? 'injection' : 'cosmetics');
+});
+
+el.repairReset.addEventListener('click', () => {
+  void setSiteFix(null);
 });
 
 el.siteToggle.addEventListener('change', async () => {

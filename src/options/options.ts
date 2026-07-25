@@ -8,7 +8,11 @@ import type {
   PopupData,
   DarkModeData,
   DarkModeSiteOverride,
+  SiteRulesData,
+  SiteFixLevel,
+  CustomFiltersData,
 } from '../shared/types.js';
+import { siteFixLabel } from '../shared/site-fix.js';
 import { STORAGE_KEY } from '../shared/constants.js';
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -256,6 +260,8 @@ chrome.storage.onChanged.addListener((changes, area) => {
   void loadLists();
   void loadYoutubeOptions();
   void loadDarkMode();
+  void loadSiteRules();
+  void loadCustomFilters();
 });
 
 // Storage events do not fire while the page is hidden in some cases; re-sync on return.
@@ -266,8 +272,174 @@ document.addEventListener('visibilitychange', () => {
   void loadDarkMode();
 });
 
+
+// --- Site rules ------------------------------------------------------------
+// One list for every per-site decision. Repair steps and the allowlist were previously
+// invisible outside the popup, so a site fixed months ago on another page could not be found.
+
+async function loadSiteRules(): Promise<void> {
+  const data = (await send({ type: 'sitefix:list' })) as SiteRulesData | null;
+  const container = $('siteRules');
+  container.textContent = '';
+  if (!data) {
+    container.textContent = 'Could not load site rules.';
+    return;
+  }
+
+  const rows: { host: string; label: string; kind: 'fix' | 'allowlist' }[] = [
+    ...Object.entries(data.siteFixes).map(([host, level]) => ({
+      host,
+      label: siteFixLabel(level),
+      kind: 'fix' as const,
+    })),
+    ...data.allowlist.map((host) => ({
+      host,
+      label: 'No blocking at all',
+      kind: 'allowlist' as const,
+    })),
+  ].sort((a, b) => a.host.localeCompare(b.host));
+
+  if (!rows.length) {
+    container.textContent = 'None yet.';
+    return;
+  }
+
+  for (const row of rows) {
+    const item = document.createElement('div');
+    item.className = 'list-item';
+    const info = document.createElement('div');
+    info.className = 'list-info';
+    const title = document.createElement('div');
+    title.className = 'list-title';
+    title.textContent = row.host;
+    const meta = document.createElement('div');
+    meta.className = 'list-meta';
+    meta.textContent = row.label;
+    info.append(title, meta);
+
+    const clear = document.createElement('button');
+    clear.type = 'button';
+    clear.className = 'override-clear';
+    clear.textContent = 'Remove';
+    clear.addEventListener('click', async () => {
+      if (row.kind === 'allowlist') {
+        await send({ type: 'popup:toggleSite', hostname: row.host, enabled: true });
+      } else {
+        await send({ type: 'sitefix:set', hostname: row.host, level: null });
+      }
+      void loadSiteRules();
+    });
+
+    item.append(info, clear);
+    container.append(item);
+  }
+}
+
+$<HTMLFormElement>('siteRuleForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const input = $<HTMLInputElement>('siteRuleHost');
+  const host = input.value.trim();
+  if (!host) return;
+  const choice = $<HTMLSelectElement>('siteRuleLevel').value;
+  if (choice === 'allowlist') {
+    await send({ type: 'popup:toggleSite', hostname: host, enabled: false });
+  } else {
+    await send({ type: 'sitefix:set', hostname: host, level: choice as SiteFixLevel });
+  }
+  input.value = '';
+  void loadSiteRules();
+});
+
+// --- My filters ------------------------------------------------------------
+// Raw text is the user's document: comments, ordering and half-finished lines all have to
+// survive a round trip, so the editor saves the text verbatim and reports what did not parse
+// rather than silently rewriting it.
+
+function renderCustomErrors(data: CustomFiltersData): void {
+  const box = $('customErrors');
+  box.textContent = '';
+  if (!data.errors.length) return;
+  for (const err of data.errors) {
+    const row = document.createElement('div');
+    row.className = 'filter-error';
+    row.textContent = `Line ${err.line}: ${err.reason}`;
+    box.append(row);
+  }
+}
+
+async function loadCustomFilters(): Promise<void> {
+  const data = (await send({ type: 'customfilters:get' })) as CustomFiltersData | null;
+  if (!data) return;
+  const box = $<HTMLTextAreaElement>('customFilters');
+  // Never clobber an in-progress edit when a storage event triggers a reload.
+  if (document.activeElement !== box) box.value = data.text;
+  $('customStatus').textContent = `${data.count} rule${data.count === 1 ? '' : 's'} active`;
+  renderCustomErrors(data);
+}
+
+$<HTMLButtonElement>('customSave').addEventListener('click', async () => {
+  const text = $<HTMLTextAreaElement>('customFilters').value;
+  const data = (await send({ type: 'customfilters:set', text })) as CustomFiltersData | null;
+  if (!data) return;
+  $('customStatus').textContent =
+    `Saved — ${data.count} rule${data.count === 1 ? '' : 's'} active` +
+    (data.errors.length ? `, ${data.errors.length} line(s) ignored` : '');
+  renderCustomErrors(data);
+});
+
+// --- Backup ----------------------------------------------------------------
+
+function backupStatus(text: string): void {
+  $('backupStatus').textContent = text;
+}
+
+$<HTMLButtonElement>('exportBtn').addEventListener('click', async () => {
+  const r = (await send({ type: 'settings:export' })) as { json: string } | null;
+  if (!r) {
+    backupStatus('Export failed.');
+    return;
+  }
+  // Object URL rather than a data: URL — settings can exceed data-URL length limits once a
+  // user has a few hundred allowlist entries.
+  const url = URL.createObjectURL(new Blob([r.json], { type: 'application/json' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'stampstack-settings.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  backupStatus('Exported stampstack-settings.json');
+});
+
+$<HTMLButtonElement>('importBtn').addEventListener('click', () => {
+  $<HTMLInputElement>('importFile').click();
+});
+
+$<HTMLInputElement>('importFile').addEventListener('change', async (e) => {
+  const input = e.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file) return;
+  const json = await file.text();
+  const r = (await send({ type: 'settings:import', json })) as
+    | { ok: boolean; error?: string }
+    | null;
+  if (!r?.ok) {
+    backupStatus(r?.error ?? 'Import failed.');
+    return;
+  }
+  backupStatus('Settings imported.');
+  void loadStats();
+  void loadLists();
+  void loadYoutubeOptions();
+  void loadDarkMode();
+  void loadSiteRules();
+  void loadCustomFilters();
+});
+
 void loadStats();
 void loadLists();
 void loadYoutubeOptions();
 void loadDarkMode();
+void loadSiteRules();
+void loadCustomFilters();
 void loadVersion();

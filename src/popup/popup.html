@@ -28,6 +28,25 @@
       </span>
     </label>
 
+    <button type="button" class="pick-btn" id="pickBtn">
+      <span class="pick-icon" aria-hidden="true">✛</span> Pick an element to hide
+    </button>
+    <p class="pick-hint" id="pickHint" hidden></p>
+
+    <!-- Breakage repair. Most breakage is element hiding or a scriptlet, not network
+         blocking, so offer the cheap fixes before handing the site back its ads. -->
+    <div class="repair" id="repair">
+      <button type="button" class="repair-open link-btn" id="repairOpen">Site looks broken?</button>
+      <div class="repair-panel" id="repairPanel" hidden>
+        <p class="repair-lead" id="repairState">Everything is on for this site.</p>
+        <button type="button" class="repair-step" id="repairNext"></button>
+        <button type="button" class="repair-reset link-btn" id="repairReset" hidden>
+          Undo — turn filtering back on
+        </button>
+        <p class="repair-hint" id="repairHint"></p>
+      </div>
+    </div>
+
     <p class="reload-note" id="reloadNote" hidden>
       <span>Reload the page to apply this.</span>
       <button type="button" id="reloadBtn" class="link-btn">Reload</button>
@@ -47,6 +66,18 @@
     <!-- Shown instead of .stats in store builds, where onRuleMatchedDebug does not exist and
          both counters would read "—" / "n/a". -->
     <p class="rule-count" id="ruleCount" hidden></p>
+
+    <!-- Page report: what this page reached for, and what we hid. Observations only — Chrome
+         withholds per-request match data from store builds, so nothing here is inferred. -->
+    <section class="report" id="report" hidden>
+      <div class="report-head">
+        <span class="report-title" id="reportTitle">On this page</span>
+        <button type="button" class="link-btn" id="reportToggle">Details</button>
+      </div>
+      <p class="report-summary" id="reportSummary"></p>
+      <ul class="report-list" id="reportList" hidden></ul>
+      <p class="report-foot" id="reportFoot" hidden></p>
+    </section>
 
     <label class="switch-row subtle">
       <span>Pause StampStack everywhere</span>
@@ -81,7 +112,7 @@
       </label>
     </section>
 
-    <section class="feature-block" id="darkModeBlock">
+    <section class="feature-block">
       <div class="feature-title">Dark mode</div>
 
       <!-- Primary: one-click dark mode for the current page -->
