@@ -107,7 +107,10 @@ function render(data: PopupData): void {
   } else {
     el.ruleCount.textContent = data.paused
       ? 'Paused — no rules active'
-      : `${data.activeRuleCount.toLocaleString()} blocking rules active`;
+      : data.degraded
+        ? `${data.activeRuleCount.toLocaleString()} rules active — a list could not load, see Settings`
+        : `${data.activeRuleCount.toLocaleString()} blocking rules active`;
+    el.ruleCount.classList.toggle('warn', !data.paused && data.degraded);
   }
 
   // Collapsed groups must not hide state: the summary carries it.

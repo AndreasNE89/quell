@@ -268,6 +268,8 @@ export interface PopupData {
   coveredBy: string | null;
   /** Active breakage-repair rung for this host, if any. */
   siteFix: SiteFixLevel | null;
+  /** A list the user enabled could not be loaded — protection is lower than requested. */
+  degraded: boolean;
   youtubeBlockSponsored: boolean;
   youtubeBlockShorts: boolean;
   youtubeSponsorBlock: boolean;
@@ -286,16 +288,28 @@ export interface SponsorBlockSegmentsData {
   segments: SponsorSegment[];
 }
 
+/**
+ * `enabled` is what the user asked for; `active` is what Chrome actually loaded.
+ *
+ * They diverge when the shared static-rule pool is exhausted — syncRulesets drops the largest
+ * ruleset to keep the rest working, and without this distinction the UI went on reporting full
+ * protection the user did not have.
+ */
+export type ListRow = ListMeta & { enabled: boolean; active: boolean };
+
 export interface ListsData {
-  lists: (ListMeta & { enabled: boolean })[];
+  lists: ListRow[];
+  /** True when at least one list the user enabled could not be loaded. */
+  degraded: boolean;
 }
 
 export interface StatsData {
   blockedTotal: number;
   paused: boolean;
-  lists: (ListMeta & { enabled: boolean })[];
+  lists: ListRow[];
   regexRulesUsed: number;
   statsReliable: boolean;
+  degraded: boolean;
 }
 
 export interface LicenseData {

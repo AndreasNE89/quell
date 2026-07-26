@@ -615,3 +615,8 @@ body.allowlisted .site {
   font: inherit;
   font-size: 10px;
 }
+
+.rule-count.warn {
+  border-color: var(--danger);
+  color: var(--fg);
+}

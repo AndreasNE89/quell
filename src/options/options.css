@@ -299,3 +299,7 @@ code {
   color: var(--danger, #b4443a);
   font-size: 12px;
 }
+
+.list-warn {
+  color: var(--danger, #b4443a);
+}

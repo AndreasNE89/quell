@@ -31,11 +31,17 @@ const GROUP_LABEL: Record<ListGroup, string> = {
 
 async function loadStats(): Promise<void> {
   const s = (await send({ type: 'stats:get' })) as StatsData;
+  // `active`, not `enabled`: on a profile whose static-rule pool is exhausted these differ,
+  // and the requested total would overstate the protection in force.
   const activeRules = s.paused
     ? 0
-    : s.lists.filter((l) => l.enabled).reduce((n, l) => n + l.ruleCount, 0);
+    : s.lists.filter((l) => l.active).reduce((n, l) => n + l.ruleCount, 0);
   $('statTotal').textContent = s.statsReliable ? s.blockedTotal.toLocaleString() : 'n/a';
   $('statRules').textContent = activeRules.toLocaleString();
+  const rulesLabel = document.querySelector('#statRules')?.parentElement?.querySelector('.card-label');
+  if (rulesLabel) {
+    rulesLabel.textContent = s.degraded ? 'rules active (reduced)' : 'network rules active';
+  }
   $('statRegex').textContent = String(s.regexRulesUsed);
   const totalLabel = document.querySelector('#statTotal')?.parentElement?.querySelector('.card-label');
   if (totalLabel) {
@@ -58,7 +64,16 @@ function listItem(l: ListsData['lists'][number]): HTMLElement {
   title.appendChild(badge);
   const meta = document.createElement('div');
   meta.className = 'list-meta';
-  meta.textContent = `${l.ruleCount.toLocaleString()} network rules · cosmetics follow this toggle`;
+  if (l.enabled && !l.active) {
+    // The user asked for this list and Chrome refused to load it. Saying so is the whole
+    // point — the toggle used to read "on" while the rules were not there.
+    meta.classList.add('list-warn');
+    meta.textContent =
+      `Not active — Chrome's shared rule limit is full. ${l.ruleCount.toLocaleString()} ` +
+      'network rules are not loaded; element hiding for this list still works.';
+  } else {
+    meta.textContent = `${l.ruleCount.toLocaleString()} network rules · cosmetics follow this toggle`;
+  }
   info.append(title, meta);
 
   const sw = document.createElement('label');
