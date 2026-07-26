@@ -284,3 +284,145 @@ test('aopr on an unrelated chain leaves the page object alone', () => {
   assert.equal(globalThis.window.keep.value, 42);
   delete globalThis.window.keep;
 });
+
+// --- remove-node-text / replace-node-text ---------------------------------------------------
+// 945 shipped rules, 99% targeting inline <script>. These edit a script's text before it runs.
+// The DOM here is a hand-rolled stand-in: node.textContent, nodeName, querySelectorAll and a
+// MutationObserver are the entire surface the scriptlet touches, and modelling them directly
+// keeps the test about the rewrite logic rather than about jsdom.
+
+class FakeNode {
+  constructor(nodeName, text) {
+    this.nodeName = nodeName;
+    this.textContent = text;
+  }
+}
+
+function installFakeDom() {
+  const nodes = [];
+  let observerCb = null;
+  const root = {
+    nodeName: 'HTML',
+    textContent: '',
+    querySelectorAll: () => nodes,
+  };
+  globalThis.document = { documentElement: root };
+  globalThis.MutationObserver = class {
+    constructor(cb) {
+      observerCb = cb;
+    }
+    observe() {}
+    disconnect() {}
+  };
+  return {
+    nodes,
+    /** Simulate the parser inserting a node the observer then sees before it executes. */
+    insert(node) {
+      nodes.push(node);
+      observerCb?.([{ type: 'childList', addedNodes: [node], target: node }]);
+      return node;
+    },
+  };
+}
+
+let savedDocument;
+let savedObserver;
+
+test('rmnt blanks a matching inline script and leaves others alone', () => {
+  savedDocument = globalThis.document;
+  savedObserver = globalThis.MutationObserver;
+  const dom = installFakeDom();
+  try {
+    mod.runScriptlet('rmnt', ['script', 'adblockDetected']);
+
+    const target = dom.insert(new FakeNode('SCRIPT', 'if (adblockDetected()) { paywall(); }'));
+    const other = dom.insert(new FakeNode('SCRIPT', 'renderArticle();'));
+    const notAScript = dom.insert(new FakeNode('DIV', 'adblockDetected mentioned in text'));
+
+    assert.equal(target.textContent, '', 'the matching script should be blanked');
+    assert.equal(other.textContent, 'renderArticle();', 'unrelated scripts must be untouched');
+    assert.equal(notAScript.textContent, 'adblockDetected mentioned in text', 'nodeName must gate');
+  } finally {
+    globalThis.document = savedDocument;
+    globalThis.MutationObserver = savedObserver;
+  }
+});
+
+test('rmnt processes nodes that already existed when it ran', () => {
+  savedDocument = globalThis.document;
+  savedObserver = globalThis.MutationObserver;
+  const dom = installFakeDom();
+  try {
+    // A scriptlet can be injected after some of the document is parsed.
+    dom.nodes.push(new FakeNode('SCRIPT', 'var x = antiAdblock;'));
+    mod.runScriptlet('remove-node-text', ['script', 'antiAdblock']);
+    assert.equal(dom.nodes[0].textContent, '');
+  } finally {
+    globalThis.document = savedDocument;
+    globalThis.MutationObserver = savedObserver;
+  }
+});
+
+test('rpnt replaces only the matched run, not the whole script', () => {
+  savedDocument = globalThis.document;
+  savedObserver = globalThis.MutationObserver;
+  const dom = installFakeDom();
+  try {
+    // Blanking everything would delete the unrelated code sharing the script.
+    mod.runScriptlet('rpnt', ['script', 'blocked=true', 'blocked=false']);
+    const n = dom.insert(new FakeNode('SCRIPT', 'init(); var blocked=true; render();'));
+    assert.equal(n.textContent, 'init(); var blocked=false; render();');
+  } finally {
+    globalThis.document = savedDocument;
+    globalThis.MutationObserver = savedObserver;
+  }
+});
+
+test('rpnt supports a regex pattern', () => {
+  savedDocument = globalThis.document;
+  savedObserver = globalThis.MutationObserver;
+  const dom = installFakeDom();
+  try {
+    // Character class rather than \d: keeps the pattern free of backslash escaping so the
+    // test asserts the regex path, not the test file's own quoting.
+    mod.runScriptlet('replace-node-text', ['script', '/detect[0-9]+/g', 'noop']);
+    const n = dom.insert(new FakeNode('SCRIPT', 'detect1(); detect2();'));
+    assert.equal(n.textContent, 'noop(); noop();');
+  } finally {
+    globalThis.document = savedDocument;
+    globalThis.MutationObserver = savedObserver;
+  }
+});
+
+test('a nodeName regex is honored, and a non-match is left alone', () => {
+  savedDocument = globalThis.document;
+  savedObserver = globalThis.MutationObserver;
+  const dom = installFakeDom();
+  try {
+    mod.runScriptlet('rmnt', ['/^(script|style)$/i', 'ads']);
+    const s = dom.insert(new FakeNode('SCRIPT', 'ads()'));
+    const st = dom.insert(new FakeNode('STYLE', '.ads{}'));
+    const p = dom.insert(new FakeNode('P', 'ads'));
+    assert.equal(s.textContent, '');
+    assert.equal(st.textContent, '');
+    assert.equal(p.textContent, 'ads', 'P is outside the nodeName pattern');
+  } finally {
+    globalThis.document = savedDocument;
+    globalThis.MutationObserver = savedObserver;
+  }
+});
+
+test('missing arguments are a no-op rather than a wildcard', () => {
+  savedDocument = globalThis.document;
+  savedObserver = globalThis.MutationObserver;
+  const dom = installFakeDom();
+  try {
+    // A rule with no pattern must not blank every script on the page.
+    mod.runScriptlet('rmnt', ['script']);
+    const n = dom.insert(new FakeNode('SCRIPT', 'important();'));
+    assert.equal(n.textContent, 'important();');
+  } finally {
+    globalThis.document = savedDocument;
+    globalThis.MutationObserver = savedObserver;
+  }
+});

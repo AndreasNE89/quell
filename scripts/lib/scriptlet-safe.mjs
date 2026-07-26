@@ -78,6 +78,10 @@ export const SUPPORTED_SCRIPTLET_NAMES = new Set([
   'noeval',
   'noeval.js',
   'nowebrtc',
+  'rmnt',
+  'remove-node-text',
+  'rpnt',
+  'replace-node-text',
 ]);
 
 /** True when no handler exists for this scriptlet name, so the rule is inert. */

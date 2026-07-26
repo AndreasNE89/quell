@@ -240,7 +240,7 @@ test('every supported alias resolves to a real handler', () => {
     assert.equal(mod.scriptletIsImplemented(name), true, name);
   }
   // Still unimplemented — the next tranche worth closing, by shipped rule count.
-  for (const name of ['rmnt', 'rpnt', 'no-xhr-if', 'aost', 'set-cookie', 'definitely-not-real']) {
+  for (const name of ['no-xhr-if', 'aost', 'set-cookie', 'xml-prune', 'definitely-not-real']) {
     assert.equal(mod.scriptletIsImplemented(name), false, name);
   }
 });

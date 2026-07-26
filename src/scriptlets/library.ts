@@ -53,6 +53,11 @@ const ALIASES: Record<string, string> = {
   noeval: 'prevent-eval-if',
   'noeval.js': 'prevent-eval-if',
   nowebrtc: 'nowebrtc',
+  // Inline-script text editing — see replaceNodeText for the measured timing limits.
+  rmnt: 'remove-node-text',
+  'remove-node-text': 'remove-node-text',
+  rpnt: 'replace-node-text',
+  'replace-node-text': 'replace-node-text',
 };
 
 /** Strip uBO-style quoting: `'\"adPlacements\"'` → `"adPlacements"`. */
@@ -919,6 +924,89 @@ function noWebrtc(): void {
   }
 }
 
+/**
+ * `replace-node-text(nodeName, pattern, replacement)` and its empty-replacement alias
+ * `remove-node-text` — 945 shipped rules, 99% of them targeting inline `<script>`.
+ *
+ * These defuse anti-adblock checks by editing the script's text before it runs. Whether that is
+ * possible at all comes down to observer timing, which I measured in Chrome rather than assumed:
+ *
+ *   - Parser-inserted inline scripts (the ones written into the served HTML): the observer
+ *     callback fires BEFORE the script executes, so blanking the text prevents it running.
+ *     Verified with a control script that was observed and deliberately left alone — it ran,
+ *     while the blanked one did not.
+ *   - Dynamically injected scripts (`el.textContent = …; body.appendChild(el)`): the script
+ *     executes synchronously inside appendChild, and the observer only sees it afterwards.
+ *     These CANNOT be stopped this way.
+ *
+ * That limitation is acceptable because anti-adblock detection is overwhelmingly inline in the
+ * HTML — that is the whole point of it, to run before anything can interfere.
+ */
+function replaceNodeText(args: string[], removeMode: boolean): void {
+  const [rawNodeName, rawPattern, rawReplacement] = args;
+  if (!rawNodeName || !rawPattern) return;
+
+  const nameMatch = patternMatcher(rawNodeName);
+  const textMatch = textMatcher(rawPattern);
+  const replacement = removeMode ? '' : (rawReplacement ?? '');
+
+  // For a literal (non-regex) pattern in replace mode, swap just the matched run rather than
+  // the whole text — replacing everything would delete unrelated code in the same script.
+  const patternRe = /^\/(.*)\/([a-z]*)$/.exec(rawPattern);
+  const rewrite = (text: string): string => {
+    if (removeMode) return '';
+    if (patternRe) {
+      try {
+        return text.replace(new RegExp(patternRe[1], patternRe[2] || 'g'), replacement);
+      } catch {
+        return text;
+      }
+    }
+    return text.split(rawPattern).join(replacement);
+  };
+
+  const consider = (node: Node): void => {
+    // nodeName check first: it is the cheap filter, and it keeps this off the hot path for the
+    // thousands of nodes a normal page inserts. DOM nodeName is uppercase (`SCRIPT`) while
+    // filters are written lowercase (`script`), so compare on the lowered form.
+    if (!nameMatch(String(node.nodeName ?? '').toLowerCase())) return;
+    const text = node.textContent;
+    if (typeof text !== 'string' || !text || !textMatch(text)) return;
+    const next = rewrite(text);
+    if (next !== text) {
+      try {
+        node.textContent = next;
+      } catch {
+        /* read-only node */
+      }
+    }
+  };
+
+  // Anything already parsed when this scriptlet runs.
+  const root = document.documentElement;
+  if (root) {
+    consider(root);
+    for (const el of root.querySelectorAll('*')) consider(el);
+  }
+
+  const obs = new MutationObserver((records) => {
+    for (const r of records) {
+      for (const node of r.addedNodes) consider(node);
+      // characterData: a script whose text is filled in after insertion.
+      if (r.type === 'characterData' && r.target) consider(r.target);
+    }
+  });
+  try {
+    obs.observe(document.documentElement ?? document, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+  } catch {
+    /* document not ready — nothing to observe yet */
+  }
+}
+
 const SCRIPTLETS: Record<string, Scriptlet> = {
   'set-constant': (a) => setConstant(a[0], a[1] ?? ''),
   'abort-on-property-read': (a) => abortOnPropertyRead(a[0]),
@@ -940,6 +1028,8 @@ const SCRIPTLETS: Record<string, Scriptlet> = {
   'nano-setInterval-booster': (a) => nanoTimerBooster('setInterval', a),
   'prevent-eval-if': (a) => preventEvalIf(a),
   nowebrtc: () => noWebrtc(),
+  'remove-node-text': (a) => replaceNodeText(a, true),
+  'replace-node-text': (a) => replaceNodeText(a, false),
 };
 
 /** Resolve an alias and run the scriptlet. Unknown names are ignored. */
