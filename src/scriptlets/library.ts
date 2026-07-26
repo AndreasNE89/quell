@@ -58,6 +58,13 @@ const ALIASES: Record<string, string> = {
   'remove-node-text': 'remove-node-text',
   rpnt: 'replace-node-text',
   'replace-node-text': 'replace-node-text',
+  'no-xhr-if': 'prevent-xhr',
+  'prevent-xhr': 'prevent-xhr',
+  aost: 'abort-on-stack-trace',
+  'abort-on-stack-trace': 'abort-on-stack-trace',
+  'set-cookie': 'set-cookie',
+  'set-local-storage-item': 'set-local-storage-item',
+  'popads-dummy': 'popads-dummy',
 };
 
 /** Strip uBO-style quoting: `'\"adPlacements\"'` → `"adPlacements"`. */
@@ -1007,6 +1014,182 @@ function replaceNodeText(args: string[], removeMode: boolean): void {
   }
 }
 
+/**
+ * `no-xhr-if(propsToMatch)` — 205 shipped rules.
+ *
+ * Unlike prevent-fetch there is nothing to return: the page holds the XHR object and waits for
+ * its events. So the request is simply never sent, and the object is driven through the state
+ * transitions a real empty 200 would produce. Skipping the events instead would hang any site
+ * that awaits `onload`, which is worse than letting the request through.
+ */
+function noXhrIf(args: string[]): void {
+  const matches = propsMatcher(args[0]);
+  const proto = XMLHttpRequest.prototype;
+  const open = proto.open;
+  const send = proto.send;
+
+  interface Marked {
+    __ssUrl?: string;
+    __ssMethod?: string;
+    __ssBlock?: boolean;
+  }
+
+  proto.open = function (
+    this: XMLHttpRequest & Marked,
+    method: string,
+    url: string | URL,
+    ...rest: unknown[]
+  ) {
+    this.__ssUrl = String(url);
+    this.__ssMethod = String(method || 'GET');
+    this.__ssBlock = undefined;
+    return (open as (...a: unknown[]) => void).call(this, method, url, ...rest);
+  } as typeof proto.open;
+
+  proto.send = function (this: XMLHttpRequest & Marked, body?: unknown) {
+    let blocked = false;
+    try {
+      blocked = matches(this.__ssUrl ?? '', this.__ssMethod ?? 'GET');
+    } catch {
+      blocked = false;
+    }
+    if (!blocked) return (send as (...a: unknown[]) => void).call(this, body);
+
+    // Present as a completed, empty 200 without touching the network.
+    const define = (prop: string, value: unknown): void => {
+      try {
+        Object.defineProperty(this, prop, { get: () => value, configurable: true });
+      } catch {
+        /* ignore */
+      }
+    };
+    define('responseText', '');
+    define('response', '');
+    define('responseURL', this.__ssUrl ?? '');
+    define('status', 200);
+    define('statusText', 'OK');
+
+    let state = 0;
+    const step = (next: number): void => {
+      state = next;
+      define('readyState', state);
+      try {
+        this.dispatchEvent(new Event('readystatechange'));
+      } catch {
+        /* ignore */
+      }
+    };
+    // Asynchronous, like a real request: a site that assigns onload after send() must still
+    // see the event.
+    setTimeout(() => {
+      step(2);
+      step(3);
+      step(4);
+      for (const type of ['load', 'loadend']) {
+        try {
+          this.dispatchEvent(new Event(type));
+        } catch {
+          /* ignore */
+        }
+      }
+    }, 0);
+  } as typeof proto.send;
+}
+
+/**
+ * `abort-on-stack-trace(chain, needle)` — 192 shipped rules.
+ *
+ * Narrower than abort-on-property-read: the property keeps working for the page at large and
+ * only throws when the call comes from a matching stack. That is what makes it usable on hot
+ * built-ins — the shipped rules target things like `String.prototype.charCodeAt` and
+ * `document.createElement`, which a blanket abort would take the whole site down with.
+ */
+function abortOnStackTrace(args: string[]): void {
+  const [chain, needle] = args;
+  if (!chain || !needle) return;
+  const match = patternMatcher(needle);
+
+  onChainOwner(chain, (owner, prop) => {
+    let original: unknown;
+    try {
+      const desc = Object.getOwnPropertyDescriptor(owner, prop);
+      original = desc?.get ? desc.get.call(owner) : desc?.value;
+    } catch {
+      return;
+    }
+    try {
+      Object.defineProperty(owner, prop, {
+        configurable: true,
+        get() {
+          let stack = '';
+          try {
+            stack = new Error().stack ?? '';
+          } catch {
+            /* no stack available */
+          }
+          if (stack && match(stack)) {
+            throw new ReferenceError('StampStack: aborted by stack trace');
+          }
+          return original;
+        },
+        set(v: unknown) {
+          original = v;
+        },
+      });
+    } catch {
+      /* non-configurable */
+    }
+  });
+}
+
+/**
+ * `set-cookie(name, value)` — 48 shipped rules, mostly pre-answering consent and anti-adblock
+ * probes. Values are restricted to a known-safe vocabulary exactly as uBO does: a filter list
+ * must not be able to write arbitrary cookie content on the user's origin.
+ */
+const SAFE_COOKIE_VALUES = new Set([
+  'true', 'false', 'yes', 'no', 'y', 'n', 'on', 'off',
+  'accept', 'accepted', 'reject', 'rejected', 'allow', 'deny',
+  'ok', 'dismiss', 'dismissed', 'closed', 'consent', 'null', '0', '1', '',
+]);
+
+function setCookie(args: string[]): void {
+  const name = (args[0] ?? '').trim();
+  const value = (args[1] ?? '').trim();
+  if (!name || !/^[\w!#$%&'*.^`|~+-]+$/.test(name)) return;
+  if (!SAFE_COOKIE_VALUES.has(value.toLowerCase())) return;
+  try {
+    document.cookie = `${name}=${value}; path=/; SameSite=Lax`;
+  } catch {
+    /* cookies blocked for this origin */
+  }
+}
+
+/** `set-local-storage-item(key, value)` — 18 rules. Same safe-value restriction as set-cookie. */
+function setLocalStorageItem(args: string[]): void {
+  const key = (args[0] ?? '').trim();
+  const value = (args[1] ?? '').trim();
+  if (!key) return;
+  if (!SAFE_COOKIE_VALUES.has(value.toLowerCase())) return;
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* storage disabled or full */
+  }
+}
+
+/** `popads-dummy` — 19 rules. Stub the globals the PopAds loader probes for. */
+function popadsDummy(): void {
+  const g = window as unknown as Record<string, unknown>;
+  for (const name of ['PopAds', 'popns']) {
+    try {
+      Object.defineProperty(g, name, { value: true, writable: true, configurable: true });
+    } catch {
+      /* non-configurable */
+    }
+  }
+}
+
 const SCRIPTLETS: Record<string, Scriptlet> = {
   'set-constant': (a) => setConstant(a[0], a[1] ?? ''),
   'abort-on-property-read': (a) => abortOnPropertyRead(a[0]),
@@ -1030,6 +1213,11 @@ const SCRIPTLETS: Record<string, Scriptlet> = {
   nowebrtc: () => noWebrtc(),
   'remove-node-text': (a) => replaceNodeText(a, true),
   'replace-node-text': (a) => replaceNodeText(a, false),
+  'prevent-xhr': (a) => noXhrIf(a),
+  'abort-on-stack-trace': (a) => abortOnStackTrace(a),
+  'set-cookie': (a) => setCookie(a),
+  'set-local-storage-item': (a) => setLocalStorageItem(a),
+  'popads-dummy': () => popadsDummy(),
 };
 
 /** Resolve an alias and run the scriptlet. Unknown names are ignored. */
