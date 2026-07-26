@@ -11,42 +11,73 @@ StampStack
 ## Summary (≤132 characters)
 
 ```
-Block ads and trackers with EasyList-style filters, cosmetics, and scriptlets — built for Manifest V3.
+Blocks ads, trackers and popunders. See what each page tracks, hide anything with a click, and fix broken sites without unblocking.
 ```
 
 ## Detailed description
 
 ```
-StampStack blocks ads and trackers in Chromium browsers using Manifest V3 Declarative Net Request, plus cosmetic filters and scriptlets for leftover page junk.
+StampStack blocks ads, trackers and popunders in Chromium browsers using Manifest V3
+Declarative Net Request, plus cosmetic filters and scriptlets for whatever the network layer
+cannot reach.
 
-What it does
-• Network blocking with packaged filter lists (EasyList-style rules compiled for DNR)
-• Cosmetic hiding for ad placeholders and overlays
-• Scriptlets for common anti-block and tracking patterns where supported
-• Per-site allowlist from the toolbar popup
-• Options to enable or disable filter lists
-• YouTube extras (optional): hide promoted videos, block Shorts, auto-skip sponsor segments (SponsorBlock community data)
-• Optional paid dark mode ($2 one-time): smart dark theme for ordinary pages — a browsing add-on, not a separate product
+What it blocks
+• 120,000+ network rules compiled from EasyList, EasyPrivacy, EasyList Cookie and uBlock
+  Origin's ads, privacy and badware lists
+• Popunders and "open in new tab" hijacks
+• Anti-adblock nags and paywall detectors
+• Cookie-consent walls and interaction nags
+• Malware and phishing hosts, including on the page you navigate to — not just its subresources
+
+See what a page actually does
+• Open the popup on any site and StampStack names the trackers that page reached out to —
+  Google Analytics, Criteo, Taboola — and tells you which ones it has rules for
+• It also counts the ad slots it hid on that page
+• No accounts, no telemetry, nothing leaves your browser to make this work
+
+Fix a broken site without losing protection
+• Most breakage is element hiding or a script patch, not network blocking
+• So instead of one on/off switch, StampStack offers graded repair: stop hiding elements →
+  also stop running scriptlets → finally, turn blocking off entirely
+• The first two steps keep your ad blocking on
+
+Hide anything you like
+• Click "Hide an element" (or press Alt+Shift+X), point at what annoys you, and it is gone —
+  on that site, permanently
+• Selectors are chosen to survive the site's next redesign, not just today's page
+• Write your own filters by hand in Settings if you prefer
+
+YouTube
+• Hide promoted videos and scrub in-player ad payloads
+• Block Shorts shelves and redirect Shorts URLs
+• Skip sponsor segments using the community SponsorBlock database, with per-category control
+  over what gets skipped — sponsors, self-promo, intros, outros and more
+
+Optional dark mode ($2 one-time)
+• A smart dark theme for ordinary pages, with per-site overrides
+• Surfaces that are already dark are left alone instead of being inverted into light
+• Entirely separate from ad blocking, which is and stays free
 
 Privacy
-• No StampStack account required for ad blocking
-• No analytics or telemetry to StampStack servers
-• Settings stay in your browser’s local storage
-• Optional dark-mode purchase is handled by ExtensionPay / Stripe (email for receipt and restore only)
-• Auto-skip sponsor segments is on by default; it asks the community SponsorBlock API using only a 4-character hash prefix of the video id — never the video id or page URL — and can be turned off in Options
-• We do not send browsing history to the payment provider
-• See the privacy policy linked on the store listing
+• No account, no analytics, no telemetry to StampStack servers
+• Settings and your allowlist stay in your browser's local storage
+• Filter lists are compiled into the extension — nothing is downloaded while you browse
+• Sponsor-segment lookups send only a 4-character hash prefix of the video id, never the video
+  id or the page URL, and can be narrowed or switched off entirely in Settings
+• The optional dark-mode purchase is handled by ExtensionPay / Stripe (email for receipt and
+  restore only); no browsing data is shared with the payment provider
+• Export and re-import your settings any time
 
 Tips
-• After install, browse normally — blocking starts with the packaged lists
-• Use the popup to pause StampStack on a site that breaks
-• Open Options to manage lists and YouTube extras
-• Restore a dark-mode purchase from the popup or Options if you reinstall
+• After install, just browse — blocking starts immediately with the packaged lists
+• If a site looks wrong, open the popup and use "Site broken?" before turning anything off
+• Alt+Shift+X starts the element picker without opening the popup
+• Reinstalling? Restore a dark-mode purchase with the email from your receipt
 ```
 
 ## Category
 
-Productivity (Tools is fine if Productivity is unavailable)
+Privacy & Security
 
 ## Official URL (Homepage)
 
