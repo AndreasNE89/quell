@@ -58,6 +58,11 @@ const STATES = {
     popup: { hostname: 'www.theguardian.com', paused: true, allowlisted: false, siteFix: null },
     dark: { paid: false, enabled: false, apply: false, restricted: false },
   },
+  degraded: {
+    label: 'Chrome refused to load a list (shared rule pool exhausted)',
+    popup: { hostname: 'www.theguardian.com', paused: false, allowlisted: false, siteFix: null, degraded: true },
+    dark: { paid: false, enabled: false, apply: false, restricted: false },
+  },
   restricted: {
     label: 'a page StampStack cannot run on (chrome://, PDF viewer, …)',
     popup: { hostname: null, paused: false, allowlisted: false, siteFix: null },
@@ -95,8 +100,9 @@ function chromeStub() {
     blockedTotal: 0,
     // Store builds have no onRuleMatchedDebug, so this is the branch users actually see.
     statsReliable: false,
-    activeRuleCount: 120377,
+    activeRuleCount: state.popup.degraded ? 64625 : 120377,
     coveredBy: null,
+    degraded: false,
     youtubeBlockSponsored: true,
     youtubeBlockShorts: false,
     youtubeSponsorBlock: true,

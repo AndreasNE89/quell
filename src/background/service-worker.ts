@@ -34,6 +34,7 @@ import type {
   TrackerIndex,
   CustomFiltersData,
   SponsorCategoriesData,
+  ListRow,
 } from '../shared/types.js';
 import { fetchSponsorSegments } from './sponsorblock-api.js';
 import {
@@ -856,6 +857,10 @@ async function handlePopupGet(): Promise<PopupData> {
     }
   }
   const allowlisted = !!hostname && isAllowlistedHost(hostname, settings.allowlist);
+  // Count what Chrome actually loaded. Reporting the requested total would overstate
+  // protection on a profile whose static-rule pool is exhausted.
+  const { rows: listRows, degraded } = await buildListRows(settings);
+  const activeRules = listRows.filter((l) => l.active).reduce((n, l) => n + l.ruleCount, 0);
   // A parent entry (example.com) allowlists sub.example.com, but removing the *sub* host from
   // the list cannot undo it. The popup needs to say so instead of offering a dead toggle.
   const coveredBy =
@@ -872,12 +877,10 @@ async function handlePopupGet(): Promise<PopupData> {
     tabBlocked: tab?.id != null ? tabBlocked.get(tab.id) ?? 0 : 0,
     blockedTotal: settings.blockedTotal,
     statsReliable: STATS_RELIABLE,
-    activeRuleCount: enabledListIds(settings).reduce(
-      (n, id) => n + (META.lists.find((l) => l.id === id)?.ruleCount ?? 0),
-      0,
-    ),
+    activeRuleCount: activeRules,
     coveredBy,
     siteFix: resolveSiteFix(hostname, settings.siteFixes),
+    degraded,
     youtubeBlockSponsored: settings.youtubeBlockSponsored !== false,
     youtubeBlockShorts: !!settings.youtubeBlockShorts,
     youtubeSponsorBlock: settings.youtubeSponsorBlock !== false,
@@ -1164,14 +1167,35 @@ async function handleSetPaused(paused: boolean): Promise<PopupData> {
   return handlePopupGet();
 }
 
-async function handleListsGet(): Promise<ListsData> {
-  const settings = await loadSettings();
-  return {
-    lists: META.lists.map((l) => ({
+/**
+ * Rows describing both what the user asked for and what Chrome actually loaded.
+ *
+ * Cosmetics for a dropped list are deliberately left running: they cost nothing from the DNR
+ * pool, so element hiding without network blocking is strictly better than nothing. What was
+ * wrong was not the degradation, it was reporting it as full protection.
+ */
+async function buildListRows(settings: Settings): Promise<{ rows: ListRow[]; degraded: boolean }> {
+  let live: string[] | null = null;
+  try {
+    live = await chrome.declarativeNetRequest.getEnabledRulesets();
+  } catch {
+    live = null; // Cannot tell — assume what the user asked for rather than crying wolf.
+  }
+  const rows = META.lists.map((l) => {
+    const enabled = isListEnabled(settings, l.id, l.enabledByDefault) && !settings.paused;
+    return {
       ...l,
       enabled: isListEnabled(settings, l.id, l.enabledByDefault),
-    })),
-  };
+      active: live == null ? enabled : enabled && live.includes(l.id),
+    };
+  });
+  return { rows, degraded: rows.some((r) => r.enabled && !settings.paused && !r.active) };
+}
+
+async function handleListsGet(): Promise<ListsData> {
+  const settings = await loadSettings();
+  const { rows, degraded } = await buildListRows(settings);
+  return { lists: rows, degraded };
 }
 
 async function handleListSetEnabled(id: string, enabled: boolean): Promise<ListsData> {
@@ -1185,15 +1209,14 @@ async function handleListSetEnabled(id: string, enabled: boolean): Promise<Lists
 
 async function handleStatsGet(): Promise<StatsData> {
   const settings = await loadSettings();
+  const { rows, degraded } = await buildListRows(settings);
   return {
     blockedTotal: settings.blockedTotal,
     paused: settings.paused,
-    lists: META.lists.map((l) => ({
-      ...l,
-      enabled: isListEnabled(settings, l.id, l.enabledByDefault),
-    })),
+    lists: rows,
     regexRulesUsed: META.regexRulesUsed,
     statsReliable: STATS_RELIABLE,
+    degraded,
   };
 }
 
