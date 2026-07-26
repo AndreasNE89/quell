@@ -82,6 +82,13 @@ export const SUPPORTED_SCRIPTLET_NAMES = new Set([
   'remove-node-text',
   'rpnt',
   'replace-node-text',
+  'no-xhr-if',
+  'prevent-xhr',
+  'aost',
+  'abort-on-stack-trace',
+  'set-cookie',
+  'set-local-storage-item',
+  'popads-dummy',
 ]);
 
 /** True when no handler exists for this scriptlet name, so the rule is inert. */

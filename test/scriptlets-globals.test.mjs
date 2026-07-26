@@ -426,3 +426,124 @@ test('missing arguments are a no-op rather than a wildcard', () => {
     globalThis.MutationObserver = savedObserver;
   }
 });
+
+// --- no-xhr-if -------------------------------------------------------------------------------
+// The failure mode that matters is NOT "the request went through" — it is hanging the page. The
+// site holds the XHR object and waits on its events, so a blocked request must still complete.
+
+class EventfulXhr extends EventTarget {
+  constructor() {
+    super();
+    this.readyState = 0;
+    this.sent = null;
+  }
+  open(method, url) {
+    this.method = method;
+    this.url = url;
+  }
+  send(body) {
+    this.sent = body ?? true;
+  }
+}
+
+test('no-xhr-if never sends a matching request', async () => {
+  globalThis.XMLHttpRequest = EventfulXhr;
+  mod.runScriptlet('no-xhr-if', ['doubleclick']);
+  const x = new globalThis.XMLHttpRequest();
+  x.open('GET', 'https://doubleclick.net/track');
+  x.send();
+  assert.equal(x.sent, null, 'the real send must not run');
+});
+
+test('a blocked XHR still completes so the page does not hang', async () => {
+  globalThis.XMLHttpRequest = EventfulXhr;
+  mod.runScriptlet('no-xhr-if', ['doubleclick']);
+  const x = new globalThis.XMLHttpRequest();
+  x.open('GET', 'https://doubleclick.net/track');
+
+  const seen = [];
+  x.addEventListener('readystatechange', () => seen.push('rsc:' + x.readyState));
+  x.addEventListener('load', () => seen.push('load'));
+  x.addEventListener('loadend', () => seen.push('loadend'));
+  x.send();
+
+  // Events are async, exactly like a real request: a site assigning onload after send() must
+  // still be called.
+  assert.deepEqual(seen, [], 'nothing should fire synchronously inside send()');
+  await new Promise((r) => setTimeout(r, 10));
+
+  assert.deepEqual(seen, ['rsc:2', 'rsc:3', 'rsc:4', 'load', 'loadend']);
+  assert.equal(x.readyState, 4);
+  assert.equal(x.status, 200);
+  assert.equal(x.responseText, '');
+});
+
+test('no-xhr-if leaves a non-matching request alone', () => {
+  globalThis.XMLHttpRequest = EventfulXhr;
+  mod.runScriptlet('no-xhr-if', ['doubleclick']);
+  const x = new globalThis.XMLHttpRequest();
+  x.open('POST', 'https://example.test/api');
+  x.send('payload');
+  assert.equal(x.sent, 'payload', 'the real send must run');
+});
+
+// --- abort-on-stack-trace --------------------------------------------------------------------
+
+test('aost throws only when the stack matches', () => {
+  globalThis.window.probe = { value: 42 };
+  mod.runScriptlet('aost', ['probe.value', 'stampstackMarkerFn']);
+
+  // Ordinary access: unrelated stack, so the property must keep working. This is the whole
+  // point of aost over aopr — the shipped rules target hot built-ins that a blanket abort
+  // would take the entire site down with.
+  assert.equal(globalThis.window.probe.value, 42);
+
+  // Access from a function whose name appears in the stack.
+  function stampstackMarkerFn() {
+    return globalThis.window.probe.value;
+  }
+  assert.throws(stampstackMarkerFn, /aborted by stack trace/);
+
+  // Still fine afterwards from an unrelated caller.
+  assert.equal(globalThis.window.probe.value, 42);
+  delete globalThis.window.probe;
+});
+
+test('aost with missing arguments is a no-op', () => {
+  globalThis.window.keep = { v: 1 };
+  mod.runScriptlet('aost', ['keep.v']);
+  assert.equal(globalThis.window.keep.v, 1, 'no needle must not mean abort-everything');
+  delete globalThis.window.keep;
+});
+
+// --- set-cookie / set-local-storage-item -----------------------------------------------------
+// A filter list must not be able to write arbitrary content to the user's origin, so values are
+// restricted to a known vocabulary exactly as uBO does.
+
+test('set-cookie writes only known-safe values', () => {
+  const written = [];
+  globalThis.document = { set cookie(v) { written.push(v); }, get cookie() { return ''; } };
+  mod.runScriptlet('set-cookie', ['ADBp', 'yes']);
+  mod.runScriptlet('set-cookie', ['popunder_stop', '1']);
+  assert.equal(written.length, 2);
+  assert.match(written[0], /^ADBp=yes;/);
+  assert.match(written[1], /^popunder_stop=1;/);
+  assert.match(written[0], /path=\/;/);
+});
+
+test('set-cookie refuses arbitrary values and bad names', () => {
+  const written = [];
+  globalThis.document = { set cookie(v) { written.push(v); }, get cookie() { return ''; } };
+  mod.runScriptlet('set-cookie', ['tracker', 'someArbitraryPayload']);
+  mod.runScriptlet('set-cookie', ['bad name; injected=1', 'yes']);
+  assert.deepEqual(written, [], 'neither an unsafe value nor an injectable name may be written');
+});
+
+test('set-local-storage-item applies the same value restriction', () => {
+  const store = new Map();
+  globalThis.localStorage = { setItem: (k, v) => store.set(k, v) };
+  mod.runScriptlet('set-local-storage-item', ['adblock', 'false']);
+  mod.runScriptlet('set-local-storage-item', ['payload', 'arbitrary-junk']);
+  assert.equal(store.get('adblock'), 'false');
+  assert.equal(store.has('payload'), false);
+});
