@@ -11,6 +11,7 @@ import type {
   SiteRulesData,
   SiteFixLevel,
   CustomFiltersData,
+  SponsorCategoriesData,
 } from '../shared/types.js';
 import { siteFixLabel } from '../shared/site-fix.js';
 import { STORAGE_KEY } from '../shared/constants.js';
@@ -115,6 +116,62 @@ async function saveYoutubeOptions(): Promise<void> {
     youtubeBlockShorts: shorts.checked,
     youtubeSponsorBlock: sponsorBlock.checked,
   });
+}
+
+// --- SponsorBlock categories ------------------------------------------------
+// All-or-nothing skipping was the gap here: two of the seven categories fired without ever
+// appearing in the UI. Absent settings mean "enabled", so an older settings blob keeps the
+// behavior it had rather than silently losing coverage.
+
+function categoryRow(c: SponsorCategoriesData['categories'][number]): HTMLElement {
+  const row = document.createElement('div');
+  row.className = 'list-item';
+  const info = document.createElement('div');
+  info.className = 'list-info';
+  const title = document.createElement('div');
+  title.className = 'list-title';
+  title.textContent = c.label;
+  const meta = document.createElement('div');
+  meta.className = 'list-meta';
+  meta.textContent = c.hint;
+  info.append(title, meta);
+
+  const sw = document.createElement('label');
+  sw.className = 'switch';
+  const input = document.createElement('input');
+  input.type = 'checkbox';
+  input.checked = c.enabled;
+  input.setAttribute('aria-label', `Skip ${c.label} segments`);
+  const slider = document.createElement('span');
+  slider.className = 'slider';
+  sw.append(input, slider);
+  input.addEventListener('change', async () => {
+    input.disabled = true;
+    const data = (await send({
+      type: 'sponsorblock:setCategory',
+      category: c.id,
+      enabled: input.checked,
+    })) as SponsorCategoriesData | null;
+    input.disabled = false;
+    if (data) renderSponsorCategories(data);
+  });
+
+  row.append(info, sw);
+  return row;
+}
+
+function renderSponsorCategories(data: SponsorCategoriesData): void {
+  const container = $('sponsorCategories');
+  container.textContent = '';
+  for (const c of data.categories) container.append(categoryRow(c));
+  $('sponsorCategoriesNote').textContent = data.allOff
+    ? 'Every category is off — StampStack will not contact the SponsorBlock API.'
+    : '';
+}
+
+async function loadSponsorCategories(): Promise<void> {
+  const data = (await send({ type: 'sponsorblock:getCategories' })) as SponsorCategoriesData | null;
+  if (data) renderSponsorCategories(data);
 }
 
 function renderDarkOverrides(data: DarkModeData): void {
@@ -262,6 +319,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   void loadDarkMode();
   void loadSiteRules();
   void loadCustomFilters();
+  void loadSponsorCategories();
 });
 
 // Storage events do not fire while the page is hidden in some cases; re-sync on return.
@@ -442,4 +500,5 @@ void loadYoutubeOptions();
 void loadDarkMode();
 void loadSiteRules();
 void loadCustomFilters();
+void loadSponsorCategories();
 void loadVersion();

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "StampStack",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "Block ads and trackers with EasyList-style filters, cosmetics, and scriptlets — built for Manifest V3.",
   "minimum_chrome_version": "120",
   "permissions": [
@@ -72,5 +72,13 @@
   ],
   "declarative_net_request": {
     "rule_resources": []
+  },
+  "commands": {
+    "pick-element": {
+      "suggested_key": {
+        "default": "Alt+Shift+X"
+      },
+      "description": "Hide an element on this page"
+    }
   }
 }

@@ -34,6 +34,8 @@ const el = {
   reportList: $('reportList'),
   reportFoot: $('reportFoot'),
   pickBtn: $<HTMLButtonElement>('pickBtn'),
+  ytSummary: $('ytSummary'),
+  darkSummary: $('darkSummary'),
   pickHint: $('pickHint'),
   repair: $('repair'),
   repairOpen: $<HTMLButtonElement>('repairOpen'),
@@ -108,6 +110,12 @@ function render(data: PopupData): void {
       : `${data.activeRuleCount.toLocaleString()} blocking rules active`;
   }
 
+  // Collapsed groups must not hide state: the summary carries it.
+  const ytOn = [data.youtubeBlockSponsored, data.youtubeBlockShorts, data.youtubeSponsorBlock].filter(
+    Boolean,
+  ).length;
+  el.ytSummary.textContent = data.paused ? 'paused' : `${ytOn} of 3 on`;
+
   el.pickBtn.disabled = !data.hostname;
   renderRepair(data);
 
@@ -121,9 +129,16 @@ function render(data: PopupData): void {
  * full allowlist, so a user fixing a collapsed menu keeps their ad blocking.
  */
 function renderRepair(data: PopupData): void {
-  // Nothing to repair on a page we do not run on, or when already fully off.
-  el.repair.hidden = !data.hostname || data.paused || data.allowlisted;
-  if (el.repair.hidden) return;
+  // Nothing to repair on a page we do not run on, or when already fully off. The trigger lives
+  // in the actions row now, so disable it rather than leaving a button that does nothing.
+  const unavailable = !data.hostname || data.paused || data.allowlisted;
+  el.repairOpen.disabled = unavailable;
+  el.repair.hidden = unavailable;
+  if (unavailable) {
+    el.repairPanel.hidden = true;
+    el.repairOpen.setAttribute('aria-expanded', 'false');
+    return;
+  }
 
   const level = data.siteFix;
   const next = nextSiteFix(level);
@@ -153,6 +168,17 @@ function renderDarkMode(data: DarkModeData): void {
   darkCurrent = data;
   el.darkPrice.textContent = data.license.priceLabel;
   const host = data.hostname;
+
+  // Summary for the collapsed group. Unpaid shows the price so the group is still a hook.
+  el.darkSummary.textContent = !data.paid
+    ? data.license.priceLabel
+    : data.restricted
+      ? 'not available here'
+      : data.apply
+        ? 'on here'
+        : data.enabled
+          ? 'off here'
+          : 'off';
 
   if (!data.paid) {
     // Locked: only the upsell + config hint. Hide the toggles.
@@ -340,8 +366,10 @@ el.pickBtn.addEventListener('click', async () => {
 });
 
 el.repairOpen.addEventListener('click', () => {
-  el.repairPanel.hidden = !el.repairPanel.hidden;
-  el.repairOpen.textContent = el.repairPanel.hidden ? 'Site looks broken?' : 'Hide repair options';
+  const open = el.repairPanel.hidden;
+  el.repairPanel.hidden = !open;
+  el.repairOpen.setAttribute('aria-expanded', String(open));
+  el.repairOpen.classList.toggle('active', open);
 });
 
 async function setSiteFix(level: SiteFixLevel | null): Promise<void> {
@@ -354,7 +382,8 @@ async function setSiteFix(level: SiteFixLevel | null): Promise<void> {
   current = data;
   render(data);
   el.repairPanel.hidden = false;
-  el.repairOpen.textContent = 'Hide repair options';
+  el.repairOpen.setAttribute('aria-expanded', 'true');
+  el.repairOpen.classList.add('active');
   promptReload();
 }
 

@@ -24,12 +24,22 @@
 * {
   box-sizing: border-box;
 }
+
+/* `hidden` is only a UA-stylesheet `display: none`, so ANY author `display` rule beats it.
+   That silently defeated four controls: an unpaid user was shown the dark-mode per-page and
+   all-sites toggles, the reset link, and — worst — the "Dev unlock" button, which must never
+   appear in a store build. Enforce the attribute globally rather than per class, so a future
+   `display` rule cannot reintroduce this. */
+[hidden] {
+  display: none !important;
+}
+
 html,
 body {
   margin: 0;
 }
 body {
-  width: 300px;
+  width: 344px;
   font: 13px/1.4 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
   background: var(--bg);
   color: var(--fg);
@@ -77,9 +87,25 @@ body {
 .site {
   background: var(--card);
   border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 10px 12px;
+  border-radius: 12px;
+  padding: 12px;
   margin-bottom: 10px;
+}
+.site-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.site-text {
+  min-width: 0;
+}
+.site-note {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
 }
 .site-host {
   font-weight: 600;
@@ -98,32 +124,6 @@ body {
   justify-content: space-between;
   padding: 8px 2px;
   cursor: pointer;
-}
-.switch-row.subtle {
-  color: var(--muted);
-  border-top: 1px solid var(--line);
-  margin-top: 4px;
-}
-
-.feature-block {
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 4px 10px 6px;
-  margin: 8px 0 4px;
-  background: var(--card);
-}
-.feature-title {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--muted);
-  padding: 6px 2px 2px;
-}
-.feature-block .switch-row.subtle {
-  border-top: none;
-  margin-top: 0;
-  color: var(--fg);
 }
 
 .dark-upsell {
@@ -363,11 +363,7 @@ body {
 .repair[hidden] {
   display: none;
 }
-.repair-open {
-  padding: 0;
-  font-size: 12px;
-  font-weight: 500;
-}
+
 .repair-panel {
   margin-top: 8px;
   padding: 10px;
@@ -481,14 +477,29 @@ body.allowlisted .site {
   opacity: 0.6;
 }
 
-.pick-btn {
+.pick-hint {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+.pick-hint[hidden] {
+  display: none;
+}
+
+/* Primary actions, side by side. Equal weight because neither is the obvious default —
+   which one you want depends on why you opened the panel. */
+.actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.action {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  width: 100%;
-  margin: 8px 0 0;
-  padding: 9px 10px;
+  padding: 9px 8px;
   background: var(--card);
   color: inherit;
   border: 1px solid var(--line);
@@ -498,26 +509,109 @@ body.allowlisted .site {
   font-weight: 600;
   cursor: pointer;
 }
-.pick-btn:hover:not(:disabled) {
+.action:hover:not(:disabled) {
   border-color: var(--accent);
 }
-.pick-btn:disabled {
+.action.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--card));
+}
+.action:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
-.pick-btn:focus-visible {
+.action:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-.pick-icon {
+.action-icon {
   color: var(--accent);
-  font-size: 14px;
+  font-size: 13px;
 }
-.pick-hint {
-  margin: 6px 0 0;
-  font-size: 11px;
-  color: var(--muted);
+
+/* Collapsible feature groups. <details> carries keyboard operability and state for free; the
+   summary shows the current state so collapsing costs no information. */
+.group {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+  margin-top: 8px;
 }
-.pick-hint[hidden] {
+.group[open] {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
+}
+.group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  list-style: none;
+}
+.group-head::-webkit-details-marker {
   display: none;
+}
+.group-head:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: 10px;
+}
+.group-title {
+  font-size: 12px;
+  font-weight: 600;
+}
+.group-state {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.group-head::after {
+  content: '⌄';
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1;
+  transition: transform 0.15s;
+}
+.group[open] .group-head::after {
+  transform: rotate(180deg);
+}
+.group-body {
+  padding: 0 12px 10px;
+}
+.group-body .switch-row {
+  border-top: 1px solid var(--line);
+  padding: 9px 0;
+}
+.group-body .switch-row:first-child {
+  border-top: 0;
+}
+.group-foot {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.foot {
+  margin-top: 10px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+.pause-row {
+  color: var(--muted);
+  padding: 8px 2px;
+}
+
+.shortcut-hint {
+  margin: -2px 0 10px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.shortcut-hint kbd {
+  padding: 0 4px;
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  font: inherit;
+  font-size: 10px;
 }

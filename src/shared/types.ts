@@ -58,6 +58,11 @@ export interface Settings {
   siteFixes: Record<string, SiteFixLevel>;
   /** The user's own cosmetic filters, as raw editable text (one rule per line). */
   customFilters: string;
+  /**
+   * Per-category SponsorBlock opt-out. Absent key = enabled, so a settings blob written before
+   * this was configurable keeps the all-categories behavior it had.
+   */
+  sponsorBlockCategories: Record<string, boolean>;
 }
 
 /**
@@ -109,6 +114,13 @@ export interface CustomFiltersData {
   /** How many rules actually parsed. */
   count: number;
   errors: { line: number; text: string; reason: string }[];
+}
+
+/** SponsorBlock category rows for the Options page. */
+export interface SponsorCategoriesData {
+  categories: { id: string; label: string; hint: string; enabled: boolean }[];
+  /** True when every category is off, i.e. the API is never contacted. */
+  allOff: boolean;
 }
 
 /** Every per-site rule the user has set, for the Options manager. */
@@ -184,6 +196,8 @@ export type Message =
   | { type: 'customfilters:add'; line: string }
   | { type: 'customfilters:get' }
   | { type: 'customfilters:set'; text: string }
+  | { type: 'sponsorblock:getCategories' }
+  | { type: 'sponsorblock:setCategory'; category: string; enabled: boolean }
   /** SW → content script: hand back what this page has observed. */
   | { type: 'page:collect' }
   | { type: 'sitefix:set'; hostname: string; level: SiteFixLevel | null }
