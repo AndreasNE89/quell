@@ -94,3 +94,17 @@ export function isDarkModeInjectibleUrl(url: string | undefined | null): boolean
     return false;
   }
 }
+
+/**
+ * How stale a cached license may be before a service-worker wake pays for a network round trip.
+ *
+ * The worker restarts constantly and init() used to refresh on every single wake — a hundred
+ * requests a day to answer a question whose answer changes about never. Grace expiry is still
+ * evaluated at use time by isLicenseEffectivelyPaid, so gating the refresh does not extend
+ * anyone's access; it only stops re-asking.
+ */
+export const LICENSE_FRESH_MS = 6 * 60 * 60 * 1000;
+
+export function licenseIsFresh(license: LicenseState, nowMs: number = Date.now()): boolean {
+  return license.verifiedAt != null && nowMs - license.verifiedAt < LICENSE_FRESH_MS;
+}

@@ -82,6 +82,7 @@ import {
 } from '../shared/site-fix.js';
 import {
   isLicenseEffectivelyPaid,
+  licenseIsFresh,
   resolveDarkModeForHost,
   hostsWithForceOff,
   hostsWithForceOn,
@@ -129,6 +130,18 @@ async function syncRulesets(settings: Settings): Promise<void> {
   for (const list of META.lists) {
     const on = !settings.paused && isListEnabled(settings, list.id, list.enabledByDefault);
     (on ? enable : disable).push(list.id);
+  }
+
+  // The service worker is ephemeral, so this runs on every wake — many times a day. Enabling
+  // a ruleset that is already enabled is not free: Chrome re-indexes, and with ~120k rules
+  // that is the most expensive thing the worker does. Skip the call entirely when the live
+  // state already matches.
+  try {
+    const live = await chrome.declarativeNetRequest.getEnabledRulesets();
+    const want = [...enable].sort().join(',');
+    if (live.slice().sort().join(',') === want) return;
+  } catch {
+    /* fall through and do the work */
   }
 
   // Disable unwanted rulesets first — always succeeds and frees global-pool budget.
@@ -205,6 +218,19 @@ async function syncAllowlist(settings: Settings): Promise<void> {
       ],
     },
   }));
+
+  // Same reasoning as syncRulesets: this runs on every wake, and rewriting identical dynamic
+  // rules is pure churn.
+  const liveBand = existing
+    .filter((r) => r.id >= ALLOWLIST_ID_START && r.id < ALLOWLIST_ID_END)
+    .map((r) => `${r.id}:${(r.condition.requestDomains ?? []).join('|')}`)
+    .sort()
+    .join(',');
+  const wantBand = addRules
+    .map((r) => `${r.id}:${(r.condition.requestDomains ?? []).join('|')}`)
+    .sort()
+    .join(',');
+  if (liveBand === wantBand) return;
 
   try {
     await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds, addRules });
@@ -399,7 +425,11 @@ async function syncDarkModeAndActiveTab(
   await applyDarkModeToOpenTabs(settings, license);
 }
 
-async function applyAll(settings: Settings, license?: LicenseState): Promise<void> {
+async function applyAll(
+  settings: Settings,
+  license?: LicenseState,
+  opts: { touchTabs?: boolean } = {},
+): Promise<void> {
   const lic = license ?? (await loadLicense());
   await Promise.all([
     syncRulesets(settings),
@@ -410,7 +440,8 @@ async function applyAll(settings: Settings, license?: LicenseState): Promise<voi
   // init()/applyAll unregisters dark CSS on paid→unpaid (grace expiry, ExtPay cancel),
   // but already-open tabs keep the dynamic engine until told to stop. license:refresh
   // already uses syncDarkModeAndActiveTab; cold-start must too or unpaid dark mode sticks.
-  await applyDarkModeToOpenTabs(settings, lic);
+  // Callers that know nothing user-visible changed opt out — see init('wake').
+  if (opts.touchTabs !== false) await applyDarkModeToOpenTabs(settings, lic);
 }
 
 // Serialize read-modify-write of the single settings blob. Message handlers and the
@@ -444,16 +475,28 @@ function withSettings<T>(fn: (s: Settings) => Promise<T>): Promise<T> {
 // Lifecycle
 // ---------------------------------------------------------------------------
 
-async function init(): Promise<void> {
-  // Must run before license.unpacked / Dev unlock decisions.
+/**
+ * `full` runs on install/update/browser-start; `wake` runs on every service-worker revival.
+ *
+ * Everything in the wake path must be idempotent AND cheap when nothing changed — the syncs
+ * stay because they are the safety net against state drift, but each now short-circuits when
+ * the live state already matches.
+ */
+async function init(mode: 'full' | 'wake' = 'full'): Promise<void> {
+  // Must run before license.unpacked / Dev unlock decisions. Module-scope state, so it is lost
+  // on every wake and has to be re-probed regardless of mode.
   await probeInstallEnvironment();
 
-  // Refresh provider state first; then ensure unpacked dev license (ExtPay may report unpaid).
-  let license = await refreshLicense();
+  const cached = await loadLicense();
+  const wasPaid = isLicenseEffectivelyPaid(cached);
+
+  let license =
+    mode === 'full' || !licenseIsFresh(cached) ? await refreshLicense() : cached;
   license = await ensureUnpackedTestLicense();
 
-  // One-shot: clear auto-off overrides written while sampling under invert (false dark).
-  await clearBuggyAutoOffOverrides();
+  // One-shot migration, and already flag-guarded; onInstalled covers the upgrade case, so it
+  // does not need to touch storage on every wake.
+  if (mode === 'full') await clearBuggyAutoOffOverrides();
 
   if (isUnpackedInstall() && isLicenseEffectivelyPaid(license)) {
     // One-shot on first unpacked run. init() re-runs on every SW cold-start, so without
@@ -468,8 +511,14 @@ async function init(): Promise<void> {
     }
   }
 
+  // Messaging every open tab is only needed when the paid state actually moved (grace expiry,
+  // an ExtPay cancel), or on a genuine start. On an ordinary wake it is a broadcast to every
+  // tab to tell them nothing changed.
+  const paidChanged = isLicenseEffectivelyPaid(license) !== wasPaid;
+  const touchTabs = mode === 'full' || paidChanged;
+
   await withSettings(async (settings) => {
-    await applyAll(settings, license);
+    await applyAll(settings, license, { touchTabs });
     await chrome.action.setBadgeBackgroundColor({ color: '#2f6f4f' });
   });
 }
@@ -513,9 +562,10 @@ chrome.commands?.onCommand.addListener((command) => {
 
 initLicense(onLicenseUnlocked);
 
-chrome.runtime.onInstalled.addListener(() => void init());
-chrome.runtime.onStartup.addListener(() => void init());
-void init();
+chrome.runtime.onInstalled.addListener(() => void init('full'));
+chrome.runtime.onStartup.addListener(() => void init('full'));
+// Module scope: this is the every-wake path, not a start. Keep it cheap.
+void init('wake');
 
 // ---------------------------------------------------------------------------
 // Blocked-request counting + badge (fires only for unpacked/dev builds)
