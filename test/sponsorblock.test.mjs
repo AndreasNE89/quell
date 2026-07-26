@@ -40,7 +40,7 @@ before(async () => {
   });
   await build({
     stdin: {
-      contents: `export { buildSkipSegmentsUrl, videoIdHashPrefix } from './src/background/sponsorblock-api.ts';`,
+      contents: `export { buildSkipSegmentsUrl, videoIdHashPrefix, normalizeSegments } from './src/background/sponsorblock-api.ts';`,
       resolveDir: ROOT,
       loader: 'ts',
     },
@@ -149,4 +149,42 @@ test('every category has user-facing copy', () => {
     assert.ok(info.label && info.label.length > 2, `${c} label`);
     assert.ok(info.hint && info.hint.length > 10, `${c} hint`);
   }
+});
+
+// --- robustness -----------------------------------------------------------------------------
+
+test('implausible and malformed segments are rejected before they reach the player', () => {
+  // A segment covering most of a video is bad data or abuse; acting on it would jump the
+  // viewer to the end. Rejecting here also keeps it out of the cache and the page payload.
+  const raw = [
+    { category: 'sponsor', actionType: 'skip', segment: [10, 25], UUID: 'ok' },
+    { category: 'sponsor', actionType: 'skip', segment: [0, 99999] },
+    { category: 'sponsor', actionType: 'skip', segment: [-5, 20] },
+    { category: 'sponsor', actionType: 'skip', segment: [30, 30] },
+    { category: 'sponsor', actionType: 'skip', segment: [50, 10] },
+    { category: 'sponsor', actionType: 'skip', segment: ['a', 'b'] },
+    { category: 'sponsor', actionType: 'mute', segment: [1, 2] },
+    null,
+    'nonsense',
+  ];
+  const out = apiMod.normalizeSegments(raw);
+  assert.equal(out.length, 1, `expected only the valid segment, got ${JSON.stringify(out)}`);
+  assert.equal(out[0].UUID, 'ok');
+  assert.deepEqual(out[0].segment, [10, 25]);
+});
+
+test('the request URL still carries unencoded JSON brackets', () => {
+  // Cloudflare on sponsor.ajay.app rejects fully URL-encoded arrays, so this must not regress
+  // when the category list became dynamic.
+  const url = apiMod.buildSkipSegmentsUrl('5f6b', ['sponsor', 'intro']);
+  assert.match(url, /categories=\["sponsor","intro"\]/);
+  assert.match(url, /actionTypes=\["skip"\]/);
+  assert.ok(!url.includes('%5B'), 'brackets must not be percent-encoded');
+});
+
+test('a narrower category list produces a different request', () => {
+  const all = apiMod.buildSkipSegmentsUrl('5f6b', ['sponsor', 'intro', 'outro']);
+  const one = apiMod.buildSkipSegmentsUrl('5f6b', ['sponsor']);
+  assert.notEqual(all, one);
+  assert.ok(!one.includes('intro'), 'a sponsor-only user must not request intro data');
 });
