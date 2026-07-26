@@ -83,8 +83,19 @@ function findPlayerVideo(): HTMLVideoElement | null {
   );
 }
 
-function showToast(category: string): void {
-  const label = CATEGORY_LABEL[category] ?? category;
+/** Segments the user undid; keyed by UUID so the same one is not re-skipped on this video. */
+const skipSuppressed = new Set<string>();
+let toastTimer: number | null = null;
+
+/**
+ * Toast for a completed skip, with an Undo.
+ *
+ * A wrong skip was previously unrecoverable — the user had to scrub back by hand and then
+ * fight the skip firing again. Undo seeks back and suppresses that segment for the rest of the
+ * video, which is the behavior SponsorBlock users expect.
+ */
+function showToast(hit: SponsorSegment, from: number): void {
+  const label = CATEGORY_LABEL[hit.category] ?? hit.category;
   let el = document.getElementById(TOAST_ID) as HTMLDivElement | null;
   if (!el) {
     el = document.createElement('div');
@@ -96,22 +107,57 @@ function showToast(category: string): void {
       bottom: '72px',
       transform: 'translateX(-50%)',
       zIndex: '2147483646',
-      padding: '8px 14px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '10px',
+      padding: '8px 10px 8px 14px',
       borderRadius: '8px',
       background: 'rgba(20, 20, 20, 0.88)',
       color: '#f2f2f2',
       font: '13px/1.3 system-ui, sans-serif',
-      pointerEvents: 'none',
+      // Interactive now, so it must accept clicks — but only over the toast itself.
+      pointerEvents: 'auto',
       opacity: '0',
       transition: 'opacity 120ms ease',
     });
     (document.documentElement || document.body).appendChild(el);
   }
-  el.textContent = `Skipped ${label}`;
-  el.style.opacity = '1';
-  window.setTimeout(() => {
+  el.textContent = '';
+
+  const text = document.createElement('span');
+  text.textContent = `Skipped ${label}`;
+  const undo = document.createElement('button');
+  undo.type = 'button';
+  undo.textContent = 'Undo';
+  Object.assign(undo.style, {
+    background: 'transparent',
+    border: '1px solid rgba(255,255,255,0.35)',
+    borderRadius: '6px',
+    color: '#f2f2f2',
+    font: 'inherit',
+    padding: '2px 8px',
+    cursor: 'pointer',
+  });
+  undo.addEventListener('click', () => {
+    skipSuppressed.add(hit.UUID ?? `${hit.segment[0]}`);
+    const video = findPlayerVideo();
+    if (video) {
+      try {
+        video.currentTime = from;
+      } catch {
+        /* media not ready */
+      }
+    }
     if (el) el.style.opacity = '0';
-  }, 1600);
+  });
+  el.append(text, undo);
+
+  el.style.opacity = '1';
+  if (toastTimer != null) window.clearTimeout(toastTimer);
+  // Longer than before: the toast is now something to act on, not just read.
+  toastTimer = window.setTimeout(() => {
+    if (el) el.style.opacity = '0';
+  }, 4000);
 }
 
 function enabled(): boolean {
@@ -121,19 +167,51 @@ function enabled(): boolean {
   return !!opts.youtubeSponsorBlock;
 }
 
+/**
+ * Retry state for a failed segment load.
+ *
+ * The previous version latched `currentVideoId` before awaiting the fetch, so a single failure
+ * — most commonly losing the race with a cold service worker on the first video of a session —
+ * left `segments` empty with the video still marked as loaded. `tick` then saw "same video, no
+ * segments" and returned forever: SponsorBlock silently did nothing for that entire page load.
+ */
+let loadFailed = false;
+let retryAttempt = 0;
+let nextRetryAt = 0;
+const MAX_RETRIES = 3;
+
 async function loadForVideo(videoId: string): Promise<void> {
   const gen = ++fetchGen;
+  const isNewVideo = videoId !== currentVideoId;
   currentVideoId = videoId;
   segments = [];
+  loadFailed = false;
+  // "Suppressed for the rest of the video" means exactly that — a retry on the same video must
+  // keep the user's undos, but moving to a new video must not inherit them. The fallback key is
+  // a start time, which can collide across videos.
+  if (isNewVideo) skipSuppressed.clear();
   if (!fetchSegments) return;
   try {
     const next = await fetchSegments(videoId);
     if (gen !== fetchGen || currentVideoId !== videoId) return;
     segments = next;
+    retryAttempt = 0;
   } catch {
     if (gen !== fetchGen) return;
     segments = [];
+    // Mark it retryable rather than silently giving up. Backoff is bounded and capped so a
+    // genuinely unreachable API costs a few requests, not a poll loop for the whole session.
+    if (retryAttempt < MAX_RETRIES) {
+      loadFailed = true;
+      retryAttempt++;
+      nextRetryAt = Date.now() + 800 * retryAttempt;
+    }
   }
+}
+
+/** True when the last load failed and enough time has passed to try again. */
+function shouldRetryLoad(): boolean {
+  return loadFailed && Date.now() >= nextRetryAt;
 }
 
 function tick(): void {
@@ -149,7 +227,7 @@ function tick(): void {
     }
     return;
   }
-  if (videoId !== currentVideoId) {
+  if (videoId !== currentVideoId || shouldRetryLoad()) {
     void loadForVideo(videoId);
     return;
   }
@@ -160,11 +238,21 @@ function tick(): void {
 
   const hit = findSkipSegment(segments, video.currentTime);
   if (!hit) return;
-  const end = hit.segment[1];
+  if (skipSuppressed.has(hit.UUID ?? `${hit.segment[0]}`)) return;
+
+  const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : null;
+  let end = hit.segment[1];
+  // A bad or malicious segment must not be able to end the video. Land just short of the end
+  // rather than at it, so playback continues instead of firing `ended`.
+  if (duration != null) {
+    if (end >= duration - 0.5) return;
+    end = Math.min(end, duration - 0.25);
+  }
   if (video.currentTime < end - 0.02) {
+    const from = video.currentTime;
     try {
       video.currentTime = end;
-      showToast(hit.category);
+      showToast(hit, from);
     } catch {
       /* seek can throw if media not ready */
     }

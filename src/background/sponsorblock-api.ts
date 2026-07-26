@@ -5,6 +5,16 @@ import { SPONSORBLOCK_SKIP_CATEGORIES, type SponsorSegment } from '../shared/spo
 
 const API_BASE = 'https://sponsor.ajay.app/api/skipSegments';
 const CACHE_TTL_MS = 60 * 60 * 1000;
+/** A community API is allowed to be slow; it is not allowed to hang the feature. */
+const REQUEST_TIMEOUT_MS = 6000;
+/**
+ * Longest segment we will act on, as a fraction of the video.
+ *
+ * A segment covering most of the video is either bad data or abuse; skipping it would jump the
+ * viewer to the end. The player-side clamp catches the extreme case, but rejecting it here
+ * keeps it out of the cache and out of the payload sent to the page.
+ */
+const MAX_SEGMENT_SECONDS = 3600;
 const CACHE_MAX = 200;
 
 interface CacheEntry {
@@ -31,7 +41,7 @@ function pruneCache(): void {
   for (let i = 0; i < drop; i++) cache.delete(entries[i][0]);
 }
 
-function normalizeSegments(raw: unknown): SponsorSegment[] {
+export function normalizeSegments(raw: unknown): SponsorSegment[] {
   if (!Array.isArray(raw)) return [];
   const out: SponsorSegment[] = [];
   for (const item of raw) {
@@ -42,6 +52,7 @@ function normalizeSegments(raw: unknown): SponsorSegment[] {
     const start = Number(seg[0]);
     const end = Number(seg[1]);
     if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
+    if (start < 0 || end - start > MAX_SEGMENT_SECONDS) continue;
     const category = typeof o.category === 'string' ? o.category : 'sponsor';
     const actionType = typeof o.actionType === 'string' ? o.actionType : 'skip';
     if (actionType !== 'skip') continue;
@@ -104,6 +115,10 @@ export async function fetchSponsorSegments(
       // SW fetch: host_permissions cover sponsor.ajay.app; no CORS dance needed.
       credentials: 'omit',
       cache: 'no-store',
+      // Without this a stalled socket leaves the promise pending forever, and the content
+      // script awaits it — so one hung connection silently disabled skipping for that video
+      // with no error to retry on. Chrome 120+ has AbortSignal.timeout.
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
   } catch {
     return hit?.segments ?? [];
