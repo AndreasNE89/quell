@@ -1,10 +1,9 @@
 /* StampStack paid dark mode — document_start dark shell for the dynamic engine.
  *
  * The dynamic engine (dark-mode-dynamic.ts) recolors each element's own background/text onto a
- * dark palette and never touches media. This registered sheet only paints an immediate dark
- * canvas in the TOP frame (registered allFrames:false) so there's no white flash before the
- * engine runs; the engine refines everything else. No invert — images/video/GIFs untouched.
- * Screen-only so printing keeps the site's light output.
+ * dark palette and never touches media. This registered sheet paints an immediate dark canvas
+ * in the TOP frame (registered allFrames:false); the engine refines everything else. No invert
+ * — images/video/GIFs untouched. Screen-only so printing keeps the site's light output.
  *
  * The :where(:not([data-stampstack-off])) guard is the live-tab OFF switch: registered CSS
  * cannot be removed from an already-loaded document, and countering it with another !important
@@ -16,5 +15,40 @@
   html:where(:not([data-stampstack-off])) {
     background-color: #1c1c1e !important;
     color-scheme: dark !important;
+  }
+
+  /* Cover the viewport until the engine has recolored the page.
+   *
+   * Darkening the `html` canvas alone does NOT prevent the flash, which is what the previous
+   * comment here claimed: virtually every site paints its own `body` background over that
+   * canvas, so the user still sees white until the engine reaches `body`.
+   *
+   * Forcing `body` from this sheet is the obvious fix and the wrong one — the engine
+   * deliberately leaves already-dark surfaces alone, so an !important body rule would pin a
+   * site whose real background is #0d1117 to our #1c1c1e for as long as the extension is on,
+   * and registered CSS cannot be removed from a loaded document to undo it.
+   *
+   * A scrim sidesteps the conflict entirely: it paints over everything without touching a
+   * single site style, and stops matching the moment the engine reports its first pass done. */
+  html:where(:not([data-stampstack-off])):not([data-stampstack-ready])::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-color: #1c1c1e;
+    /* Never swallow a click, even while visible. */
+    pointer-events: none;
+    z-index: 2147483647;
+    /* Fallback removal. If the engine never reports ready — it threw, the license lapsed
+     * mid-load, the tab was backgrounded — this lifts on its own, so the worst case is a brief
+     * dark rectangle instead of a permanently blanked page. Deliberately CSS-driven: it must
+     * not depend on the script that may be the very thing that failed. */
+    animation: stampstack-scrim-lift 120ms linear 1400ms forwards;
+  }
+
+  @keyframes stampstack-scrim-lift {
+    to {
+      opacity: 0;
+      visibility: hidden;
+    }
   }
 }

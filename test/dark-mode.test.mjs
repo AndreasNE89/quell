@@ -4,7 +4,7 @@ import { build } from 'esbuild';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { rmSync } from 'node:fs';
+import { rmSync, readFileSync } from 'node:fs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 let mod;
@@ -189,4 +189,49 @@ test('should not inject dark mode on restricted https urls', () => {
   assert.equal(mod.isDarkModeInjectibleUrl(devconsole), false);
   assert.equal(mod.isDarkModeInjectibleUrl('https://news.ycombinator.com/'), true);
   assert.equal(mod.isDarkModeInjectibleUrl('chrome://extensions'), false);
+});
+
+// --- document_start scrim ---------------------------------------------------------------
+// The registered sheet darkened only the `html` canvas, which does not prevent the flash:
+// virtually every site paints its own `body` background over that canvas, so the user saw white
+// until the engine reached `body`. These assert the scrim's shape and — more importantly — that
+// it can always be removed, since a scrim that sticks is a blanked page.
+
+test('the scrim covers the viewport and cannot swallow clicks', () => {
+  const css = readFileSync(join(ROOT, 'src', 'content', 'dark-mode.css'), 'utf8');
+  const rule = /::before\s*\{([^}]*)\}/.exec(css);
+  assert.ok(rule, 'expected a ::before scrim rule');
+  const body = rule[1];
+  assert.match(body, /position:\s*fixed/);
+  assert.match(body, /inset:\s*0/);
+  assert.match(body, /pointer-events:\s*none/, 'the scrim must never intercept a click');
+  assert.match(body, /background-color:\s*#1c1c1e/);
+});
+
+test('the scrim has two independent removal paths', () => {
+  const css = readFileSync(join(ROOT, 'src', 'content', 'dark-mode.css'), 'utf8');
+  // 1. the engine reports its first pass done
+  assert.match(css, /:not\(\[data-stampstack-ready\]\)::before/);
+  // 2. a CSS animation lifts it even if the script never runs at all
+  assert.match(css, /animation:\s*stampstack-scrim-lift/);
+  assert.match(css, /@keyframes\s+stampstack-scrim-lift/);
+});
+
+test('the off switch removes the scrim as well as the canvas', () => {
+  // Toggling dark mode off in a live tab must not leave a dark rectangle behind, and
+  // registered CSS cannot be removed from a loaded document — only made to stop matching.
+  const css = readFileSync(join(ROOT, 'src', 'content', 'dark-mode.css'), 'utf8');
+  const scrimSelector = /html:where\(:not\(\[data-stampstack-off\]\)\):not\(\[data-stampstack-ready\]\)::before/;
+  assert.match(css, scrimSelector, 'the scrim must also be gated on data-stampstack-off');
+});
+
+test('the engine lifts the scrim on both completion and shutdown', () => {
+  const src = readFileSync(join(ROOT, 'src', 'content', 'dark-mode-dynamic.ts'), 'utf8');
+  assert.match(src, /function liftScrim/);
+  assert.match(src, /data-stampstack-ready/);
+  // A timer too: neither the ready path nor the CSS animation covers "engine started, threw
+  // mid-drain" — the first never fires, and the second only applies when the engine never ran.
+  assert.match(src, /setTimeout\(liftScrim/);
+  // Shutdown must not wait for a timer.
+  assert.match(src, /stopDynamicDark\(\): void \{[\s\S]{0,200}liftScrim\(\)/);
 });

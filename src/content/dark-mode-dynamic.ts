@@ -338,7 +338,20 @@ function drain(): void {
     // paint a multi-second staggered fade wave as batches land).
     initialStormDone = true;
     refreshShell();
+    liftScrim();
   }
+}
+
+/**
+ * Drop the document_start scrim once the page is actually recolored.
+ *
+ * The scrim in dark-mode.css hides the site's own (usually white) `body` background during the
+ * window before the engine reaches it. It has a CSS fallback that lifts it regardless after
+ * 1.4s, so this is the fast path, not the only path — never the sole thing standing between the
+ * user and a visible page.
+ */
+function liftScrim(): void {
+  document.documentElement?.setAttribute('data-stampstack-ready', '');
 }
 
 // ---------------------------------------------------------------------------
@@ -510,6 +523,12 @@ export function applyDynamicDark(shell: boolean): void {
   injectShell();
   hookPrint();
 
+  // Third, independent scrim lift. The engine reporting its first drain is the fast path and
+  // the CSS animation in dark-mode.css is the "engine never started" path — but CSS animations
+  // are throttled in background tabs, and neither covers "engine started, then threw mid-drain".
+  // A plain timer does, and costs nothing when the normal path wins the race.
+  setTimeout(liftScrim, 1600);
+
   const els: Element[] = [];
   collect(document, els);
   enqueue(els);
@@ -530,6 +549,8 @@ export function applyDynamicDark(shell: boolean): void {
 /** Turn it off and restore original inline colors (including nodes detached while dark). */
 export function stopDynamicDark(): void {
   if (!active) return;
+  // Toggling off mid-load must not leave the scrim covering the page waiting for its timer.
+  liftScrim();
   active = false;
   engineGen++;
   observer?.disconnect();
