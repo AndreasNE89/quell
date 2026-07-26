@@ -60,6 +60,24 @@ export const SUPPORTED_SCRIPTLET_NAMES = new Set([
   'json-prune-xhr-response',
   'trusted-replace-fetch-response',
   'trusted-replace-xhr-response',
+  // Global-patching family added in 1.6.0 — see src/scriptlets/library.ts.
+  'nowoif',
+  'no-window-open-if',
+  'window.open-defuser',
+  'aeld',
+  'addEventListener-defuser',
+  'prevent-addEventListener',
+  'no-fetch-if',
+  'prevent-fetch',
+  'nano-stb',
+  'nano-setTimeout-booster',
+  'nano-sib',
+  'nano-setInterval-booster',
+  'noeval-if',
+  'prevent-eval-if',
+  'noeval',
+  'noeval.js',
+  'nowebrtc',
 ]);
 
 /** True when no handler exists for this scriptlet name, so the rule is inert. */
