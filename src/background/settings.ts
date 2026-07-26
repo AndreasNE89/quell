@@ -18,6 +18,7 @@ export function defaultSettings(): Settings {
     darkModeAutoOff: {},
     siteFixes: {},
     customFilters: '',
+    sponsorBlockCategories: {},
   };
 }
 
@@ -53,6 +54,7 @@ export function mergeSettings(partial: Partial<Settings>): Settings {
     darkModeAutoOff: { ...base.darkModeAutoOff },
     siteFixes: { ...base.siteFixes },
     customFilters: base.customFilters,
+    sponsorBlockCategories: { ...base.sponsorBlockCategories },
     allowlist: [...base.allowlist],
   };
 
@@ -86,6 +88,14 @@ export function mergeSettings(partial: Partial<Settings>): Settings {
   if (typeof partial.customFilters === 'string') {
     // Bounded so an imported file cannot wedge the parser or the Options textarea.
     next.customFilters = partial.customFilters.slice(0, 100_000);
+  }
+  if (partial.sponsorBlockCategories && typeof partial.sponsorBlockCategories === 'object') {
+    next.sponsorBlockCategories = {};
+    for (const [cat, on] of Object.entries(partial.sponsorBlockCategories)) {
+      if (typeof cat === 'string' && cat && typeof on === 'boolean') {
+        next.sponsorBlockCategories[cat] = on;
+      }
+    }
   }
   if (partial.siteFixes && typeof partial.siteFixes === 'object') {
     next.siteFixes = {};

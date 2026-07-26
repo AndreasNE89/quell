@@ -19,6 +19,16 @@
 * {
   box-sizing: border-box;
 }
+
+/* `hidden` is only a UA-stylesheet `display: none`, so ANY author `display` rule beats it.
+   That silently defeated four controls: an unpaid user was shown the dark-mode per-page and
+   all-sites toggles, the reset link, and — worst — the "Dev unlock" button, which must never
+   appear in a store build. Enforce the attribute globally rather than per class, so a future
+   `display` rule cannot reintroduce this. */
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   background: var(--bg);

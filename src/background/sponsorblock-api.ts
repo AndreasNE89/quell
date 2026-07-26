@@ -72,15 +72,29 @@ interface HashBucket {
   segments?: unknown;
 }
 
-/** Fetch skippable segments for a video id (cached). */
-export async function fetchSponsorSegments(videoId: string): Promise<SponsorSegment[]> {
+/**
+ * Fetch skippable segments for a video id (cached).
+ *
+ * `categories` narrows the request to what the user actually wants skipped, so a user who only
+ * wants sponsors does not download intro/outro data — less to send, less to parse, and the
+ * request itself discloses less about what we do with the answer.
+ */
+export async function fetchSponsorSegments(
+  videoId: string,
+  categories: readonly string[] = SPONSORBLOCK_SKIP_CATEGORIES,
+): Promise<SponsorSegment[]> {
   if (!/^[a-zA-Z0-9_-]{11}$/.test(videoId)) return [];
+  // Nothing enabled: never contact the API at all. An empty category list would also be a 400.
+  if (!categories.length) return [];
 
-  const hit = cache.get(videoId);
+  // Cache is keyed by video AND category set — a narrower earlier request must not be served
+  // back to a later, wider one.
+  const cacheKey = `${videoId}|${[...categories].sort().join(',')}`;
+  const hit = cache.get(cacheKey);
   if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.segments;
 
   const prefix = await videoIdHashPrefix(videoId);
-  const url = buildSkipSegmentsUrl(prefix, SPONSORBLOCK_SKIP_CATEGORIES);
+  const url = buildSkipSegmentsUrl(prefix, categories);
 
   let res: Response;
   try {
@@ -97,7 +111,7 @@ export async function fetchSponsorSegments(videoId: string): Promise<SponsorSegm
 
   // 404 = no segments known for this hash bucket / video.
   if (res.status === 404) {
-    cache.set(videoId, { at: Date.now(), segments: [] });
+    cache.set(cacheKey, { at: Date.now(), segments: [] });
     pruneCache();
     return [];
   }
@@ -117,7 +131,7 @@ export async function fetchSponsorSegments(videoId: string): Promise<SponsorSegm
     if (bucket) segments = normalizeSegments(bucket.segments);
   }
 
-  cache.set(videoId, { at: Date.now(), segments });
+  cache.set(cacheKey, { at: Date.now(), segments });
   pruneCache();
   return segments;
 }

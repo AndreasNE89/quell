@@ -33,8 +33,14 @@ import type {
   PageReport,
   TrackerIndex,
   CustomFiltersData,
+  SponsorCategoriesData,
 } from '../shared/types.js';
 import { fetchSponsorSegments } from './sponsorblock-api.js';
+import {
+  SPONSORBLOCK_SKIP_CATEGORIES,
+  SPONSORBLOCK_CATEGORY_INFO,
+  enabledSponsorCategories,
+} from '../shared/sponsorblock.js';
 import {
   ALLOWLIST_ID_START,
   ALLOWLIST_ID_END,
@@ -493,6 +499,18 @@ async function onLicenseUnlocked(_license: LicenseState): Promise<void> {
   await syncDarkModeAndActiveTab(settings, _license);
 }
 
+/**
+ * Keyboard shortcut for the element picker.
+ *
+ * The picker is the one feature that is actively worse via the popup: opening the panel to
+ * start it means the thing you want to point at is behind the panel. `commands` needs no
+ * permission, and the user can rebind or clear it in chrome://extensions/shortcuts.
+ */
+chrome.commands?.onCommand.addListener((command) => {
+  if (command !== 'pick-element') return;
+  void handlePickerStart();
+});
+
 initLicense(onLicenseUnlocked);
 
 chrome.runtime.onInstalled.addListener(() => void init());
@@ -618,6 +636,12 @@ async function handleMessage(msg: Message, sender: chrome.runtime.MessageSender)
 
     case 'youtube:getOptions':
       return handleYoutubeGetOptions(msg.hostname);
+
+    case 'sponsorblock:getCategories':
+      return handleSponsorCategoriesGet();
+
+    case 'sponsorblock:setCategory':
+      return handleSponsorCategorySet(msg.category, msg.enabled);
 
     case 'sponsorblock:getSegments':
       return handleSponsorBlockGetSegments(msg.videoId);
@@ -838,8 +862,37 @@ async function handleSetYoutubeOptions(
 }
 
 async function handleSponsorBlockGetSegments(videoId: string): Promise<SponsorBlockSegmentsData> {
-  const segments = await fetchSponsorSegments(videoId);
+  const settings = await loadSettings();
+  // Only ask for what the user wants skipped: a narrower request downloads less and discloses
+  // less. All categories off short-circuits inside fetchSponsorSegments — no request at all.
+  const categories = enabledSponsorCategories(settings.sponsorBlockCategories);
+  const segments = await fetchSponsorSegments(videoId, categories);
   return { videoId, segments };
+}
+
+async function handleSponsorCategoriesGet(): Promise<SponsorCategoriesData> {
+  const settings = await loadSettings();
+  const prefs = settings.sponsorBlockCategories ?? {};
+  const categories = SPONSORBLOCK_SKIP_CATEGORIES.map((id) => ({
+    id,
+    label: SPONSORBLOCK_CATEGORY_INFO[id].label,
+    hint: SPONSORBLOCK_CATEGORY_INFO[id].hint,
+    enabled: prefs[id] !== false,
+  }));
+  return { categories, allOff: categories.every((c) => !c.enabled) };
+}
+
+async function handleSponsorCategorySet(
+  category: string,
+  enabled: boolean,
+): Promise<SponsorCategoriesData> {
+  if ((SPONSORBLOCK_SKIP_CATEGORIES as readonly string[]).includes(category)) {
+    await mutateSettings((s) => {
+      if (!s.sponsorBlockCategories) s.sponsorBlockCategories = {};
+      s.sponsorBlockCategories[category] = enabled;
+    });
+  }
+  return handleSponsorCategoriesGet();
 }
 
 async function handleToggleSite(hostname: string, enabled: boolean): Promise<PopupData> {

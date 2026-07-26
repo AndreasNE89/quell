@@ -52,3 +52,31 @@ for (const page of ['popup', 'options']) {
     assert.deepEqual(unused, [], `${page}.html defines ids nothing reads`);
   });
 }
+
+for (const page of ['popup', 'options']) {
+  test(`${page}: the [hidden] attribute is enforced against class display rules`, () => {
+    // `hidden` is only a UA-stylesheet `display: none`, so any author rule that sets `display`
+    // on the same element beats it. That silently defeated four controls in the popup — an
+    // unpaid user was shown the dark-mode toggles, the reset link, and the "Dev unlock" button
+    // that must never appear in a store build. No unit test could see it; only rendering could.
+    const css = readFileSync(join(ROOT, 'src', page, `${page}.css`), 'utf8');
+    const guard = /\[hidden\]\s*\{[^}]*display:\s*none\s*!important/;
+    assert.match(
+      css,
+      guard,
+      `${page}.css must keep the global [hidden] { display: none !important } guard`,
+    );
+  });
+
+  test(`${page}: every element the script hides can actually be hidden`, () => {
+    // Belt and braces for the same bug: if the global guard is ever scoped down, this still
+    // fails for any element that is toggled via `.hidden` in TS.
+    const ts = readFileSync(join(ROOT, 'src', page, `${page}.ts`), 'utf8');
+    const css = readFileSync(join(ROOT, 'src', page, `${page}.css`), 'utf8');
+    // Any `.hidden =` assignment, however the element was obtained — the popup uses an `el.`
+    // lookup object, Options assigns straight onto a `$()` result.
+    const toggled = new Set([...ts.matchAll(/([\w$)\]']+)\.hidden\s*=/g)].map((m) => m[1]));
+    assert.ok(toggled.size > 0, 'expected the script to hide something');
+    assert.match(css, /\[hidden\]/, `${page}.css needs a [hidden] rule for: ${[...toggled].join(', ')}`);
+  });
+}
