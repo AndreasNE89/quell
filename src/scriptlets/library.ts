@@ -34,6 +34,25 @@ const ALIASES: Record<string, string> = {
   'json-prune-xhr-response': 'json-prune-xhr-response',
   'trusted-replace-fetch-response': 'trusted-replace-fetch-response',
   'trusted-replace-xhr-response': 'trusted-replace-xhr-response',
+  // Popunder defuser — the single largest unimplemented group in the shipped lists.
+  nowoif: 'no-window-open-if',
+  'no-window-open-if': 'no-window-open-if',
+  'window.open-defuser': 'no-window-open-if',
+  aeld: 'addEventListener-defuser',
+  'addEventListener-defuser': 'addEventListener-defuser',
+  'prevent-addEventListener': 'addEventListener-defuser',
+  'no-fetch-if': 'prevent-fetch',
+  'prevent-fetch': 'prevent-fetch',
+  'nano-stb': 'nano-setTimeout-booster',
+  'nano-setTimeout-booster': 'nano-setTimeout-booster',
+  'nano-sib': 'nano-setInterval-booster',
+  'nano-setInterval-booster': 'nano-setInterval-booster',
+  'noeval-if': 'prevent-eval-if',
+  'prevent-eval-if': 'prevent-eval-if',
+  // Plain `noeval` is the same hook with an empty (match-all) pattern.
+  noeval: 'prevent-eval-if',
+  'noeval.js': 'prevent-eval-if',
+  nowebrtc: 'nowebrtc',
 };
 
 /** Strip uBO-style quoting: `'\"adPlacements\"'` → `"adPlacements"`. */
@@ -160,39 +179,29 @@ const AbortError = (): never => {
 };
 
 function abortOnPropertyRead(chain: string): void {
-  const parts = chain.split('.');
-  const prop = parts.pop();
-  if (!prop) return;
-  let owner: any = window;
-  for (const p of parts) {
-    owner = owner?.[p];
-    if (owner == null) return;
-  }
-  try {
-    Object.defineProperty(owner, prop, { get: AbortError, set: () => {}, configurable: true });
-  } catch {
-    /* ignore */
-  }
+  // Via onChainOwner so a chain whose intermediate object does not exist yet still gets the
+  // trap when the site creates it — see the note there.
+  onChainOwner(chain, (owner, prop) => {
+    try {
+      Object.defineProperty(owner, prop, { get: AbortError, set: () => {}, configurable: true });
+    } catch {
+      /* non-configurable */
+    }
+  });
 }
 
 function abortOnPropertyWrite(chain: string): void {
-  const parts = chain.split('.');
-  const prop = parts.pop();
-  if (!prop) return;
-  let owner: any = window;
-  for (const p of parts) {
-    owner = owner?.[p];
-    if (owner == null) return;
-  }
-  try {
-    Object.defineProperty(owner, prop, {
-      set: AbortError,
-      get: () => undefined,
-      configurable: true,
-    });
-  } catch {
-    /* ignore */
-  }
+  onChainOwner(chain, (owner, prop) => {
+    try {
+      Object.defineProperty(owner, prop, {
+        set: AbortError,
+        get: () => undefined,
+        configurable: true,
+      });
+    } catch {
+      /* non-configurable */
+    }
+  });
 }
 
 function textMatcher(pattern: string | undefined): (t: string) => boolean {
@@ -630,6 +639,286 @@ function trustedReplaceXhrResponse(args: string[]): void {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Global-patching scriptlets
+// ---------------------------------------------------------------------------
+// Each of these neuters one page capability when a pattern matches, and otherwise calls
+// through untouched. The uniform shape matters: a scriptlet that misfires does not fail
+// safe — it breaks the site — so every one of them defaults to "call the original".
+
+/** uBO pattern semantics: empty/`*` matches all, `/re/flags` is a regex, leading `!` negates. */
+function patternMatcher(raw: string | undefined): (text: string) => boolean {
+  if (!raw || raw === '*') return () => true;
+  if (raw.startsWith('!')) {
+    const inner = textMatcher(raw.slice(1));
+    return (t) => !inner(t);
+  }
+  return textMatcher(raw);
+}
+
+/** uBO `propsToMatch`: space-separated `key:value` pairs; a bare token is a URL needle. */
+function propsMatcher(raw: string | undefined): (url: string, method: string) => boolean {
+  if (!raw || raw === '*') return () => true;
+  let urlNeedle: string | undefined;
+  let method: string | undefined;
+  for (const token of raw.trim().split(/\s+/)) {
+    if (token.startsWith('url:')) urlNeedle = token.slice(4);
+    else if (token.startsWith('method:')) method = token.slice(7).toUpperCase();
+    else if (!urlNeedle) urlNeedle = token;
+  }
+  return (url, verb) => {
+    if (method && verb.toUpperCase() !== method) return false;
+    return urlMatchesNeedle(url, urlNeedle);
+  };
+}
+
+/**
+ * Apply `fn` to a dotted chain's owner, now or as soon as the site creates it.
+ *
+ * The previous abort-on-property-* walk bailed the moment an intermediate object was missing,
+ * which is the normal case at document_start: the script that creates `_sp_` has not run yet.
+ * 282 shipped rules use dotted chains — including the Sourcepoint CMP hooks on major news
+ * sites — and every one of them was a silent no-op. Trap the root's setter instead, the same
+ * way set-constant already does.
+ */
+function onChainOwner(chain: string, fn: (owner: object, prop: string) => void): void {
+  const parts = chain.split('.').filter(Boolean);
+  const prop = parts.pop();
+  if (!prop) return;
+  if (!parts.length) {
+    fn(window, prop);
+    return;
+  }
+
+  const [root, ...rest] = parts;
+  const applyFrom = (obj: unknown): void => {
+    let cur: unknown = obj;
+    for (const p of rest) {
+      if (cur == null || (typeof cur !== 'object' && typeof cur !== 'function')) return;
+      cur = (cur as Record<string, unknown>)[p];
+    }
+    if (cur == null || (typeof cur !== 'object' && typeof cur !== 'function')) return;
+    fn(cur as object, prop);
+  };
+
+  const existing = (window as unknown as Record<string, unknown>)[root];
+  if (existing != null) applyFrom(existing);
+
+  let held = existing;
+  try {
+    Object.defineProperty(window, root, {
+      configurable: true,
+      enumerable: true,
+      get: () => held,
+      set(v: unknown) {
+        held = v;
+        applyFrom(v);
+      },
+    });
+  } catch {
+    /* non-configurable root — nothing more we can do */
+  }
+}
+
+/**
+ * `no-window-open-if(pattern, delay, decoy)` — popunder defuser, 827 shipped rules.
+ *
+ * Returns a decoy window object rather than null: `null` is exactly what a browser popup
+ * blocker returns, and anti-adblock scripts test for it to detect blocking. The decoy has to
+ * absorb the property pokes a popunder does on the handle it gets back.
+ */
+function noWindowOpenIf(args: string[]): void {
+  const match = patternMatcher(args[0]);
+  const delay = args[1] ? parseInt(args[1], 10) : NaN;
+  const original = window.open;
+
+  const decoyWindow = (): unknown => {
+    const noop = (): void => {};
+    const decoy: Record<string, unknown> = {
+      closed: false,
+      opener: null,
+      name: '',
+      focus: noop,
+      blur: noop,
+      close() {
+        decoy['closed'] = true;
+      },
+      postMessage: noop,
+      addEventListener: noop,
+      removeEventListener: noop,
+      moveTo: noop,
+      resizeTo: noop,
+      document: { write: noop, writeln: noop, open: noop, close: noop, body: null },
+      location: { href: 'about:blank', assign: noop, replace: noop, reload: noop },
+    };
+    // uBO closes the decoy after `delay` ms when one is given, so a site that polls
+    // `handle.closed` sees the lifecycle it expects.
+    if (!Number.isNaN(delay) && delay >= 0) {
+      setTimeout(() => {
+        decoy['closed'] = true;
+      }, delay);
+    }
+    return decoy;
+  };
+
+  window.open = function (this: unknown, url?: string | URL, ...rest: unknown[]) {
+    try {
+      if (match(String(url ?? ''))) return decoyWindow() as Window;
+    } catch {
+      /* fall through to the real open */
+    }
+    return (original as (...a: unknown[]) => Window | null).call(this, url, ...rest);
+  } as typeof window.open;
+}
+
+/**
+ * `addEventListener-defuser(type, pattern)` — 655 shipped rules.
+ * Both arguments are wildcards when empty, so the guard requires BOTH to match before a
+ * listener is dropped; anything else would silently break unrelated page behavior.
+ */
+function addEventListenerDefuser(args: string[]): void {
+  const typeMatch = patternMatcher(args[0]);
+  const handlerMatch = patternMatcher(args[1]);
+  const proto = EventTarget.prototype;
+  const original = proto.addEventListener;
+
+  proto.addEventListener = function (
+    this: EventTarget,
+    type: string,
+    listener: EventListenerOrEventListenerObject | null,
+    options?: boolean | AddEventListenerOptions,
+  ) {
+    try {
+      const src = typeof listener === 'function' ? listener.toString() : String(listener);
+      if (typeMatch(String(type)) && handlerMatch(src)) return;
+    } catch {
+      /* fall through and register normally */
+    }
+    return original.call(this, type, listener, options);
+  };
+}
+
+/** Body forms uBO accepts for the prevent-fetch/xhr family. */
+function syntheticBody(spec: string | undefined): string {
+  switch ((spec ?? '').trim()) {
+    case 'emptyObj':
+      return '{}';
+    case 'emptyArr':
+      return '[]';
+    case 'true':
+      return 'true';
+    default:
+      return '';
+  }
+}
+
+/** `no-fetch-if(propsToMatch, responseBody)` — 359 shipped rules. */
+function noFetchIf(args: string[]): void {
+  const matches = propsMatcher(args[0]);
+  const body = syntheticBody(args[1]);
+  const original = window.fetch;
+
+  window.fetch = function (this: unknown, input: RequestInfo | URL, init?: RequestInit) {
+    try {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.href
+            : (input as Request).url;
+      const method = init?.method ?? (input as Request)?.method ?? 'GET';
+      if (matches(String(url), String(method))) {
+        // A resolved empty 200 rather than a rejection: a rejected fetch is an observable
+        // signal, and several anti-adblock scripts count failures.
+        return Promise.resolve(
+          new Response(body, { status: 200, statusText: 'OK', headers: { 'Content-Type': 'text/plain' } }),
+        );
+      }
+    } catch {
+      /* fall through */
+    }
+    return (original as (...a: unknown[]) => Promise<Response>).call(this, input, init);
+  } as typeof window.fetch;
+}
+
+/**
+ * `nano-setTimeout-booster` / `nano-setInterval-booster` — 309 shipped rules combined.
+ * Scales a matching timer's delay so artificial "please wait N seconds" gates elapse at once.
+ */
+function nanoTimerBooster(kind: 'setTimeout' | 'setInterval', args: string[]): void {
+  const match = patternMatcher(args[0]);
+  const wantDelay = args[1] && args[1] !== '*' ? parseInt(args[1], 10) : NaN;
+  let boost = args[2] ? parseFloat(args[2]) : 0.05;
+  // uBO clamps out-of-range boosts rather than trusting the filter author.
+  if (!Number.isFinite(boost) || boost < 0.001 || boost > 50) boost = 0.05;
+
+  const g = window as unknown as Record<string, (...a: unknown[]) => number>;
+  const original = g[kind];
+  g[kind] = function (this: unknown, ...a: unknown[]) {
+    const [cb, delay, ...rest] = a as [unknown, number | undefined, ...unknown[]];
+    let nextDelay = delay;
+    try {
+      const src = typeof cb === 'function' ? cb.toString() : String(cb);
+      const current = delay ?? 0;
+      const delayOk = Number.isNaN(wantDelay) || wantDelay === current;
+      if (match(src) && delayOk) nextDelay = Math.max(0, Math.floor(current * boost));
+    } catch {
+      /* leave the delay alone */
+    }
+    return original.call(this, cb, nextDelay as number, ...rest);
+  };
+}
+
+/**
+ * `prevent-eval-if(pattern)` — 145 rules — and `noeval` — 29 rules.
+ *
+ * This replaces the page's eval to *stop* code running; nothing here evaluates anything. An
+ * empty pattern means "neuter every eval", which is what plain `noeval` compiles to.
+ */
+function preventEvalIf(args: string[]): void {
+  const match = patternMatcher(args[0]);
+  const g = window as unknown as { eval: (code: string) => unknown };
+  const original = g.eval;
+  g.eval = function (this: unknown, code: string) {
+    try {
+      if (match(String(code))) return undefined;
+    } catch {
+      /* fall through */
+    }
+    return original.call(this, code);
+  } as typeof g.eval;
+}
+
+/** `nowebrtc` — 59 rules. Stub the peer-connection constructor so peer ads cannot dial out. */
+function noWebrtc(): void {
+  const g = window as unknown as Record<string, unknown>;
+  const noop = (): void => {};
+  const Stub = function () {
+    return {
+      close: noop,
+      createDataChannel: () => ({ close: noop, send: noop }),
+      createOffer: () => Promise.reject(new Error('blocked')),
+      createAnswer: () => Promise.reject(new Error('blocked')),
+      setLocalDescription: () => Promise.resolve(),
+      setRemoteDescription: () => Promise.resolve(),
+      addIceCandidate: () => Promise.resolve(),
+      addEventListener: noop,
+      removeEventListener: noop,
+      addStream: noop,
+      getStats: () => Promise.resolve(new Map()),
+    };
+  } as unknown as new () => unknown;
+
+  for (const name of ['RTCPeerConnection', 'webkitRTCPeerConnection', 'mozRTCPeerConnection']) {
+    if (!(name in g)) continue;
+    try {
+      Object.defineProperty(g, name, { value: Stub, writable: true, configurable: true });
+    } catch {
+      /* non-configurable */
+    }
+  }
+}
+
 const SCRIPTLETS: Record<string, Scriptlet> = {
   'set-constant': (a) => setConstant(a[0], a[1] ?? ''),
   'abort-on-property-read': (a) => abortOnPropertyRead(a[0]),
@@ -644,6 +933,13 @@ const SCRIPTLETS: Record<string, Scriptlet> = {
   'json-prune-xhr-response': (a) => jsonPruneXhrResponse(a),
   'trusted-replace-fetch-response': (a) => trustedReplaceFetchResponse(a),
   'trusted-replace-xhr-response': (a) => trustedReplaceXhrResponse(a),
+  'no-window-open-if': (a) => noWindowOpenIf(a),
+  'addEventListener-defuser': (a) => addEventListenerDefuser(a),
+  'prevent-fetch': (a) => noFetchIf(a),
+  'nano-setTimeout-booster': (a) => nanoTimerBooster('setTimeout', a),
+  'nano-setInterval-booster': (a) => nanoTimerBooster('setInterval', a),
+  'prevent-eval-if': (a) => preventEvalIf(a),
+  nowebrtc: () => noWebrtc(),
 };
 
 /** Resolve an alias and run the scriptlet. Unknown names are ignored. */
