@@ -52,11 +52,18 @@ YouTube
 • Block Shorts shelves and redirect Shorts URLs
 • Skip sponsor segments using the community SponsorBlock database, with per-category control
   over what gets skipped — sponsors, self-promo, intros, outros and more
+• Skipped something you wanted? The toast has an Undo
 
 Optional dark mode ($2 one-time)
 • A smart dark theme for ordinary pages, with per-site overrides
 • Surfaces that are already dark are left alone instead of being inverted into light
 • Entirely separate from ad blocking, which is and stays free
+
+Honest about what it is doing
+• The rule count reflects what Chrome actually loaded, not what was requested — if the browser's
+  shared rule limit forces a list to be dropped, StampStack says so instead of quietly claiming
+  full protection
+• On pages it cannot run on, it says that too, rather than showing controls that do nothing
 
 Privacy
 • No account, no analytics, no telemetry to StampStack servers

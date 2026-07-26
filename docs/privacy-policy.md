@@ -1,7 +1,7 @@
 # StampStack Privacy Policy
 
 **Effective date:** July 13, 2026  
-**Last updated:** July 24, 2026
+**Last updated:** July 26, 2026
 
 **Host this HTML for the Chrome Web Store:** publish [`privacy-policy.html`](./privacy-policy.html) at a stable HTTPS URL (GitHub Pages, your site, etc.) and paste that URL into the Store’s Privacy practices form.
 
@@ -22,8 +22,9 @@ StampStack is a browser extension that blocks ads and trackers using Declarative
 | Browsing activity | Not sent to us. Blocking uses Chrome’s DNR engine and the filter rules packaged into the extension. |
 | Settings & allowlist | Stored locally via `chrome.storage`. Not uploaded. |
 | Statistics | On-device only when available. Not synced to a StampStack server. |
+| Page analysis (on your device) | To show you what a page connects to, and to power the element picker and your own filters, StampStack reads the current page in your browser: the addresses it references and the elements its rules match. **None of this is transmitted anywhere** — not to us, not to any third party. It exists only for as long as the page is open, and the popup is the only thing that ever sees it. |
 | Optional purchase | If you buy dark mode, ExtensionPay / Stripe process payment and may collect an email for receipt and restore. StampStack caches a local paid flag; **browsing history and allowlist are not sent** to the payment provider. |
-| SponsorBlock (on by default) | The **Auto-skip sponsor segments** toggle is **on by default**. While it is on, StampStack asks the community SponsorBlock API (`sponsor.ajay.app`) which segments to skip. It sends only the **first 4 characters of a SHA-256 hash of the YouTube video id** — never the video id itself, the page URL, or any account identifier — and the request is made without cookies or credentials. The API answers with every video sharing that 4-character prefix, and the right one is selected on your device. Turn the toggle off in Options to stop these requests entirely. |
+| SponsorBlock (on by default) | The **Auto-skip sponsor segments** toggle is **on by default**. While it is on, StampStack asks the community SponsorBlock API (`sponsor.ajay.app`) which segments to skip. It sends only the **first 4 characters of a SHA-256 hash of the YouTube video id** — never the video id itself, the page URL, or any account identifier — and the request is made without cookies or credentials. The API answers with every video sharing that 4-character prefix, and the right one is selected on your device. You can also choose which segment types to skip; StampStack asks only for the ones you picked, and turning them all off stops these requests entirely. |
 
 ## Permissions
 
