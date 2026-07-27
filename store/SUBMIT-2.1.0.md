@@ -4,7 +4,7 @@ An update, not a fresh listing. Most dashboard fields carry over from 2.0.0 unto
 covers only what changes.
 
 **Package:** `release/stampstack-2.1.0.zip`
-**sha256:** `c148cdf88f1a423796b9a7f9d4b07f8a8f00d7906fdce3fc5af955d1e63d8676`
+**sha256:** `c6b0637ba6be05ab3f24630c3954f33d2cc3962eee979bd75ec917bb54d97337`
 **Size:** 2.60 MiB · 39 files · 121,988 DNR rules across 6 rulesets
 
 ---

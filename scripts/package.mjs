@@ -20,6 +20,7 @@ import { join, dirname, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { deflateRawSync } from 'node:zlib';
+import { createHash } from 'node:crypto';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -274,6 +275,30 @@ const size = statSync(zipPath).size;
 console.log(`\n✓ ${zipPath}`);
 console.log(`  files≈${n}  size=${(size / 1024 / 1024).toFixed(2)} MiB  version=${version}`);
 console.log(`  rulesets=${rules.length}: ${rules.map((r) => r.id).join(', ')}`);
+
+// The submission doc quotes this zip's sha256 so a reviewer can be told the artifact is
+// reproducible. Any source change since the doc was written silently invalidates that number,
+// and nothing else notices — a merged follow-up PR left the shipped 2.1.0 doc pointing at a
+// zip built before the fixes it described. Warn rather than fail: the doc legitimately lags
+// while a release is still being assembled.
+{
+  const digest = createHash('sha256').update(readFileSync(zipPath)).digest('hex');
+  console.log(`  sha256=${digest}`);
+  const docPath = join(ROOT, 'store', `SUBMIT-${version}.md`);
+  if (existsSync(docPath)) {
+    const doc = readFileSync(docPath, 'utf8');
+    const quoted = doc.match(/\b[0-9a-f]{64}\b/)?.[0];
+    if (!quoted) {
+      console.log(`\n  note: store/SUBMIT-${version}.md quotes no sha256.`);
+    } else if (quoted !== digest) {
+      console.log(`\n  ⚠ store/SUBMIT-${version}.md is stale — it quotes a different build:`);
+      console.log(`      doc: ${quoted}`);
+      console.log(`      zip: ${digest}`);
+      console.log('    Update it before submitting, or a reviewer is given a hash that does not verify.');
+    }
+  }
+}
+
 console.log('\nUpload this zip in Chrome Web Store Developer Dashboard → Package.');
 console.log('Release checklist: docs/RELEASE_CHECKLIST.md');
 console.log('Follow docs/CHROME_WEB_STORE.md for listing fields and review notes.');
