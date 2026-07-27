@@ -58,8 +58,9 @@ export function listAge(generatedAt: string | null | undefined, now: number): Li
     level === 'stale'
       ? ' — behind upstream. A new StampStack version will refresh them.'
       : level === 'aging'
-        ? ' — a refresh is due.'
+        ? ' — a StampStack update will refresh them soon.'
         : '';
 
-  return { level, days, date, text: `Filter lists compiled ${when} (${date})${tail}` };
+  // "Refreshed" is the lock stamp (when upstream bytes last moved), not the compile clock.
+  return { level, days, date, text: `Filter lists refreshed ${when} (${date})${tail}` };
 }

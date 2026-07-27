@@ -114,10 +114,10 @@ test('a missing lock file reads as null rather than throwing', () => {
   }
 });
 
-test('a corrupt lock file reads as null rather than throwing', () => {
+test('a corrupt lock file throws LOCK_CORRUPT rather than looking missing', () => {
   const dir = fixture({ 'lists.lock.json': '{ not json' });
   try {
-    assert.equal(readLock(dir), null);
+    assert.throws(() => readLock(dir), (e) => e?.code === 'LOCK_CORRUPT');
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -161,7 +161,7 @@ test('a shrinking list reads as a minus, not a plus', () => {
 
 test('a no-op re-stamp keeps the old timestamp, so list age stays honest', () => {
   // The stamp means "when this content arrived", not "when the script last ran". Advancing it
-  // on an unchanged refresh would reset the Options "compiled N days ago" counter and claim
+  // on an unchanged refresh would reset the Options "refreshed N days ago" counter and claim
   // protection is fresher than upstream actually delivered.
   const dir = fixture({ 'a.txt': 'alpha' });
   try {

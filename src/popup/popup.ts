@@ -71,6 +71,26 @@ function send(msg: Message): Promise<unknown> {
   return chrome.runtime.sendMessage(msg);
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/** Cold service-worker wakes can drop the first sendMessage; match the content-script retry. */
+async function sendWithRetry<T>(msg: Message, attempts = 5): Promise<T | null> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const resp = (await send(msg)) as T | null | undefined;
+      if (resp != null) return resp;
+    } catch (e) {
+      lastErr = e;
+    }
+    await sleep(50 * (i + 1));
+  }
+  if (lastErr) console.warn('[StampStack] sendMessage failed after retries', msg.type, lastErr);
+  return null;
+}
+
 function render(data: PopupData): void {
   const blockingHere = !data.paused && !data.allowlisted && !!data.hostname;
   el.host.textContent = data.hostname ?? 'This page';
@@ -430,37 +450,44 @@ el.repairReset.addEventListener('click', () => {
 /**
  * Hand the composed report to the user's mail client.
  *
- * Not every profile has one — a mailto with no handler opens a tab that goes nowhere, and the
- * user would have no idea the click did anything. So the address and the text are also put on
- * the clipboard, and the note says where they went.
+ * Not every profile has one — `tabs.create({ url: mailto:… })` often resolves even when no
+ * handler exists (blank tab). Clipboard is the reliable path. Also: opening a tab closes the
+ * action popup, so any note after `tabs.create` never paints — set feedback first, then open.
  */
 el.reportBreakage.addEventListener('click', async () => {
   if (!current?.hostname) return;
   el.reportBreakage.disabled = true;
-  let copied = false;
   try {
-    const report = (await send({
+    const report = await sendWithRetry<BreakageReport>({
       type: 'report:breakage',
       hostname: current.hostname,
-    })) as BreakageReport;
+    });
+    if (!report) {
+      el.reportBreakageNote.textContent = `Could not build a report. Contact ${SUPPORT_EMAIL}`;
+      return;
+    }
 
+    let copied = false;
     try {
       await navigator.clipboard.writeText(
         `To: ${report.to}\nSubject: ${report.subject}\n\n${report.body}`,
       );
       copied = true;
     } catch {
-      // A convenience, not the path. Worth nothing on its own, worth a lot when mailto fails.
+      // Best-effort; no clipboardWrite permission — some profiles still allow it from a gesture.
     }
+
+    // Paint before tabs.create closes this popup. Double-rAF gives the layout a frame.
+    el.reportBreakageNote.textContent = copied
+      ? `Draft copied — opening your email app if one is available. Send to ${report.to}`
+      : `Opening your email app if available — send to ${report.to}`;
+    el.reportBreakageNote.classList.add('sent');
+    await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
 
     try {
       await chrome.tabs.create({ url: report.mailto, active: true });
-      el.reportBreakageNote.textContent = copied
-        ? `Opening your email app — also copied, for ${report.to}`
-        : `Opening your email app — send to ${report.to}`;
     } catch {
-      // No registered mail handler. Say so plainly: a message claiming an app is opening
-      // when none did is how a user concludes the button is broken and gives up.
+      // Popup may already be gone; if not, correct the optimistic note.
       el.reportBreakageNote.textContent = copied
         ? `No email app opened — the report is on your clipboard. Send it to ${report.to}`
         : `No email app opened. Report ${current.hostname} to ${report.to}`;

@@ -905,6 +905,11 @@ async function handlePopupGet(): Promise<PopupData> {
 async function handleBreakageReport(hostname: string): Promise<BreakageReport> {
   const settings = await loadSettings();
   const host = normalizeHostname(hostname);
+  // Same gate as allowlist / DNR match patterns — refuse garbage or CRLF-bearing hosts so
+  // they cannot land in a mailto subject (normal tab hosts already pass).
+  if (!isValidMatchPatternHost(host)) {
+    throw new Error('invalid hostname for breakage report');
+  }
   const { rows, degraded } = await buildListRows(settings);
   return buildBreakageReport({
     hostname: host,

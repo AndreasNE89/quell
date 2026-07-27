@@ -379,7 +379,15 @@ function buildTrackerIndex(rulesetsByList) {
  * scan stays as a fallback for a working copy that has not been stamped yet.
  */
 function listsRefreshedAt() {
-  const lock = readLock(FILTERS_DIR);
+  let lock;
+  try {
+    lock = readLock(FILTERS_DIR);
+  } catch (e) {
+    if (e?.code === 'LOCK_CORRUPT') {
+      throw new Error('filters/lists.lock.json is not valid JSON; run npm run lock-lists');
+    }
+    throw e;
+  }
   if (lock?.updated) return lock.updated;
 
   let newest = 0;

@@ -18,7 +18,16 @@ const FILTERS = join(ROOT, 'filters');
 const check = process.argv.includes('--check');
 
 const registry = JSON.parse(readFileSync(join(FILTERS, 'lists.json'), 'utf8'));
-const previous = readLock(FILTERS);
+let previous;
+try {
+  previous = readLock(FILTERS);
+} catch (e) {
+  if (e?.code === 'LOCK_CORRUPT') {
+    console.error('filters/lists.lock.json is not valid JSON. Fix it or re-stamp: npm run lock-lists');
+    process.exit(1);
+  }
+  throw e;
+}
 // Carry the previous stamp through so the diff reflects content alone; what the stamp should
 // actually become is decided from that diff, below. Inventing a timestamp here would make
 // every verify run look like a change.

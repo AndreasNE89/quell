@@ -64,6 +64,10 @@ test('a normal refresh reports totals, per-list rows and byte movement', () => {
   // A list whose bytes did not move gets a dash, not a fabricated zero.
   assert.match(body, /\| `ubo` \| 20,000 \| 0 \| — \|/);
   assert.equal(/⚠️/.test(body), false);
+  // Gate already ran reproducibility — must not claim that check only happens on merge.
+  assert.match(body, /byte-for-byte rebuild/);
+  assert.equal(/on merge, which is where the byte-for-byte/.test(body), false);
+  assert.match(body, /CI \/ build/);
 });
 
 test('a hard shrink puts a warning in the body', () => {
