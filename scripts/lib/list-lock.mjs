@@ -51,13 +51,20 @@ export function buildLock(registry, filtersDir, now) {
   };
 }
 
+/**
+ * @returns {object | null} parsed lock, or `null` when the file is absent.
+ * @throws {{ code: 'LOCK_CORRUPT' }} when the file exists but is not valid JSON — callers
+ * must not treat that the same as "not stamped yet".
+ */
 export function readLock(filtersDir) {
   const path = join(filtersDir, LOCK_FILE);
   if (!existsSync(path)) return null;
   try {
     return JSON.parse(readFileSync(path, 'utf8'));
   } catch {
-    return null;
+    const err = new Error(`${LOCK_FILE} is not valid JSON`);
+    err.code = 'LOCK_CORRUPT';
+    throw err;
   }
 }
 
@@ -104,7 +111,7 @@ export function diffLock(lock, current) {
  * script". Those diverge whenever a refresh downloads bytes identical to what was already
  * there, which is the common case between upstream releases. Advancing the stamp then would
  * be a lie with a user-visible consequence: compile-filters feeds this into
- * `meta.generatedAt`, and the Options page turns it into "Filter lists compiled N days ago".
+ * `meta.generatedAt`, and the Options page turns it into "Filter lists refreshed N days ago".
  * A no-op refresh would reset that counter and claim protection is fresher than upstream
  * actually delivered.
  */

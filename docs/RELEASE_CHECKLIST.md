@@ -20,6 +20,7 @@ Tiny cross-fixes are OK when they unblock a release.
 1. **Version bump** in `package.json` (and thus `manifest.json` via build) — must be **greater** than the last uploaded CWS version.
 2. **Lists current** (or intentional skip on dark-only even releases):
    - Normally there is nothing to do here: the **Refresh filter lists** workflow runs on the 1st and 15th and opens a PR with the rule-count delta. Merge it and the lists are current.
+   - That PR is opened with `GITHUB_TOKEN`, so GitHub will **not** attach the named `CI / build` check (the refresh job’s own Gate already ran the same commands, including byte-for-byte). If branch protection requires `CI / build`, either allow a bypass for that branch or open refresh PRs with a PAT/GitHub App that can trigger workflows.
    - By hand: `npm run update-lists` then `npm run compile-filters`
    - Watch compile stats for `scriptlet-obfuscated`, regex/memory skips
    - The lists are committed and pinned by `filters/lists.lock.json`. `npm run check-lists` verifies disk against the lock; `npm run lock-lists` re-stamps it after an intentional hand-edit

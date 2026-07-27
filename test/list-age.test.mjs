@@ -22,22 +22,24 @@ test('a fresh build says when, with no warning tail', () => {
   const a = listAge(daysAgo(3), NOW);
   assert.equal(a.level, 'fresh');
   assert.equal(a.days, 3);
-  assert.equal(a.text, 'Filter lists compiled 3 days ago (24 Jul 2026)');
+  assert.equal(a.text, 'Filter lists refreshed 3 days ago (24 Jul 2026)');
 });
 
 test('same day reads as "today", not "0 days ago"', () => {
-  assert.equal(listAge(daysAgo(0), NOW).text, 'Filter lists compiled today (27 Jul 2026)');
+  assert.equal(listAge(daysAgo(0), NOW).text, 'Filter lists refreshed today (27 Jul 2026)');
 });
 
 test('one day is singular', () => {
-  assert.match(listAge(daysAgo(1), NOW).text, /compiled 1 day ago/);
+  assert.match(listAge(daysAgo(1), NOW).text, /refreshed 1 day ago/);
 });
 
-test('the aging threshold is inclusive and adds a due note', () => {
+test('the aging threshold is inclusive and names what fixes it', () => {
   assert.equal(listAge(daysAgo(AGING_DAYS - 1), NOW).level, 'fresh');
   const aging = listAge(daysAgo(AGING_DAYS), NOW);
   assert.equal(aging.level, 'aging');
-  assert.match(aging.text, /a refresh is due/);
+  // The user cannot refresh lists by hand, so the copy must not imply they can.
+  assert.match(aging.text, /a StampStack update will refresh them soon/);
+  assert.equal(/a refresh is due/.test(aging.text), false);
 });
 
 test('the stale threshold is inclusive and names what fixes it', () => {
@@ -54,7 +56,7 @@ test('a clock behind the build machine reports 0 days, never a negative age', ()
   const a = listAge(future, NOW);
   assert.equal(a.days, 0);
   assert.equal(a.level, 'fresh');
-  assert.match(a.text, /compiled today/);
+  assert.match(a.text, /refreshed today/);
 });
 
 test('a missing or unparseable date says so instead of guessing', () => {
