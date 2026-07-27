@@ -100,9 +100,17 @@ export function report({ beforeMeta, afterMeta, beforeLock, afterLock }) {
     out.push(`> Declared in \`lists.json\` but not downloaded: ${lock.absent.join(', ')}`, '');
 
   out.push('---', '');
-  out.push('CI runs the same gate as any other PR: typecheck, tests, store package, obfuscation');
-  out.push('scan, and a byte-for-byte rebuild. Merging this pins the new lists; cutting a release');
-  out.push('from it is a separate step (`docs/RELEASE_CHECKLIST.md`).');
+  // Precise about what has and has not run. GitHub does not trigger workflows for a PR opened
+  // with GITHUB_TOKEN, so ci.yml has *not* seen this branch — claiming otherwise would tell a
+  // reviewer the build was checked by something that never looked at it.
+  out.push('Gated inside the refresh job itself: `check-lists`, typecheck, tests, store package');
+  out.push('and the obfuscation scan all passed before this was opened. `ci.yml` does not run on');
+  out.push('this PR — GitHub does not trigger workflows for a pull request opened with');
+  out.push('`GITHUB_TOKEN` — but it does run on merge, which is where the byte-for-byte rebuild');
+  out.push('check happens.');
+  out.push('');
+  out.push('Merging pins the new lists. Cutting a release from them is a separate, deliberate');
+  out.push('step (`docs/RELEASE_CHECKLIST.md`).');
   return out.join('\n');
 }
 

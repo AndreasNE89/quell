@@ -40,9 +40,9 @@ Fix a broken site without losing protection
 • So instead of one on/off switch, StampStack offers graded repair: stop hiding elements →
   also stop running scriptlets → finally, turn blocking off entirely
 • The first two steps keep your ad blocking on
-• Still broken? One click writes a report for you and opens it in your email app. You read
-  it and send it — StampStack transmits nothing, and it never includes anything about the
-  page you were on
+• Still broken? One click writes a report for you and opens it in your email app. You read it
+  and send it — StampStack transmits nothing. It names the site and lists your StampStack
+  settings, and nothing else: no page content, no addresses, not even the full URL
 
 Hide anything you like
 • Click "Hide an element" (or press Alt+Shift+X), point at what annoys you, and it is gone —

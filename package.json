@@ -22,7 +22,10 @@
     "cws-upload": "node scripts/cws-upload-assist.mjs",
     "icons": "node scripts/make-icons.mjs",
     "watch": "node scripts/build.mjs --watch",
+    "ensure-local-config": "node scripts/ensure-local-config.mjs",
+    "pretypecheck": "node scripts/ensure-local-config.mjs",
     "typecheck": "tsc --noEmit",
+    "pretest": "node scripts/ensure-local-config.mjs",
     "test": "node --test",
     "dev": "npm run build && npm run watch",
     "preview": "node scripts/preview-ui.mjs"

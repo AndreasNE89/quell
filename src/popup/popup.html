@@ -50,20 +50,25 @@
     <div class="repair" id="repair">
       <div class="repair-panel" id="repairPanel" hidden>
         <p class="repair-lead" id="repairState">Everything is on for this site.</p>
-        <button type="button" class="repair-step" id="repairNext"></button>
-        <p class="repair-hint" id="repairHint"></p>
-        <button type="button" class="repair-reset link-btn" id="repairReset" hidden>
-          Undo — turn filtering back on
-        </button>
-        <!-- The only signal a no-telemetry blocker can get. Nothing is sent from here: this
-             opens a draft the user reads and sends themselves. -->
+        <!-- The rungs only mean anything while we are still filtering this site. Reporting
+             does not, so it lives outside this wrapper. -->
+        <div id="repairLadder">
+          <button type="button" class="repair-step" id="repairNext"></button>
+          <p class="repair-hint" id="repairHint"></p>
+          <button type="button" class="repair-reset link-btn" id="repairReset" hidden>
+            Undo — turn filtering back on
+          </button>
+        </div>
+        <!-- The only signal a no-telemetry blocker can get, and it has to survive the user
+             giving up: someone who allowlisted the site is the person most worth hearing
+             from. Nothing is sent from here — this opens a draft they read and send. -->
         <div class="repair-report">
           <button type="button" class="link-btn" id="reportBreakage">
             Still broken? Tell the developer
           </button>
           <p class="repair-report-note" id="reportBreakageNote">
-            Opens a pre-filled email. Includes the site name and your StampStack settings —
-            nothing about the page.
+            Opens a pre-filled email and copies it to your clipboard. Includes the site name
+            and your StampStack settings — nothing about the page itself.
           </p>
         </div>
       </div>

@@ -46,6 +46,7 @@ const el = {
   repairNext: $<HTMLButtonElement>('repairNext'),
   repairReset: $<HTMLButtonElement>('repairReset'),
   repairHint: $('repairHint'),
+  repairLadder: $('repairLadder'),
   reportBreakage: $<HTMLButtonElement>('reportBreakage'),
   reportBreakageNote: $('reportBreakageNote'),
   optionsBtn: $('optionsBtn'),
@@ -136,14 +137,24 @@ function render(data: PopupData): void {
  * full allowlist, so a user fixing a collapsed menu keeps their ad blocking.
  */
 function renderRepair(data: PopupData): void {
-  // Nothing to repair on a page we do not run on, or when already fully off. The trigger lives
-  // in the actions row now, so disable it rather than leaving a button that does nothing.
-  const unavailable = !data.hostname || data.paused || data.allowlisted;
+  // Nothing here is ours to have broken on a page we do not run on, or while paused
+  // everywhere. Allowlisted is different — see below.
+  const unavailable = !data.hostname || data.paused;
   el.repairOpen.disabled = unavailable;
   el.repair.hidden = unavailable;
   if (unavailable) {
     el.repairPanel.hidden = true;
     el.repairOpen.setAttribute('aria-expanded', 'false');
+    return;
+  }
+
+  // Allowlisted means the ladder is finished — there is no further rung to offer. The panel
+  // stays reachable anyway, because someone who turned blocking off to fix a site is the
+  // person most worth hearing from, and hiding this took the report away at exactly that
+  // moment.
+  el.repairLadder.hidden = data.allowlisted;
+  if (data.allowlisted) {
+    el.repairState.textContent = 'Blocking is off for this site — nothing here is filtered.';
     return;
   }
 
