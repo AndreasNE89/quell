@@ -118,3 +118,89 @@ test('a sub-kilobyte change does not round away to "0 KB"', () => {
   assert.match(body, /−46 B/);
   assert.equal(/0 KB/.test(body), false);
 });
+
+// --- CLI exit codes -------------------------------------------------------------------
+// The refresh workflow branches on these. 3 means "nothing moved, skip the PR"; anything
+// else non-zero must fail the job. If unreadable inputs also produced 3, a broken run would
+// look exactly like a quiet upstream and silently drop a real refresh.
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, writeFileSync as wf, rmSync as rm } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join as pjoin } from 'node:path';
+
+function cliExit(args) {
+  try {
+    execFileSync(process.execPath, ['scripts/list-refresh-report.mjs', ...args], { stdio: 'pipe' });
+    return 0;
+  } catch (e) {
+    return e.status;
+  }
+}
+
+test('CLI: a genuine no-op exits 3', () => {
+  const dir = mkdtempSync(pjoin(tmpdir(), 'stampstack-cli-'));
+  try {
+    const m = pjoin(dir, 'meta.json');
+    const l = pjoin(dir, 'lock.json');
+    wf(m, JSON.stringify(meta({ a: 100 })));
+    wf(l, JSON.stringify(lock({ a: 2048 })));
+    assert.equal(cliExit(['--before-meta', m, '--after-meta', m, '--before-lock', l, '--after-lock', l]), 3);
+  } finally {
+    rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('CLI: a real change exits 0', () => {
+  const dir = mkdtempSync(pjoin(tmpdir(), 'stampstack-cli-'));
+  try {
+    const before = pjoin(dir, 'before.json');
+    const after = pjoin(dir, 'after.json');
+    const l1 = pjoin(dir, 'l1.json');
+    const l2 = pjoin(dir, 'l2.json');
+    wf(before, JSON.stringify(meta({ a: 100 })));
+    wf(after, JSON.stringify(meta({ a: 140 })));
+    wf(l1, JSON.stringify(lock({ a: 2048 })));
+    wf(l2, JSON.stringify(lock({ a: 4096 })));
+    assert.equal(
+      cliExit(['--before-meta', before, '--after-meta', after, '--before-lock', l1, '--after-lock', l2]),
+      0,
+    );
+  } finally {
+    rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('CLI: unreadable inputs exit 1, never 3', () => {
+  const gone = pjoin(tmpdir(), 'stampstack-does-not-exist-9f3a.json');
+  assert.equal(
+    cliExit(['--before-meta', gone, '--after-meta', gone, '--before-lock', gone, '--after-lock', gone]),
+    1,
+  );
+});
+
+test('CLI: a missing flag exits 1, never 3', () => {
+  const dir = mkdtempSync(pjoin(tmpdir(), 'stampstack-cli-'));
+  try {
+    const m = pjoin(dir, 'meta.json');
+    wf(m, JSON.stringify(meta({ a: 100 })));
+    assert.equal(cliExit(['--after-meta', m]), 1);
+  } finally {
+    rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('CLI: malformed JSON exits 1, never 3', () => {
+  const dir = mkdtempSync(pjoin(tmpdir(), 'stampstack-cli-'));
+  try {
+    const good = pjoin(dir, 'good.json');
+    const bad = pjoin(dir, 'bad.json');
+    wf(good, JSON.stringify(meta({ a: 100 })));
+    wf(bad, '{ not json at all');
+    assert.equal(
+      cliExit(['--before-meta', good, '--after-meta', good, '--before-lock', good, '--after-lock', bad]),
+      1,
+    );
+  } finally {
+    rm(dir, { recursive: true, force: true });
+  }
+});

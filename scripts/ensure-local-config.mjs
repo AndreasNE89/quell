@@ -7,7 +7,9 @@
 //
 // scripts/build.mjs has always created it, but only once a build is under way, which is too
 // late for a typecheck or test step that runs first. This is that same step, callable on its
-// own, wired as a pre-hook for typecheck/test/compile-filters.
+// own, wired as `pretypecheck` and `pretest` in package.json — the two entry points that
+// resolve TypeScript imports before any build has run. compile-filters does not need it: it
+// reads the filter lists and never touches src/shared.
 //
 // It never overwrites an existing file: a developer's real override must survive this.
 

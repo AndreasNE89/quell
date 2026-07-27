@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { buildLock, diffLock, formatLockDiff, readLock, writeLock } from '../scripts/lib/list-lock.mjs';
+import { buildLock, diffLock, formatLockDiff, readLock, stampFor, writeLock } from '../scripts/lib/list-lock.mjs';
 
 const STAMP = '2026-07-27T00:00:00.000Z';
 
@@ -157,4 +157,47 @@ test('a shrinking list reads as a minus, not a plus', () => {
   });
   assert.match(text, /−2 KB/);
   assert.equal(/\+/.test(text), false);
+});
+
+test('a no-op re-stamp keeps the old timestamp, so list age stays honest', () => {
+  // The stamp means "when this content arrived", not "when the script last ran". Advancing it
+  // on an unchanged refresh would reset the Options "compiled N days ago" counter and claim
+  // protection is fresher than upstream actually delivered.
+  const dir = fixture({ 'a.txt': 'alpha' });
+  try {
+    const before = buildLock(registry('a'), dir, STAMP);
+    const diff = diffLock(before, buildLock(registry('a'), dir, STAMP));
+    assert.equal(diff.clean, true);
+    assert.equal(stampFor(before, diff, '2026-09-01T00:00:00.000Z'), STAMP);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a real content change does take the new timestamp', () => {
+  const dir = fixture({ 'a.txt': 'alpha' });
+  try {
+    const before = buildLock(registry('a'), dir, STAMP);
+    writeFileSync(join(dir, 'a.txt'), 'alpha changed');
+    const diff = diffLock(before, buildLock(registry('a'), dir, STAMP));
+    assert.equal(diff.clean, false);
+    assert.equal(stampFor(before, diff, '2026-09-01T00:00:00.000Z'), '2026-09-01T00:00:00.000Z');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a first stamp with no previous lock uses now', () => {
+  const dir = fixture({ 'a.txt': 'alpha' });
+  try {
+    const diff = diffLock(null, buildLock(registry('a'), dir, STAMP));
+    assert.equal(stampFor(null, diff, '2026-09-01T00:00:00.000Z'), '2026-09-01T00:00:00.000Z');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a clean diff against a previous lock with no stamp still takes now', () => {
+  const diff = { clean: true, changed: [], added: [], removed: [], absent: [] };
+  assert.equal(stampFor({ lists: {} }, diff, '2026-09-01T00:00:00.000Z'), '2026-09-01T00:00:00.000Z');
 });

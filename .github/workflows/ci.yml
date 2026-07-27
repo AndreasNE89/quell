@@ -59,7 +59,11 @@ jobs:
       # That claim is worth nothing unless something checks it.
       - name: Build is byte-for-byte reproducible
         run: |
-          zip=$(ls release/*.zip | head -1)
+          # Pinned to this commit's version, not "whatever zip is first" — a stale artifact
+          # sitting in release/ would otherwise be hashed while a different one is rebuilt,
+          # and the comparison would be meaningless in either direction.
+          zip="release/stampstack-$(node -p "require('./package.json').version").zip"
+          test -f "$zip" || { echo "::error::expected $zip"; ls -la release/; exit 1; }
           first=$(sha256sum "$zip" | cut -d' ' -f1)
           npm run package -- --skip-lists > /dev/null
           second=$(sha256sum "$zip" | cut -d' ' -f1)

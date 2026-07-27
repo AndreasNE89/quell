@@ -11,7 +11,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { buildLock, diffLock, formatLockDiff, readLock, writeLock } from './lib/list-lock.mjs';
+import { buildLock, diffLock, formatLockDiff, readLock, stampFor, writeLock } from './lib/list-lock.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const FILTERS = join(ROOT, 'filters');
@@ -19,9 +19,12 @@ const check = process.argv.includes('--check');
 
 const registry = JSON.parse(readFileSync(join(FILTERS, 'lists.json'), 'utf8'));
 const previous = readLock(FILTERS);
-// A verify run must not invent a timestamp — it would make every check look like a change.
-const current = buildLock(registry, FILTERS, check ? (previous?.updated ?? null) : new Date().toISOString());
-const diff = diffLock(previous, current);
+// Carry the previous stamp through so the diff reflects content alone; what the stamp should
+// actually become is decided from that diff, below. Inventing a timestamp here would make
+// every verify run look like a change.
+const candidate = buildLock(registry, FILTERS, previous?.updated ?? null);
+const diff = diffLock(previous, candidate);
+const current = { ...candidate, updated: stampFor(previous, diff, new Date().toISOString()) };
 
 if (check) {
   if (!previous) {
@@ -44,7 +47,9 @@ if (check) {
 } else {
   writeLock(FILTERS, current);
   if (diff.clean && previous) {
-    console.log('lists.lock.json refreshed — no list content changed.');
+    // Deliberately byte-identical to what was already there — including the stamp, so the
+    // recorded age still reflects when upstream last actually changed.
+    console.log(`No list content changed. Stamp left at ${current.updated} (age is upstream's, not ours).`);
   } else {
     console.log('lists.lock.json updated:\n');
     console.log(formatLockDiff(diff) || '  (first stamp)');

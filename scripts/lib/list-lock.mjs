@@ -97,6 +97,21 @@ export function diffLock(lock, current) {
   };
 }
 
+/**
+ * Which timestamp a re-stamp should record.
+ *
+ * `updated` means "when this list content arrived", not "when someone last ran the stamping
+ * script". Those diverge whenever a refresh downloads bytes identical to what was already
+ * there, which is the common case between upstream releases. Advancing the stamp then would
+ * be a lie with a user-visible consequence: compile-filters feeds this into
+ * `meta.generatedAt`, and the Options page turns it into "Filter lists compiled N days ago".
+ * A no-op refresh would reset that counter and claim protection is fresher than upstream
+ * actually delivered.
+ */
+export function stampFor(previous, diff, now) {
+  return diff.clean && previous?.updated ? previous.updated : now;
+}
+
 /** One line per moved list, for a PR body or a CI log. */
 export function formatLockDiff(diff) {
   const kb = (n) => (n < 1024 ? `${n} B` : `${(n / 1024).toFixed(0)} KB`);

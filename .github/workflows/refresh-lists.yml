@@ -56,21 +56,35 @@ jobs:
       - name: Summarize the change
         id: summary
         run: |
-          if node scripts/list-refresh-report.mjs \
-              --before-meta "$RUNNER_TEMP/meta-before.json" \
-              --after-meta src/generated/meta.json \
-              --before-lock "$RUNNER_TEMP/lock-before.json" \
-              --after-lock filters/lists.lock.json \
-              > "$RUNNER_TEMP/body.md"; then
+          set +e
+          node scripts/list-refresh-report.mjs \
+            --before-meta "$RUNNER_TEMP/meta-before.json" \
+            --after-meta src/generated/meta.json \
+            --before-lock "$RUNNER_TEMP/lock-before.json" \
+            --after-lock filters/lists.lock.json \
+            > "$RUNNER_TEMP/body.md"
+          rc=$?
+          set -e
+
+          # Exit 3 is the script's "nothing moved" signal. Every other non-zero is a crash, and
+          # must fail the job — lumping them together would turn a broken script into a silent
+          # "upstream is unchanged" and drop a real refresh on the floor.
+          if [ "$rc" -eq 0 ]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
             cat "$RUNNER_TEMP/body.md" >> "$GITHUB_STEP_SUMMARY"
-          else
+          elif [ "$rc" -eq 3 ]; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo 'Upstream lists are unchanged — nothing to open.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error::list-refresh-report.mjs failed with exit $rc"
+            cat "$RUNNER_TEMP/body.md" || true
+            exit "$rc"
           fi
 
       # A pull request opened with GITHUB_TOKEN does not trigger other workflows, so ci.yml
-      # will not run on it. The gate therefore runs here, or the PR would arrive unverified.
+      # will not run on it. The gate therefore runs here, or the PR would arrive unverified —
+      # including the reproducibility assertion, which otherwise would not be made about the
+      # refresh branch at all.
       - name: Gate
         if: steps.summary.outputs.changed == 'true'
         run: |
@@ -78,6 +92,18 @@ jobs:
           npm run typecheck
           npm test
           npm run package -- --skip-lists
+
+          zip="release/stampstack-$(node -p "require('./package.json').version").zip"
+          first=$(sha256sum "$zip" | cut -d' ' -f1)
+          npm run package -- --skip-lists > /dev/null
+          second=$(sha256sum "$zip" | cut -d' ' -f1)
+          if [ "$first" != "$second" ]; then
+            echo "::error::New lists made the build non-reproducible."
+            echo "first:  $first"
+            echo "second: $second"
+            exit 1
+          fi
+          echo "sha256 $first — stable across two builds"
 
       - name: Open or update the pull request
         if: steps.summary.outputs.changed == 'true'

@@ -115,13 +115,36 @@ export function report({ beforeMeta, afterMeta, beforeLock, afterLock }) {
 }
 
 // Only run as a CLI, so the tests can import the pure parts.
-if (arg('after-meta')) {
+if (process.argv.some((a) => a.startsWith('--'))) {
+  const wanted = ['before-meta', 'after-meta', 'before-lock', 'after-lock'];
+  const loaded = {};
+  const problems = [];
+  for (const name of wanted) {
+    const path = arg(name);
+    if (!path) {
+      problems.push(`--${name} was not given`);
+      continue;
+    }
+    const value = readJson(path);
+    if (value === null) problems.push(`--${name}: ${path} is missing or not valid JSON`);
+    loaded[name] = value;
+  }
+
+  // Exit 1, never 3. Unreadable inputs make every comparison come out empty, which is
+  // indistinguishable from a genuine no-op — and a caller that treats the two alike would
+  // turn a broken run into a confident "upstream is unchanged" and drop a real refresh.
+  if (problems.length) {
+    console.error('list-refresh-report: cannot read its inputs —');
+    for (const p of problems) console.error(`  ${p}`);
+    process.exit(1);
+  }
+
   const body = report({
-    beforeMeta: readJson(arg('before-meta')),
-    afterMeta: readJson(arg('after-meta')),
-    beforeLock: readJson(arg('before-lock')),
-    afterLock: readJson(arg('after-lock')),
+    beforeMeta: loaded['before-meta'],
+    afterMeta: loaded['after-meta'],
+    beforeLock: loaded['before-lock'],
+    afterLock: loaded['after-lock'],
   });
   if (body) process.stdout.write(body + '\n');
-  else process.exitCode = 3; // nothing changed — the workflow skips the PR
+  else process.exit(3); // genuinely nothing moved — the workflow skips the PR
 }

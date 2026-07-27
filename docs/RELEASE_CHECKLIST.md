@@ -24,7 +24,7 @@ Tiny cross-fixes are OK when they unblock a release.
    - Watch compile stats for `scriptlet-obfuscated`, regex/memory skips
    - The lists are committed and pinned by `filters/lists.lock.json`. `npm run check-lists` verifies disk against the lock; `npm run lock-lists` re-stamps it after an intentional hand-edit
    - If list download fails with TLS/`unable to verify the first certificate` (corp proxy/AV): build with existing `filters/*.txt` via `npm run package -- --skip-lists` and retry lists off that network
-3. **Checks** — CI already runs everything except `smoke-extpay` on every push and PR, and asserts the build is byte-for-byte reproducible. Run these locally when you have not pushed:
+3. **Checks** — CI runs everything except `smoke-extpay` on **pushes to `main` and on pull requests**, and asserts the build is byte-for-byte reproducible. A feature branch with no PR open is *not* covered, so run these locally until you open one:
    - `npm run typecheck`
    - `npm test`
    - `npm run smoke-extpay` (ExtPay id + store Dev-unlock gate + obfuscation scan; restores `[dev]` `dist/` after) — **not** covered by CI, because it depends on the local ExtPay configuration
