@@ -1,0 +1,82 @@
+name: CI
+
+# Every gate in this repo used to run only when someone remembered to run it. These are the
+# same commands docs/RELEASE_CHECKLIST.md asks for, on every push and pull request.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      # The playwright devDependency is only used by the local audit/screenshot scripts.
+      # Nothing in this job drives a browser, and its postinstall pulls ~300 MB.
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+
+      # Before anything is compiled: prove the lists on disk are the ones the lock records.
+      # A build from unpinned inputs is not the build this commit describes.
+      - name: Filter lists match their lock
+        run: npm run check-lists
+
+      # src/generated/ is gitignored and service-worker.ts imports from it, so typecheck
+      # cannot run until the filters are compiled.
+      - name: Compile filters
+        run: npm run compile-filters
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test
+
+      # --skip-lists because the lists are committed. Without it this would re-download from
+      # six upstream hosts and build something other than what the commit pins.
+      - name: Store package
+        run: npm run package -- --skip-lists
+
+      # The repo tells Chrome Web Store reviewers a release can be reproduced from its tag.
+      # That claim is worth nothing unless something checks it.
+      - name: Build is byte-for-byte reproducible
+        run: |
+          zip=$(ls release/*.zip | head -1)
+          first=$(sha256sum "$zip" | cut -d' ' -f1)
+          npm run package -- --skip-lists > /dev/null
+          second=$(sha256sum "$zip" | cut -d' ' -f1)
+          if [ "$first" != "$second" ]; then
+            echo "::error::Two builds of the same commit produced different bytes."
+            echo "first:  $first"
+            echo "second: $second"
+            exit 1
+          fi
+          echo "sha256 $first — stable across two builds"
+          echo "**Package:** \`$(basename "$zip")\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "**sha256:** \`$first\` (reproducible)" >> "$GITHUB_STEP_SUMMARY"
+
+      # So a store upload never has to come off someone's laptop.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stampstack-package
+          path: release/*.zip
+          if-no-files-found: error
+          retention-days: 30

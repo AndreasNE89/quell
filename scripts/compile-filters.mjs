@@ -34,6 +34,7 @@ import {
 import { DNR } from './lib/limits.mjs';
 import { scriptletLooksObfuscated, scriptletUnsupported } from './lib/scriptlet-safe.mjs';
 import { trackerDomainMap } from './lib/trackers.mjs';
+import { readLock } from './lib/list-lock.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -366,8 +367,21 @@ function buildTrackerIndex(rulesetsByList) {
   return { domains };
 }
 
-/** Newest mtime across the compiled filter files, as an ISO string (null if none exist). */
-function newestFilterMtime() {
+/**
+ * When the filter lists were last refreshed, as an ISO string (null if there are none).
+ *
+ * This ends up embedded in meta.json and therefore in the shipped bundle, so it has to be a
+ * function of the committed sources — not of the machine doing the build. mtimes are not:
+ * git does not preserve them, so a fresh clone stamps checkout time and the "reproducible
+ * from the tag" claim quietly stops being true.
+ *
+ * filters/lists.lock.json records the fetch time and is committed, so prefer it. The mtime
+ * scan stays as a fallback for a working copy that has not been stamped yet.
+ */
+function listsRefreshedAt() {
+  const lock = readLock(FILTERS_DIR);
+  if (lock?.updated) return lock.updated;
+
   let newest = 0;
   for (const name of readdirSync(FILTERS_DIR)) {
     if (!name.endsWith('.txt')) continue;
@@ -522,7 +536,7 @@ function main() {
         // gets inlined into background.js and makes two builds of identical sources produce
         // different bytes, so a store zip can't be diffed or reproduced. This value is also
         // more truthful — it dates the filter data, which is what "generated" means to a user.
-        generatedAt: newestFilterMtime(),
+        generatedAt: listsRefreshedAt(),
         lists: metaLists,
         regexRulesUsed: ctx.regexCount,
       },
