@@ -303,3 +303,10 @@ code {
 .list-warn {
   color: var(--danger, #b4443a);
 }
+/* Sits directly above the list toggles and qualifies all of them, so it reads tighter to
+   the block it describes than the paragraph of hint text above it. */
+.list-age {
+  margin-top: -8px;
+  margin-bottom: 12px;
+  font-variant-numeric: tabular-nums;
+}

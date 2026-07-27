@@ -1,0 +1,139 @@
+name: Refresh filter lists
+
+# An ad blocker whose lists are frozen gets quietly worse every week, and with no telemetry
+# by design there is nothing to notice it happening. docs/RELEASE_CHECKLIST.md asks for a
+# refresh about every two weeks; this is that, as a pull request to review rather than a
+# chore to remember.
+#
+# Merging a refresh pins new lists. Cutting a release from it stays a deliberate, separate act.
+
+on:
+  schedule:
+    - cron: '0 6 1,15 * *' # 1st and 15th, 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: refresh-filter-lists
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      BRANCH: chore/refresh-filter-lists
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+
+      # Compile the currently pinned lists first, so the PR can say what actually moved
+      # rather than just that something did.
+      - name: Baseline from the pinned lists
+        run: |
+          npm run compile-filters
+          cp src/generated/meta.json "$RUNNER_TEMP/meta-before.json"
+          cp filters/lists.lock.json "$RUNNER_TEMP/lock-before.json"
+
+      # Exits non-zero if any list fails to download, which fails the job rather than
+      # committing a half-updated set.
+      - name: Download upstream lists
+        run: npm run update-lists
+
+      - name: Recompile
+        run: npm run compile-filters
+
+      - name: Summarize the change
+        id: summary
+        run: |
+          set +e
+          node scripts/list-refresh-report.mjs \
+            --before-meta "$RUNNER_TEMP/meta-before.json" \
+            --after-meta src/generated/meta.json \
+            --before-lock "$RUNNER_TEMP/lock-before.json" \
+            --after-lock filters/lists.lock.json \
+            > "$RUNNER_TEMP/body.md"
+          rc=$?
+          set -e
+
+          # Exit 3 is the script's "nothing moved" signal. Every other non-zero is a crash, and
+          # must fail the job — lumping them together would turn a broken script into a silent
+          # "upstream is unchanged" and drop a real refresh on the floor.
+          if [ "$rc" -eq 0 ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            cat "$RUNNER_TEMP/body.md" >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$rc" -eq 3 ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo 'Upstream lists are unchanged — nothing to open.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error::list-refresh-report.mjs failed with exit $rc"
+            cat "$RUNNER_TEMP/body.md" || true
+            exit "$rc"
+          fi
+
+      # A pull request opened with GITHUB_TOKEN does not trigger other workflows, so ci.yml
+      # will not run on it. The gate therefore runs here, or the PR would arrive unverified —
+      # including the reproducibility assertion, which otherwise would not be made about the
+      # refresh branch at all.
+      - name: Gate
+        if: steps.summary.outputs.changed == 'true'
+        run: |
+          npm run check-lists
+          npm run typecheck
+          npm test
+          npm run package -- --skip-lists
+
+          zip="release/stampstack-$(node -p "require('./package.json').version").zip"
+          first=$(sha256sum "$zip" | cut -d' ' -f1)
+          npm run package -- --skip-lists > /dev/null
+          second=$(sha256sum "$zip" | cut -d' ' -f1)
+          if [ "$first" != "$second" ]; then
+            echo "::error::New lists made the build non-reproducible."
+            echo "first:  $first"
+            echo "second: $second"
+            exit 1
+          fi
+          echo "sha256 $first — stable across two builds"
+
+      - name: Open or update the pull request
+        if: steps.summary.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          {
+            echo 'Refresh filter lists'
+            echo
+            head -c 60000 "$RUNNER_TEMP/body.md"
+          } > "$RUNNER_TEMP/commit.md"
+
+          git checkout -B "$BRANCH"
+          git add filters/
+          git commit --file "$RUNNER_TEMP/commit.md"
+
+          # This branch belongs to the workflow, and a pending refresh is always superseded by
+          # a newer one — so replacing it wholesale is the intended behaviour, not a mishap.
+          git push --force origin "$BRANCH"
+
+          if [ -n "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')" ]; then
+            gh pr edit "$BRANCH" --body-file "$RUNNER_TEMP/body.md"
+            echo "Updated the open refresh PR."
+          else
+            gh pr create \
+              --head "$BRANCH" \
+              --base "${{ github.event.repository.default_branch }}" \
+              --title "Refresh filter lists" \
+              --body-file "$RUNNER_TEMP/body.md"
+          fi

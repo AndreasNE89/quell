@@ -52,6 +52,9 @@ export const LICENSE_GRACE_MS = 14 * 24 * 60 * 60 * 1000;
 /** User-facing price for dark mode (matches ExtensionPay plan). */
 export const DARK_MODE_PRICE_LABEL = '$2';
 
+/** Where breakage reports go. Same address as the privacy policy's contact. */
+export const SUPPORT_EMAIL = 'andreas.nelvik.engebretsen@gmail.com';
+
 /**
  * Pre-rebrand settings keys — migrated once into STORAGE_KEY then removed.
  * Includes short-lived intermediate rename keys from the rebrand process.

@@ -52,7 +52,7 @@
 <body>
   <main>
     <h1>StampStack Privacy Policy</h1>
-    <p class="meta">Effective date: July 13, 2026 · Last updated: July 26, 2026</p>
+    <p class="meta">Effective date: July 13, 2026 · Last updated: July 27, 2026</p>
 
     <div class="box">
       <strong>Short version:</strong> StampStack does not collect, sell, or transmit your browsing history.
@@ -79,6 +79,7 @@
       <li><strong>Settings &amp; allowlist:</strong> Stored locally via <code>chrome.storage</code> on your device. Not uploaded.</li>
       <li><strong>Statistics:</strong> Any on-device counters (e.g. badge hints) stay local when available. StampStack does not sync them to a server.</li>
       <li><strong>Page analysis (on your device):</strong> To show you what a page connects to, and to power the element picker and your own filters, StampStack reads the current page in your browser — the addresses it references and the elements its rules match. <strong>None of this is transmitted anywhere</strong>, to us or to any third party. It exists only while the page is open, and the popup is the only thing that ever sees it.</li>
+      <li><strong>Breakage reports (only if you start one):</strong> If you use &ldquo;Still broken? Tell the developer&rdquo;, StampStack composes an email and opens it in your own mail app. <strong>StampStack does not send it</strong> — you read, edit and send it yourself, or close it. The draft contains the site&rsquo;s hostname and StampStack&rsquo;s own settings (version, filter-list date, which lists are on, repair step, browser version). It contains nothing about the page itself: no page content, no full URL, and none of what the page report observed.</li>
       <li><strong>Optional purchase:</strong> If you buy dark mode, ExtensionPay / Stripe process payment and may collect an email for receipt and restore. StampStack caches a local paid flag; <strong>browsing history and allowlist are not sent</strong> to the payment provider.</li>
       <li><strong>SponsorBlock (on by default):</strong> The Auto-skip sponsor segments toggle is <strong>on by default</strong>. While it is on, StampStack asks the community SponsorBlock API (<code>sponsor.ajay.app</code>) which segments to skip. It sends only the <strong>first 4 characters of a SHA-256 hash of the YouTube video id</strong> — never the video id itself, the page URL, or any account identifier — and the request is made without cookies or credentials. The API answers with every video sharing that 4-character prefix, and the right one is selected on your device. You can also choose which segment types to skip; StampStack asks only for the ones you picked, and turning them all off stops these requests entirely.</li>
     </ul>

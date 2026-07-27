@@ -21,6 +21,13 @@ docs/youtube-features-audit.json
 src/shared/extpay-config.local.ts
 # Chrome Web Store upload assist (Playwright persistent profile — keeps Google login)
 .cws-chrome-profile/
+# Local CWS dashboard automation: driver scripts and their output (screenshots and JSON dumps
+# of your own developer console). Never belongs in the repo — `git add store/` swept 105 of
+# these in once already.
+scripts/cws-*.mjs
+store/cws-*
+.tmp-ship/
+.playwright-store-shots/
 
 # UI preview harness output (npm run preview)
 .preview/

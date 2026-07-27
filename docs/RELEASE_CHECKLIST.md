@@ -19,13 +19,15 @@ Tiny cross-fixes are OK when they unblock a release.
 
 1. **Version bump** in `package.json` (and thus `manifest.json` via build) — must be **greater** than the last uploaded CWS version.
 2. **Lists current** (or intentional skip on dark-only even releases):
-   - `npm run update-lists` then `npm run compile-filters`
+   - Normally there is nothing to do here: the **Refresh filter lists** workflow runs on the 1st and 15th and opens a PR with the rule-count delta. Merge it and the lists are current.
+   - By hand: `npm run update-lists` then `npm run compile-filters`
    - Watch compile stats for `scriptlet-obfuscated`, regex/memory skips
+   - The lists are committed and pinned by `filters/lists.lock.json`. `npm run check-lists` verifies disk against the lock; `npm run lock-lists` re-stamps it after an intentional hand-edit
    - If list download fails with TLS/`unable to verify the first certificate` (corp proxy/AV): build with existing `filters/*.txt` via `npm run package -- --skip-lists` and retry lists off that network
-3. **Checks**
+3. **Checks** — CI runs everything except `smoke-extpay` on **pushes to `main` and on pull requests**, and asserts the build is byte-for-byte reproducible. A feature branch with no PR open is *not* covered, so run these locally until you open one:
    - `npm run typecheck`
    - `npm test`
-   - `npm run smoke-extpay` (ExtPay id + store Dev-unlock gate + obfuscation scan; restores `[dev]` `dist/` after)
+   - `npm run smoke-extpay` (ExtPay id + store Dev-unlock gate + obfuscation scan; restores `[dev]` `dist/` after) — **not** covered by CI, because it depends on the local ExtPay configuration
 4. **Package**
    - `npm run package` (or `npm run package -- --skip-lists` if lists already fresh)
    - Confirm `release/stampstack-<version>.zip`
