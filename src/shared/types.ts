@@ -310,6 +310,8 @@ export interface StatsData {
   regexRulesUsed: number;
   statsReliable: boolean;
   degraded: boolean;
+  /** When the packaged lists were fetched upstream — `GeneratedMeta.generatedAt`. */
+  listsGeneratedAt: string | null;
 }
 
 export interface LicenseData {

@@ -1217,6 +1217,7 @@ async function handleStatsGet(): Promise<StatsData> {
     regexRulesUsed: META.regexRulesUsed,
     statsReliable: STATS_RELIABLE,
     degraded,
+    listsGeneratedAt: META.generatedAt,
   };
 }
 

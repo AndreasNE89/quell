@@ -14,6 +14,7 @@ import type {
   SponsorCategoriesData,
 } from '../shared/types.js';
 import { siteFixLabel } from '../shared/site-fix.js';
+import { listAge } from '../shared/list-age.js';
 import { STORAGE_KEY } from '../shared/constants.js';
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -47,6 +48,13 @@ async function loadStats(): Promise<void> {
   if (totalLabel) {
     totalLabel.textContent = s.statsReliable ? 'requests blocked' : 'blocked count (dev only)';
   }
+
+  // Lists are frozen at build time, so their age is the one thing about coverage the UI
+  // could not previously say. Left unsaid, protection decays with nothing to show for it.
+  const age = listAge(s.listsGeneratedAt, Date.now());
+  const ageEl = $('listAge');
+  ageEl.textContent = age.text;
+  ageEl.classList.toggle('list-warn', age.level === 'stale');
 }
 
 function listItem(l: ListsData['lists'][number]): HTMLElement {

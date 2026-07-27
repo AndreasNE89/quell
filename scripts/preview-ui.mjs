@@ -68,6 +68,12 @@ const STATES = {
     popup: { hostname: null, paused: false, allowlisted: false, siteFix: null },
     dark: { paid: true, enabled: true, apply: false, restricted: true },
   },
+  'stale-lists': {
+    label: 'filter lists well past a refresh — see Options (--page=options)',
+    popup: { hostname: 'www.theguardian.com', paused: false, allowlisted: false, siteFix: null },
+    dark: { paid: false, enabled: false, apply: false, restricted: false },
+    listAgeDays: 47,
+  },
 };
 
 if (process.argv.includes('--list')) {
@@ -161,7 +167,16 @@ function chromeStub() {
     'darkmode:get': dark,
     'report:get': report,
     'lists:get': lists,
-    'stats:get': { blockedTotal: 0, paused: popup.paused, lists: lists.lists, regexRulesUsed: 209, statsReliable: false },
+    // listsGeneratedAt is offset from now so the age line renders a real value rather than
+    // "unavailable"; --state=stale-lists pushes it past the warning threshold.
+    'stats:get': {
+      blockedTotal: 0,
+      paused: popup.paused,
+      lists: lists.lists,
+      regexRulesUsed: 209,
+      statsReliable: false,
+      listsGeneratedAt: new Date(Date.now() - (state.listAgeDays ?? 3) * 86_400_000).toISOString(),
+    },
     'sitefix:list': { allowlist: ['ads.example.com'], siteFixes: { 'shop.example.com': 'injection' } },
     'customfilters:get': { text: '! my rules\nexample.com##.sponsored-widget\n', count: 1, errors: [] },
     'sponsorblock:getCategories': sponsor,
