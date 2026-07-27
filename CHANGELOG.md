@@ -2,7 +2,10 @@
 
 Written for users, not for the commit log. Internal refactors and test-only work are omitted.
 
-## Unreleased
+## 2.1.0
+
+A maintenance release about the two things a blocker cannot do for itself: stay current, and
+find out when it has broken a page.
 
 - **Tell the developer a site is broken.** The "Site broken?" panel now ends with a report
   action. It opens a pre-filled email you read and send yourself — StampStack transmits
@@ -11,6 +14,8 @@ Written for users, not for the commit log. Internal refactors and test-only work
 - **Settings shows how old the filter lists are**, and says so in red once a build is more
   than a month behind upstream. The lists are compiled into each release, so this is the one
   thing about coverage the interface could not previously tell you.
+- **1,611 more blocking rules**, from a fresh pull of EasyList, EasyPrivacy, EasyList Cookie
+  and uBlock Origin's lists — 121,988 in total.
 
 ## 2.0.0
 

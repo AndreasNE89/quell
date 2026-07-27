@@ -1,6 +1,6 @@
 {
   "comment": "Integrity record for the lists compiled into a release. Written by `npm run update-lists`; verify with `npm run check-lists`. The .txt files themselves are the source of truth.",
-  "updated": "2026-07-27T10:10:11.232Z",
+  "updated": "2026-07-27T10:33:18.658Z",
   "lists": {
     "quell-seed": {
       "file": "quell-seed.txt",
@@ -9,28 +9,28 @@
     },
     "easylist": {
       "file": "easylist.txt",
-      "bytes": 2159477,
-      "sha256": "0e833f320cb1c620502beee3fc5c5992f6861fc29fe08b508764c46224c10b0b"
+      "bytes": 2195487,
+      "sha256": "228667f34f04d6ab9a5fd0d168dad06d6f9185c845ed9f60a49f3906cb07cc66"
     },
     "easyprivacy": {
       "file": "easyprivacy.txt",
-      "bytes": 1489651,
-      "sha256": "82c0994fa0fdbedbe8d738779da3b3ce2635736f9e0b75ece66beed727373e93"
+      "bytes": 1490265,
+      "sha256": "cb52c9bbc806e4243e0ec3fd96adba71d907a83e635143b9ed52404d0310d39d"
     },
     "ubo-filters": {
       "file": "ubo-filters.txt",
-      "bytes": 1838582,
-      "sha256": "30f493675bbf540d654688978954c2a1438ba74b7563536d2d1ad10ea932bedd"
+      "bytes": 1840221,
+      "sha256": "7448851ec09c2b17959e532c70d5a56f56f65735a2a2d86d6e4403a24b9ba6f0"
     },
     "ubo-badware": {
       "file": "ubo-badware.txt",
-      "bytes": 146510,
-      "sha256": "79c5ce363895a90e03d48781dc6fe449e28965f6642ae09be4489c3a408b6074"
+      "bytes": 146606,
+      "sha256": "07b47233f4747a9277fc37e0291b2ea47c667baf230ce140c0a2078a45f11eb6"
     },
     "easylist-cookie": {
       "file": "easylist-cookie.txt",
-      "bytes": 874757,
-      "sha256": "0ec4142e5495dcdfd6e9910355ac542c689b6933d91b63ff5381a22cd620d3ba"
+      "bytes": 875705,
+      "sha256": "8a7cae157a478ef460d4981894f2a32e980404b5582ab864842e321651df756d"
     }
   }
 }
