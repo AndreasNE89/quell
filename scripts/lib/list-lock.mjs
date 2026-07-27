@@ -99,7 +99,8 @@ export function diffLock(lock, current) {
 
 /** One line per moved list, for a PR body or a CI log. */
 export function formatLockDiff(diff) {
-  const kb = (n) => `${(n / 1024).toFixed(0)} KB`;
+  const kb = (n) => (n < 1024 ? `${n} B` : `${(n / 1024).toFixed(0)} KB`);
+  // A handful of changed bytes must not round to "0 KB" and read as no change at all.
   const signed = (n) => `${n >= 0 ? '+' : '−'}${kb(Math.abs(n))}`;
   const lines = [];
   for (const c of diff.changed) lines.push(`  ~ ${c.id} — ${kb(c.bytes)} (${signed(c.delta)})`);
