@@ -1,7 +1,7 @@
 # StampStack Privacy Policy
 
 **Effective date:** July 13, 2026  
-**Last updated:** July 26, 2026
+**Last updated:** July 27, 2026
 
 **Host this HTML for the Chrome Web Store:** publish [`privacy-policy.html`](./privacy-policy.html) at a stable HTTPS URL (GitHub Pages, your site, etc.) and paste that URL into the Store’s Privacy practices form.
 
@@ -23,6 +23,7 @@ StampStack is a browser extension that blocks ads and trackers using Declarative
 | Settings & allowlist | Stored locally via `chrome.storage`. Not uploaded. |
 | Statistics | On-device only when available. Not synced to a StampStack server. |
 | Page analysis (on your device) | To show you what a page connects to, and to power the element picker and your own filters, StampStack reads the current page in your browser: the addresses it references and the elements its rules match. **None of this is transmitted anywhere** — not to us, not to any third party. It exists only for as long as the page is open, and the popup is the only thing that ever sees it. |
+| Breakage reports (only if you start one) | If you use **Still broken? Tell the developer**, StampStack composes an email and opens it in your own mail app. **StampStack does not send it** — you read, edit and send it yourself, or close it. The draft contains the site's hostname and StampStack's own settings (version, filter-list date, which lists are on, repair step, browser version). It contains nothing about the page itself: no page content, no full URL, and none of what the page report observed. |
 | Optional purchase | If you buy dark mode, ExtensionPay / Stripe process payment and may collect an email for receipt and restore. StampStack caches a local paid flag; **browsing history and allowlist are not sent** to the payment provider. |
 | SponsorBlock (on by default) | The **Auto-skip sponsor segments** toggle is **on by default**. While it is on, StampStack asks the community SponsorBlock API (`sponsor.ajay.app`) which segments to skip. It sends only the **first 4 characters of a SHA-256 hash of the YouTube video id** — never the video id itself, the page URL, or any account identifier — and the request is made without cookies or credentials. The API answers with every video sharing that 4-character prefix, and the right one is selected on your device. You can also choose which segment types to skip; StampStack asks only for the ones you picked, and turning them all off stops these requests entirely. |
 

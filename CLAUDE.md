@@ -6,9 +6,11 @@ StampStack is a private Manifest V3 Chromium extension (`stampstack-adblock`) th
 
 - `npm run build` — compile filters + bundle to `dist/`
 - `npm run typecheck` — TypeScript strict check
-- `npm run update-lists` — refresh downloadable lists under `filters/`
+- `npm run update-lists` — refresh downloadable lists under `filters/` (re-stamps the lock)
+- `npm run check-lists` — verify `filters/*.txt` against `filters/lists.lock.json`
 - `npm run smoke-extpay` — ExtPay id + store Dev-unlock gate (restores `[dev]` dist)
 - `npm run watch` — JS rebuild only (re-run compile-filters after list/parser changes)
+- `npm run preview -- --page=options --state=stale-lists` — render a UI state without Chrome
 
 Load unpacked from `dist/`. Store cadence: `docs/RELEASE_CHECKLIST.md`. Breakage inbox: `docs/SUPPORT_TRIAGE.md`.
 
@@ -31,6 +33,8 @@ Do not hand-edit `src/generated/` or `dist/`.
 - `src/manifest.json` has empty `rule_resources`; `scripts/build.mjs` fills them from `meta.json`.
 - Settings key is `stampstack.settings` (migrates legacy `quell.settings` and short-lived rename keys).
 - Ruleset id `quell-seed` stays stable; chrome.scripting ids stay `quell-*` for upgrade safety.
+- The filter lists are committed and marked `-text` in `.gitattributes`. Without that, `core.autocrlf` rewrites them on checkout and every hash in `lists.lock.json` fails on a Linux runner.
+- `meta.generatedAt` comes from `lists.lock.json`, not from file mtimes — mtimes do not survive a clone, and the value is embedded in the shipped bundle.
 
 ## Testing
 

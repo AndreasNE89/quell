@@ -2,9 +2,41 @@
 
 Use Chrome Web Store reviews and publisher email as the breakage inbox. Aim to respond (fix, document, or reply) within one biweekly release cycle.
 
+## In-product reports
+
+The popup's "Site broken?" panel ends with **Still broken? Tell the developer**, which opens a
+pre-filled email to the publisher address. Subject line is `StampStack breakage: <host>`, so a
+filter on that string collects them.
+
+Each one already answers most of the template below:
+
+```
+site:         shop.example.com
+repair step:  element hiding off
+version:      2.0.0
+filter lists: 24 Jul 2026 (2d old)
+rules active: 120,377
+lists on:     quell-seed, easylist, easyprivacy, ubo-filters, ubo-badware
+browser:      Chrome 138
+```
+
+Read `repair step` first — it says how much filtering was still on when the user gave up, which
+narrows the cause before you open the site:
+
+| `repair step` in the report | What it rules out |
+|---|---|
+| everything on | Nothing yet — reproduce with all layers on |
+| element hiding off *(and it fixed it)* | A cosmetic rule is hiding something the site needs |
+| element hiding and scriptlets off *(and it fixed it)* | A scriptlet is patching a page global the site depends on |
+| blocking off (allowlisted) | Network-layer overblock — the expensive kind |
+
+Nothing about the page is included, by design, so a report never tells you *what* on the page
+broke. That still comes from the user's own description at the top of the mail.
+
 ## Triage template
 
-Copy into a review reply draft or a note in `docs/AD_AUDIT.md` / `docs/DARK_MODE_SITES.md`:
+For reports that arrive without the block above (a store review, say). Copy into a review reply
+draft or a note in `docs/AD_AUDIT.md` / `docs/DARK_MODE_SITES.md`:
 
 ```
 Hostname:
