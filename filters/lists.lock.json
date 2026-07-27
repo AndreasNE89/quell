@@ -1,0 +1,36 @@
+{
+  "comment": "Integrity record for the lists compiled into a release. Written by `npm run update-lists`; verify with `npm run check-lists`. The .txt files themselves are the source of truth.",
+  "updated": "2026-07-27T10:10:11.232Z",
+  "lists": {
+    "quell-seed": {
+      "file": "quell-seed.txt",
+      "bytes": 8660,
+      "sha256": "e94ea676050e65406d0c49f8378290a8f8133445bef15d6431add8c6ac0ca0da"
+    },
+    "easylist": {
+      "file": "easylist.txt",
+      "bytes": 2159477,
+      "sha256": "0e833f320cb1c620502beee3fc5c5992f6861fc29fe08b508764c46224c10b0b"
+    },
+    "easyprivacy": {
+      "file": "easyprivacy.txt",
+      "bytes": 1489651,
+      "sha256": "82c0994fa0fdbedbe8d738779da3b3ce2635736f9e0b75ece66beed727373e93"
+    },
+    "ubo-filters": {
+      "file": "ubo-filters.txt",
+      "bytes": 1838582,
+      "sha256": "30f493675bbf540d654688978954c2a1438ba74b7563536d2d1ad10ea932bedd"
+    },
+    "ubo-badware": {
+      "file": "ubo-badware.txt",
+      "bytes": 146510,
+      "sha256": "79c5ce363895a90e03d48781dc6fe449e28965f6642ae09be4489c3a408b6074"
+    },
+    "easylist-cookie": {
+      "file": "easylist-cookie.txt",
+      "bytes": 874757,
+      "sha256": "0ec4142e5495dcdfd6e9910355ac542c689b6933d91b63ff5381a22cd620d3ba"
+    }
+  }
+}

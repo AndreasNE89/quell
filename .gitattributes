@@ -1,0 +1,15 @@
+# The committed filter lists are build inputs whose exact bytes are recorded in
+# filters/lists.lock.json. This repo is developed on Windows with core.autocrlf=true, which
+# would rewrite line endings on checkout and make every hash in the lock fail verification on
+# a Linux CI runner. `-text` disables that conversion so the bytes on disk are the bytes that
+# were downloaded, on every platform.
+filters/*.txt -text
+
+# Upstream lists, not our source. Collapses their diffs on GitHub by default (still
+# expandable) and keeps them out of the repo's language statistics, so a refresh PR shows the
+# lock summary rather than 40,000 lines of EasyList.
+filters/easylist.txt        linguist-generated=true
+filters/easyprivacy.txt     linguist-generated=true
+filters/easylist-cookie.txt linguist-generated=true
+filters/ubo-filters.txt     linguist-generated=true
+filters/ubo-badware.txt     linguist-generated=true
