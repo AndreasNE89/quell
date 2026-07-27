@@ -178,6 +178,12 @@ function chromeStub() {
       listsGeneratedAt: new Date(Date.now() - (state.listAgeDays ?? 3) * 86_400_000).toISOString(),
     },
     'sitefix:list': { allowlist: ['ads.example.com'], siteFixes: { 'shop.example.com': 'injection' } },
+    'report:breakage': {
+      to: 'support@example.com',
+      subject: 'StampStack breakage: preview',
+      body: '(preview)',
+      mailto: 'mailto:support@example.com?subject=preview',
+    },
     'customfilters:get': { text: '! my rules\nexample.com##.sponsored-widget\n', count: 1, errors: [] },
     'sponsorblock:getCategories': sponsor,
   };

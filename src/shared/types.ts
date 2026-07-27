@@ -192,6 +192,8 @@ export type Message =
   | { type: 'popup:toggleSite'; hostname: string; enabled: boolean }
   | { type: 'popup:setPaused'; paused: boolean }
   | { type: 'report:get' }
+  /** Compose (but never send) a breakage report for this host. */
+  | { type: 'report:breakage'; hostname: string }
   | { type: 'picker:start' }
   | { type: 'customfilters:add'; line: string }
   | { type: 'customfilters:get' }

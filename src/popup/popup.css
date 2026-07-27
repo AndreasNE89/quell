@@ -411,6 +411,30 @@ body {
   display: none;
 }
 
+/* Last thing in the panel, and separated: it is what you do when the ladder above did not
+   work, not another rung on it. */
+.repair-report {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.repair-report .link-btn {
+  display: block;
+  padding: 0;
+  font-size: 11px;
+}
+.repair-report-note {
+  margin: 4px 0 0;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+/* After the click, the note stops describing what the button will do and reports what it
+   did — including the address, in case no mail client opened. */
+.repair-report-note.sent {
+  color: var(--accent);
+}
+
 .reload-note {
   display: flex;
   align-items: center;

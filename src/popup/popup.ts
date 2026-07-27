@@ -8,6 +8,8 @@ import type {
   SiteFixLevel,
 } from '../shared/types.js';
 import { nextSiteFix } from '../shared/site-fix.js';
+import type { BreakageReport } from '../shared/breakage-report.js';
+import { SUPPORT_EMAIL } from '../shared/constants.js';
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -44,6 +46,8 @@ const el = {
   repairNext: $<HTMLButtonElement>('repairNext'),
   repairReset: $<HTMLButtonElement>('repairReset'),
   repairHint: $('repairHint'),
+  reportBreakage: $<HTMLButtonElement>('reportBreakage'),
+  reportBreakageNote: $('reportBreakageNote'),
   optionsBtn: $('optionsBtn'),
   openOptions: $('openOptions'),
   darkModeRow: $('darkModeRow'),
@@ -410,6 +414,52 @@ el.repairNext.addEventListener('click', async () => {
 
 el.repairReset.addEventListener('click', () => {
   void setSiteFix(null);
+});
+
+/**
+ * Hand the composed report to the user's mail client.
+ *
+ * Not every profile has one — a mailto with no handler opens a tab that goes nowhere, and the
+ * user would have no idea the click did anything. So the address and the text are also put on
+ * the clipboard, and the note says where they went.
+ */
+el.reportBreakage.addEventListener('click', async () => {
+  if (!current?.hostname) return;
+  el.reportBreakage.disabled = true;
+  let copied = false;
+  try {
+    const report = (await send({
+      type: 'report:breakage',
+      hostname: current.hostname,
+    })) as BreakageReport;
+
+    try {
+      await navigator.clipboard.writeText(
+        `To: ${report.to}\nSubject: ${report.subject}\n\n${report.body}`,
+      );
+      copied = true;
+    } catch {
+      // A convenience, not the path. Worth nothing on its own, worth a lot when mailto fails.
+    }
+
+    try {
+      await chrome.tabs.create({ url: report.mailto, active: true });
+      el.reportBreakageNote.textContent = copied
+        ? `Opening your email app — also copied, for ${report.to}`
+        : `Opening your email app — send to ${report.to}`;
+    } catch {
+      // No registered mail handler. Say so plainly: a message claiming an app is opening
+      // when none did is how a user concludes the button is broken and gives up.
+      el.reportBreakageNote.textContent = copied
+        ? `No email app opened — the report is on your clipboard. Send it to ${report.to}`
+        : `No email app opened. Report ${current.hostname} to ${report.to}`;
+    }
+  } catch {
+    el.reportBreakageNote.textContent = `Could not build a report. Contact ${SUPPORT_EMAIL}`;
+  } finally {
+    el.reportBreakageNote.classList.add('sent');
+    el.reportBreakage.disabled = false;
+  }
 });
 
 el.siteToggle.addEventListener('change', async () => {

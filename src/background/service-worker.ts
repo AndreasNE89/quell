@@ -82,6 +82,11 @@ import {
   hostsWithScriptletsOff,
 } from '../shared/site-fix.js';
 import {
+  buildBreakageReport,
+  browserLabel,
+  type BreakageReport,
+} from '../shared/breakage-report.js';
+import {
   isLicenseEffectivelyPaid,
   licenseIsFresh,
   resolveDarkModeForHost,
@@ -650,6 +655,9 @@ async function handleMessage(msg: Message, sender: chrome.runtime.MessageSender)
     case 'report:get':
       return handleReportGet();
 
+    case 'report:breakage':
+      return handleBreakageReport(msg.hostname);
+
     case 'picker:start':
       return handlePickerStart();
 
@@ -885,6 +893,31 @@ async function handlePopupGet(): Promise<PopupData> {
     youtubeBlockShorts: !!settings.youtubeBlockShorts,
     youtubeSponsorBlock: settings.youtubeSponsorBlock !== false,
   };
+}
+
+/**
+ * Compose a breakage report for the user to send.
+ *
+ * Everything here is the extension's own state plus the hostname the user is looking at.
+ * Nothing about the page itself is read, and nothing is transmitted — the popup hands the
+ * result to a mail client, where the user sees it before deciding to send.
+ */
+async function handleBreakageReport(hostname: string): Promise<BreakageReport> {
+  const settings = await loadSettings();
+  const host = normalizeHostname(hostname);
+  const { rows, degraded } = await buildListRows(settings);
+  return buildBreakageReport({
+    hostname: host,
+    siteFix: resolveSiteFix(host, settings.siteFixes),
+    allowlisted: isAllowlistedHost(host, settings.allowlist),
+    version: chrome.runtime.getManifest().version,
+    listsGeneratedAt: META.generatedAt,
+    activeRuleCount: rows.filter((l) => l.active).reduce((n, l) => n + l.ruleCount, 0),
+    degraded,
+    enabledLists: rows.filter((l) => l.enabled).map((l) => l.id),
+    browser: browserLabel(typeof navigator === 'undefined' ? null : navigator.userAgent),
+    now: Date.now(),
+  });
 }
 
 async function handleYoutubeGetOptions(hostname: string): Promise<YoutubeOptionsData> {
