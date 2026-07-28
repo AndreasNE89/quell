@@ -434,6 +434,11 @@ body {
 .repair-report-note.sent {
   color: var(--accent);
 }
+/* Left the user with nothing to send. Sharing the success accent made a dead end read as a
+   completed action. */
+.repair-report-note.failed {
+  color: var(--danger);
+}
 
 .reload-note {
   display: flex;

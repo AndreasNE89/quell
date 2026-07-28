@@ -18,15 +18,24 @@ const FILTERS = join(ROOT, 'filters');
 const check = process.argv.includes('--check');
 
 const registry = JSON.parse(readFileSync(join(FILTERS, 'lists.json'), 'utf8'));
-let previous;
+// A corrupt lock is fatal when verifying and recoverable when rewriting.
+//
+// `--check` must fail: it exists to prove disk matches the record, and a record nobody can
+// read proves nothing. But the rewrite path is the documented way out of that state, so it
+// cannot fail for the same reason — it used to print "re-stamp: npm run lock-lists", which is
+// this command, which then exited the same way. The only escape was deleting the file by hand.
+let previous = null;
+let recovered = false;
 try {
   previous = readLock(FILTERS);
 } catch (e) {
-  if (e?.code === 'LOCK_CORRUPT') {
-    console.error('filters/lists.lock.json is not valid JSON. Fix it or re-stamp: npm run lock-lists');
+  if (e?.code !== 'LOCK_CORRUPT') throw e;
+  if (check) {
+    console.error('filters/lists.lock.json is not valid JSON.');
+    console.error('Rewrite it from the lists on disk: npm run lock-lists');
     process.exit(1);
   }
-  throw e;
+  recovered = true;
 }
 // Carry the previous stamp through so the diff reflects content alone; what the stamp should
 // actually become is decided from that diff, below. Inventing a timestamp here would make
@@ -55,7 +64,14 @@ if (check) {
   console.log(`lists.lock.json matches ${Object.keys(current.lists).length} lists on disk.`);
 } else {
   writeLock(FILTERS, current);
-  if (diff.clean && previous) {
+  if (recovered) {
+    // The stamp means "when this content arrived", and a corrupt file took that date with it.
+    // The lists on disk have not moved, so `now` overstates their freshness — say so rather
+    // than let the Options age line quietly restart from today.
+    console.warn('filters/lists.lock.json was unreadable — rewritten from the lists on disk.');
+    console.warn(`  The previous refresh date was lost; the stamp now reads ${current.updated}.`);
+    console.warn('  If the lists are older than that, run npm run update-lists to make it true.');
+  } else if (diff.clean && previous) {
     // Deliberately byte-identical to what was already there — including the stamp, so the
     // recorded age still reflects when upstream last actually changed.
     console.log(`No list content changed. Stamp left at ${current.updated} (age is upstream's, not ours).`);
