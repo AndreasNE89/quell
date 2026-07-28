@@ -10,6 +10,7 @@ import type {
 import { nextSiteFix } from '../shared/site-fix.js';
 import type { BreakageReport } from '../shared/breakage-report.js';
 import { SUPPORT_EMAIL } from '../shared/constants.js';
+import { isValidMatchPatternHost, normalizeHostname } from '../shared/hostname.js';
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -144,7 +145,10 @@ function render(data: PopupData): void {
   ).length;
   el.ytSummary.textContent = data.paused ? 'paused' : `${ytOn} of 3 on`;
 
-  el.pickBtn.disabled = !data.hostname;
+  // Same reason as the repair panel: a picked selector is stored per host and cosmetic
+  // matching drops hosts that are not valid match patterns, so picking on one would appear
+  // to work and then never apply.
+  el.pickBtn.disabled = !data.hostname || !isValidMatchPatternHost(normalizeHostname(data.hostname));
   renderRepair(data);
 
   el.statusDot.classList.toggle('off', !blockingHere);
@@ -159,7 +163,14 @@ function render(data: PopupData): void {
 function renderRepair(data: PopupData): void {
   // Nothing here is ours to have broken on a page we do not run on, or while paused
   // everywhere. Allowlisted is different — see below.
-  const unavailable = !data.hostname || data.paused;
+  //
+  // A host that is not expressible as a match pattern (an IPv6 literal, `http://[::1]/`) has a
+  // hostname but nothing acts on it: isAllowlistedHost refuses it, cosmetic matching filters
+  // it out, and the service worker rejects a breakage report for it. Offering the ladder there
+  // would be three controls that silently do nothing, and the report would spend five retries
+  // discovering that the refusal is permanent.
+  const actionable = !!data.hostname && isValidMatchPatternHost(normalizeHostname(data.hostname));
+  const unavailable = !actionable || data.paused;
   el.repairOpen.disabled = unavailable;
   el.repair.hidden = unavailable;
   if (unavailable) {

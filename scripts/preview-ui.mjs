@@ -68,6 +68,11 @@ const STATES = {
     popup: { hostname: null, paused: false, allowlisted: false, siteFix: null },
     dark: { paid: true, enabled: true, apply: false, restricted: true },
   },
+  ipv6: {
+    label: 'a host StampStack cannot act on (IPv6 literal) — repair panel must be absent',
+    popup: { hostname: '[::1]', paused: false, allowlisted: false, siteFix: null },
+    dark: { paid: false, enabled: false, apply: false, restricted: false },
+  },
   'stale-lists': {
     label: 'filter lists well past a refresh — see Options (--page=options)',
     popup: { hostname: 'www.theguardian.com', paused: false, allowlisted: false, siteFix: null },
