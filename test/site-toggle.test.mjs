@@ -1,22 +1,22 @@
 // Integration test for the per-site blocking toggle, driven through the real service worker.
 //
 // "Turning blocking off for one site does nothing, but Pause everywhere works" was reported
-// against 2.1.0. Every layer looked correct in isolation, and the reason it could still fail
-// was structural: handleToggleSite awaited Promise.all([syncAllowlist, syncRegisteredScripts]).
-// Cosmetic registration carries one match pattern per generichide exception plus the user's
-// allowlist — thousands in a single call — and if it rejected, Promise.all rejected, the
-// message handler answered null, and the popup's render(null) threw inside an async listener.
-// The allowlist was already written and the network layer already off, but nothing said so
-// and the switch stayed where the user left it. Pause escaped it by unregistering instead.
+// against 2.1.0. These tests were written while hunting that, and they all passed — because the
+// actual cause was upstream of everything here: the popup's switch had no clickable area, so
+// popup:toggleSite was never sent. See test/popup-controls.test.mjs, which is the test that
+// would have caught it.
 //
-// So this asserts the toggle reports success and writes its DNR rule even when the cosmetic
-// half fails.
+// Kept anyway. This file pins the whole allowlist path end to end through the real service
+// worker — storage, the allowAllRequests rule, its priority relative to static rules, and the
+// cosmetic excludes — none of which had coverage before. It is also a standing reminder that a
+// green service-worker suite says nothing about whether the UI can reach it.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 // license.ts imports extpay, which does not resolve on platform:'neutral'.
 const stubDir = mkdtempSync(join(tmpdir(), 'stampstack-extpay-'));
@@ -38,6 +38,8 @@ const bundle = (
     logLevel: 'silent',
   })
 ).outputFiles[0].text;
+
+let moduleSeq = 0;
 
 const noopEvent = () => ({ addListener() {}, removeListener() {} });
 
@@ -120,11 +122,14 @@ async function bootServiceWorker({ host, failRegistration = false }) {
   };
 
   globalThis.chrome = chrome;
-  // Cache-bust so each test gets its own module instance bound to its own fake.
-  const url =
-    'data:text/javascript;base64,' +
-    Buffer.from(`${bundle}\n//${Math.random().toString(36).slice(2)}`).toString('base64');
-  await import(url);
+  // Import from a real file, not a data: URL. These tests deliberately make the service worker
+  // log an error, and with a data: URL every frame of that stack trace embeds the whole ~4 MB
+  // base64 bundle. Locally that is merely ugly; on a CI runner the log writer stalls for half
+  // an hour on the multi-megabyte lines. A temp file keeps stack frames to a path.
+  // The unique filename is also what gives each test its own module instance.
+  const file = join(stubDir, `sw-${moduleSeq++}.mjs`);
+  writeFileSync(file, bundle);
+  await import(pathToFileURL(file).href);
 
   assert.ok(listener, 'service worker registered no onMessage listener');
   // The handlers read chrome.* when they run, not at import, so the fake has to be the live
