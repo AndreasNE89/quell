@@ -531,11 +531,22 @@ el.reportBreakage.addEventListener('click', async () => {
 
 el.siteToggle.addEventListener('change', async () => {
   if (!current?.hostname) return;
-  const data = (await send({
+  const wanted = el.siteToggle.checked;
+  // A null answer used to reach render() and throw inside this async listener: no UI change, no
+  // error, switch left claiming a state that was never applied. Not the cause of the 2.1.1 bug
+  // (the click never reached this handler at all) but the same silence, one layer up.
+  const data = await sendWithRetry<PopupData>({
     type: 'popup:toggleSite',
     hostname: current.hostname,
-    enabled: el.siteToggle.checked,
-  })) as PopupData;
+    enabled: wanted,
+  });
+  if (!data) {
+    el.siteToggle.checked = !wanted; // Never leave the switch claiming a state we did not reach.
+    el.siteToggleLabel.textContent = 'Could not change this site — see Settings';
+    el.siteToggleLabel.classList.add('warn');
+    return;
+  }
+  el.siteToggleLabel.classList.remove('warn');
   current = data;
   render(data);
   promptReload();
