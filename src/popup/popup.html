@@ -23,10 +23,12 @@
           <div class="site-host" id="host">—</div>
           <div class="site-sub" id="siteSub">Blocking on this site</div>
         </div>
-        <span class="switch">
+        <!-- A label, like every other switch in this popup. This one was a bare <span> and so
+             had no way to receive a click at all. -->
+        <label class="switch">
           <input type="checkbox" id="siteToggle" aria-label="Block on this site" />
           <span class="slider"></span>
-        </span>
+        </label>
       </div>
       <div class="site-note" id="siteToggleLabel">Block on this site</div>
     </section>

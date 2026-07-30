@@ -1002,7 +1002,20 @@ async function handleToggleSite(hostname: string, enabled: boolean): Promise<Pop
     } else if (isSafeAllowlistHost(host)) set.add(host);
     s.allowlist = [...set];
   });
-  await withSettings((s) => Promise.all([syncAllowlist(s), syncRegisteredScripts(s)]));
+  // Settle these independently: they are unrelated layers, and one failing should not cost the
+  // user the other. Defensive rather than load-bearing — syncRegisteredScripts and syncAllowlist
+  // both swallow their own errors today, so neither can reject and reach the caller. Kept so
+  // that stops being something the caller has to rely on, and so a failure is attributed to the
+  // layer it came from instead of vanishing into one shared catch.
+  const [allowlistResult, scriptsResult] = await withSettings((s) =>
+    Promise.allSettled([syncAllowlist(s), syncRegisteredScripts(s)]),
+  );
+  if (allowlistResult.status === 'rejected') {
+    console.error('[StampStack] allowlist DNR sync failed', allowlistResult.reason);
+  }
+  if (scriptsResult.status === 'rejected') {
+    console.error('[StampStack] cosmetic registration sync failed', scriptsResult.reason);
+  }
   return handlePopupGet();
 }
 
@@ -1241,7 +1254,16 @@ async function handleListSetEnabled(id: string, enabled: boolean): Promise<Lists
     s.enabledLists[id] = enabled;
   });
   // Network + cosmetics + scriptlets all honor list enablement.
-  await withSettings((s) => Promise.all([syncRulesets(s), syncRegisteredScripts(s)]));
+  // Settled independently for the same reason as the site toggle: a cosmetic registration
+  // failure must not make a successful ruleset change report as no change at all.
+  const settled = await withSettings((s) =>
+    Promise.allSettled([syncRulesets(s), syncRegisteredScripts(s)]),
+  );
+  settled.forEach((r, i) => {
+    if (r.status === 'rejected') {
+      console.error(`[StampStack] ${i === 0 ? 'ruleset' : 'cosmetic'} sync failed`, r.reason);
+    }
+  });
   return handleListsGet();
 }
 

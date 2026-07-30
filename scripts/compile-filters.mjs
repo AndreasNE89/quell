@@ -384,7 +384,12 @@ function listsRefreshedAt() {
     lock = readLock(FILTERS_DIR);
   } catch (e) {
     if (e?.code === 'LOCK_CORRUPT') {
-      throw new Error('filters/lists.lock.json is not valid JSON; run npm run lock-lists');
+      // Fail rather than fall through to the mtime scan below: mtimes do not survive a clone,
+      // and silently using them is the non-reproducible build the lock exists to prevent.
+      throw new Error(
+        'filters/lists.lock.json is not valid JSON.\n' +
+          '  Rewrite it from the lists on disk: npm run lock-lists',
+      );
     }
     throw e;
   }

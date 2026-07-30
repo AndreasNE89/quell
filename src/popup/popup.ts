@@ -465,6 +465,20 @@ el.repairReset.addEventListener('click', () => {
  * handler exists (blank tab). Clipboard is the reliable path. Also: opening a tab closes the
  * action popup, so any note after `tabs.create` never paints — set feedback first, then open.
  */
+/** Outcome the user can act on. */
+function noteSent(text: string): void {
+  el.reportBreakageNote.textContent = text;
+  el.reportBreakageNote.classList.add('sent');
+  el.reportBreakageNote.classList.remove('failed');
+}
+
+/** Outcome that left them with nothing — must not wear the success accent. */
+function noteFailed(text: string): void {
+  el.reportBreakageNote.textContent = text;
+  el.reportBreakageNote.classList.add('failed');
+  el.reportBreakageNote.classList.remove('sent');
+}
+
 el.reportBreakage.addEventListener('click', async () => {
   if (!current?.hostname) return;
   el.reportBreakage.disabled = true;
@@ -474,7 +488,7 @@ el.reportBreakage.addEventListener('click', async () => {
       hostname: current.hostname,
     });
     if (!report) {
-      el.reportBreakageNote.textContent = `Could not build a report. Contact ${SUPPORT_EMAIL}`;
+      noteFailed(`Could not build a report. Contact ${SUPPORT_EMAIL}`);
       return;
     }
 
@@ -489,35 +503,50 @@ el.reportBreakage.addEventListener('click', async () => {
     }
 
     // Paint before tabs.create closes this popup. Double-rAF gives the layout a frame.
-    el.reportBreakageNote.textContent = copied
-      ? `Draft copied — opening your email app if one is available. Send to ${report.to}`
-      : `Opening your email app if available — send to ${report.to}`;
-    el.reportBreakageNote.classList.add('sent');
+    noteSent(
+      copied
+        ? `Draft copied — opening your email app if one is available. Send to ${report.to}`
+        : `Opening your email app if available — send to ${report.to}`,
+    );
     await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
 
     try {
       await chrome.tabs.create({ url: report.mailto, active: true });
     } catch {
-      // Popup may already be gone; if not, correct the optimistic note.
-      el.reportBreakageNote.textContent = copied
-        ? `No email app opened — the report is on your clipboard. Send it to ${report.to}`
-        : `No email app opened. Report ${current.hostname} to ${report.to}`;
+      // Popup may already be gone; if not, correct the optimistic note. With the report on the
+      // clipboard the user still has everything they need, so that stays the success accent;
+      // without it there is nothing to act on and it is a failure.
+      if (copied) {
+        noteSent(`No email app opened — the report is on your clipboard. Send it to ${report.to}`);
+      } else {
+        noteFailed(`No email app opened. Report ${current.hostname} to ${report.to}`);
+      }
     }
   } catch {
-    el.reportBreakageNote.textContent = `Could not build a report. Contact ${SUPPORT_EMAIL}`;
+    noteFailed(`Could not build a report. Contact ${SUPPORT_EMAIL}`);
   } finally {
-    el.reportBreakageNote.classList.add('sent');
     el.reportBreakage.disabled = false;
   }
 });
 
 el.siteToggle.addEventListener('change', async () => {
   if (!current?.hostname) return;
-  const data = (await send({
+  const wanted = el.siteToggle.checked;
+  // A null answer used to reach render() and throw inside this async listener: no UI change, no
+  // error, switch left claiming a state that was never applied. Not the cause of the 2.1.1 bug
+  // (the click never reached this handler at all) but the same silence, one layer up.
+  const data = await sendWithRetry<PopupData>({
     type: 'popup:toggleSite',
     hostname: current.hostname,
-    enabled: el.siteToggle.checked,
-  })) as PopupData;
+    enabled: wanted,
+  });
+  if (!data) {
+    el.siteToggle.checked = !wanted; // Never leave the switch claiming a state we did not reach.
+    el.siteToggleLabel.textContent = 'Could not change this site — see Settings';
+    el.siteToggleLabel.classList.add('warn');
+    return;
+  }
+  el.siteToggleLabel.classList.remove('warn');
   current = data;
   render(data);
   promptReload();

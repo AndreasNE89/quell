@@ -19,6 +19,10 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Without this a wedged job holds the concurrency group for the 6-hour default. One did:
+    # a test printed multi-megabyte log lines, the runner stopped responding to cancellation,
+    # and every later push queued behind it until it was force-cancelled by hand.
+    timeout-minutes: 15
     env:
       # The playwright devDependency is only used by the local audit/screenshot scripts.
       # Nothing in this job drives a browser, and its postinstall pulls ~300 MB.

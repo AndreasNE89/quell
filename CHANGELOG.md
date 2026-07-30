@@ -2,6 +2,17 @@
 
 Written for users, not for the commit log. Internal refactors and test-only work are omitted.
 
+## 2.1.1
+
+- **Fixed: "Block on this site" did nothing.** The switch was there, it moved when you dragged
+  it, and clicking it had no effect whatsoever — on any site. Turning blocking off for a single
+  site was impossible; the only thing that worked was "Pause everywhere". The control had no
+  clickable area at all, so nothing was ever saved. Every other switch in the popup was
+  unaffected.
+
+  This shipped in 1.7.0 and went unnoticed until now. Apologies — it made the single most
+  useful control in the extension useless.
+
 ## 2.1.0
 
 A maintenance release about the two things a blocker cannot do for itself: stay current, and

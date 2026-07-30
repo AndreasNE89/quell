@@ -219,10 +219,31 @@ body {
   height: 22px;
   flex: none;
 }
+/*
+ * The input must cover the switch, not collapse to nothing.
+ *
+ * With `width: 0; height: 0` the checkbox has no hit area at all, and `.slider` is a later
+ * absolutely-positioned sibling that paints over the spot anyway. Every switch except the
+ * per-site one happened to sit inside a `<label>`, which forwarded the click — so the one
+ * switch without a label was completely inert to a mouse while looking identical. Giving the
+ * input its own hit area fixes that and stops the next switch inheriting the trap.
+ *
+ * z-index keeps it above `.slider`; opacity:0 keeps the slider's appearance. The
+ * `input:checked + .slider` / `:focus-visible` / `:disabled` sibling selectors are unaffected
+ * by positioning it.
+ */
 .switch input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
   opacity: 0;
-  width: 0;
-  height: 0;
+  z-index: 1;
+  cursor: pointer;
+}
+.switch input:disabled {
+  cursor: default;
 }
 .slider {
   position: absolute;
@@ -434,6 +455,11 @@ body {
 .repair-report-note.sent {
   color: var(--accent);
 }
+/* Left the user with nothing to send. Sharing the success accent made a dead end read as a
+   completed action. */
+.repair-report-note.failed {
+  color: var(--danger);
+}
 
 .reload-note {
   display: flex;
@@ -643,4 +669,10 @@ body.allowlisted .site {
 .rule-count.warn {
   border-color: var(--danger);
   color: var(--fg);
+}
+/* The site toggle could not be applied. Previously this state had no appearance at all —
+   the switch just sat there looking changed. */
+.site-note.warn {
+  color: var(--danger);
+  font-weight: 600;
 }

@@ -1,7 +1,7 @@
 // Tests for the filter-list provenance lock (scripts/lib/list-lock.mjs).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildLock, diffLock, formatLockDiff, readLock, stampFor, writeLock } from '../scripts/lib/list-lock.mjs';
@@ -200,4 +200,90 @@ test('a first stamp with no previous lock uses now', () => {
 test('a clean diff against a previous lock with no stamp still takes now', () => {
   const diff = { clean: true, changed: [], added: [], removed: [], absent: [] };
   assert.equal(stampFor({ lists: {} }, diff, '2026-09-01T00:00:00.000Z'), '2026-09-01T00:00:00.000Z');
+});
+
+// --- CLI recovery from a corrupt lock ---------------------------------------------------
+// `--check` must fail on a corrupt lock: it exists to prove disk matches the record, and an
+// unreadable record proves nothing. The rewrite path must NOT fail for the same reason — it is
+// the documented way out, and it used to tell the user to run the command they were running.
+import { spawnSync } from 'node:child_process';
+import { cpSync, mkdirSync } from 'node:fs';
+
+const REPO = process.cwd();
+
+/** A throwaway repo root with filters/ populated, so lock-lists.mjs can run against it. */
+function repoFixture(lockContents) {
+  const dir = mkdtempSync(join(tmpdir(), 'stampstack-repo-'));
+  mkdirSync(join(dir, 'filters'));
+  cpSync(join(REPO, 'filters', 'lists.json'), join(dir, 'filters', 'lists.json'));
+  for (const l of JSON.parse(readFileSync(join(REPO, 'filters', 'lists.json'), 'utf8')).lists) {
+    writeFileSync(join(dir, 'filters', l.file), `! stub for ${l.id}\n`);
+  }
+  if (lockContents !== undefined) writeFileSync(join(dir, 'filters', 'lists.lock.json'), lockContents);
+  mkdirSync(join(dir, 'scripts', 'lib'), { recursive: true });
+  cpSync(join(REPO, 'scripts', 'lock-lists.mjs'), join(dir, 'scripts', 'lock-lists.mjs'));
+  cpSync(join(REPO, 'scripts', 'lib', 'list-lock.mjs'), join(dir, 'scripts', 'lib', 'list-lock.mjs'));
+  return dir;
+}
+
+/** spawnSync, not execFileSync: the recovery warning goes to stderr, which execFileSync drops. */
+function runLock(dir, args) {
+  const r = spawnSync(process.execPath, [join(dir, 'scripts', 'lock-lists.mjs'), ...args], {
+    cwd: dir,
+    encoding: 'utf8',
+  });
+  return { code: r.status, out: `${r.stdout ?? ''}${r.stderr ?? ''}` };
+}
+
+test('CLI: --check fails on a corrupt lock', () => {
+  const dir = repoFixture('{ not json');
+  try {
+    const r = runLock(dir, ['--check']);
+    assert.equal(r.code, 1);
+    assert.match(r.out, /not valid JSON/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('CLI: rewrite recovers from a corrupt lock instead of telling you to run itself', () => {
+  const dir = repoFixture('{ not json');
+  try {
+    const r = runLock(dir, []);
+    assert.equal(r.code, 0, `rewrite should recover, got exit ${r.code}: ${r.out}`);
+    assert.match(r.out, /unreadable — rewritten/);
+    // The lost refresh date must be called out, not silently reset.
+    assert.match(r.out, /previous refresh date was lost/);
+    // And the file it wrote must now be readable.
+    assert.equal(runLock(dir, ['--check']).code, 0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('CLI: the recovery message does not point at a command that fails', () => {
+  const dir = repoFixture('{ not json');
+  try {
+    // The --check error names the rewrite; the rewrite must then actually succeed.
+    const checkOut = runLock(dir, ['--check']).out;
+    assert.match(checkOut, /npm run lock-lists/);
+    assert.equal(/Fix it or re-stamp: npm run lock-lists/.test(checkOut), false);
+    assert.equal(runLock(dir, []).code, 0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('CLI: a healthy lock is untouched by a rewrite', () => {
+  const dir = repoFixture(undefined);
+  try {
+    assert.equal(runLock(dir, []).code, 0); // first stamp
+    const first = readFileSync(join(dir, 'filters', 'lists.lock.json'), 'utf8');
+    const second = runLock(dir, []);
+    assert.equal(second.code, 0);
+    assert.match(second.out, /No list content changed/);
+    assert.equal(readFileSync(join(dir, 'filters', 'lists.lock.json'), 'utf8'), first);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

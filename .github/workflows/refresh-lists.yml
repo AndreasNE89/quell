@@ -23,6 +23,9 @@ concurrency:
 jobs:
   refresh:
     runs-on: ubuntu-latest
+    # Downloads six upstream lists and packages twice; 25 minutes is generous. Bounded so a
+    # stalled scheduled run cannot sit on the concurrency group until the 6-hour default.
+    timeout-minutes: 25
     env:
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
       BRANCH: chore/refresh-filter-lists
