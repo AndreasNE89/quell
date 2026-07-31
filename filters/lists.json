@@ -48,6 +48,22 @@
       "enabledByDefault": false,
       "file": "easylist-cookie.txt",
       "url": "https://secure.fanboy.co.nz/fanboy-cookiemonster.txt"
+    },
+    {
+      "id": "easylist-china",
+      "title": "EasyList China (中文)",
+      "group": "ads",
+      "enabledByDefault": false,
+      "file": "easylist-china.txt",
+      "url": "https://easylist-downloads.adblockplus.org/easylistchina.txt"
+    },
+    {
+      "id": "cjx-annoyance",
+      "title": "CJX Annoyance (中文)",
+      "group": "annoyances",
+      "enabledByDefault": false,
+      "file": "cjx-annoyance.txt",
+      "url": "https://raw.githubusercontent.com/cjx82630/cjxlist/master/cjx-annoyance.txt"
     }
   ]
 }

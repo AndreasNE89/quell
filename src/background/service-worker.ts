@@ -81,6 +81,7 @@ import {
   hostsWithCosmeticsOff,
   hostsWithScriptletsOff,
 } from '../shared/site-fix.js';
+import { localeDefaultLists } from '../shared/locale-lists.js';
 import {
   buildBreakageReport,
   browserLabel,
@@ -488,6 +489,32 @@ function withSettings<T>(fn: (s: Settings) => Promise<T>): Promise<T> {
  * stay because they are the safety net against state drift, but each now short-circuits when
  * the live state already matches.
  */
+/**
+ * Turn on any regional list this browser's UI language calls for, once, at install.
+ *
+ * Only fills in ids the user has no stored opinion about, so it can never overwrite a choice.
+ * Failures are logged and swallowed: a missing regional list must not stop the extension from
+ * finishing its first run.
+ */
+async function applyLocaleDefaults(): Promise<void> {
+  try {
+    const ui = chrome.i18n?.getUILanguage?.() ?? '';
+    const wanted = localeDefaultLists(ui).filter((id) => META.lists.some((l) => l.id === id));
+    if (!wanted.length) return;
+
+    const settings = await mutateSettings((s) => {
+      for (const id of wanted) {
+        if (!(id in s.enabledLists)) s.enabledLists[id] = true;
+      }
+    });
+    console.info(`[StampStack] UI language ${ui}: enabled ${wanted.join(', ')}`);
+    await withSettings((s) => Promise.allSettled([syncRulesets(s), syncRegisteredScripts(s)]));
+    void settings;
+  } catch (e) {
+    console.error('[StampStack] locale default lists failed', e);
+  }
+}
+
 async function init(mode: 'full' | 'wake' = 'full'): Promise<void> {
   // Must run before license.unpacked / Dev unlock decisions. Module-scope state, so it is lost
   // on every wake and has to be re-probed regardless of mode.
@@ -568,7 +595,12 @@ chrome.commands?.onCommand.addListener((command) => {
 
 initLicense(onLicenseUnlocked);
 
-chrome.runtime.onInstalled.addListener(() => void init('full'));
+chrome.runtime.onInstalled.addListener((details) => {
+  // Fresh installs only. On an update the user's toggles are already their own answer, and
+  // re-applying a regional default would silently switch back on a list they turned off.
+  if (details.reason === 'install') void applyLocaleDefaults();
+  void init('full');
+});
 chrome.runtime.onStartup.addListener(() => void init('full'));
 // Module scope: this is the every-wake path, not a start. Keep it cheap.
 void init('wake');
