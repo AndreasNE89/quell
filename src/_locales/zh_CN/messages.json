@@ -229,7 +229,7 @@
     "message": "此版本未配置 ExtensionPay。未打包版本：用开发解锁测试深色模式。"
   },
   "options_list_age_aging": {
-    "message": "过滤规则列表更新于$WHEN$（$DATE$）—— StampStack 更新后会刷新。",
+    "message": "过滤规则列表更新时间：$WHEN$（$DATE$）—— StampStack 更新后会刷新。",
     "placeholders": {
       "when": {
         "content": "$1"
@@ -258,7 +258,7 @@
     }
   },
   "options_list_age_fresh": {
-    "message": "过滤规则列表更新于$WHEN$（$DATE$）",
+    "message": "过滤规则列表更新时间：$WHEN$（$DATE$）",
     "placeholders": {
       "when": {
         "content": "$1"
@@ -269,7 +269,7 @@
     }
   },
   "options_list_age_stale": {
-    "message": "过滤规则列表更新于$WHEN$（$DATE$）—— 已落后于上游。新版 StampStack 会刷新它们。",
+    "message": "过滤规则列表更新时间：$WHEN$（$DATE$）—— 已落后于上游。新版 StampStack 会刷新它们。",
     "placeholders": {
       "when": {
         "content": "$1"
