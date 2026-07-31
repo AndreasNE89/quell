@@ -1,0 +1,828 @@
+{
+  "options_add": {
+    "message": "Add"
+  },
+  "options_add_a_site": {
+    "message": "Add a site"
+  },
+  "options_auto_skip_sponsors_intros_outros_self_promo": {
+    "message": "Auto-skip sponsors, intros, outros, self-promo, and interaction reminders"
+  },
+  "options_backup": {
+    "message": "Backup"
+  },
+  "options_blocked_count_dev_only": {
+    "message": "blocked count (dev only)"
+  },
+  "options_buy_dark_mode_2": {
+    "message": "Buy dark mode ($$2)"
+  },
+  "options_buy_dark_mode_price": {
+    "message": "Buy dark mode ($PRICE$)",
+    "placeholders": {
+      "price": {
+        "content": "$1",
+        "example": "$2"
+      }
+    }
+  },
+  "options_checking_license": {
+    "message": "Checking license…"
+  },
+  "options_clear": {
+    "message": "Clear"
+  },
+  "options_custom_filters_intro": {
+    "message": "Your own element-hiding rules, one per line. The popup's element picker writes here. Format: example.com##.selector — one hostname, then ##, then a CSS selector."
+  },
+  "options_custom_lines_ignored_one": {
+    "message": "$COUNT$ line ignored.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "options_custom_lines_ignored_other": {
+    "message": "$COUNT$ lines ignored.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "3"
+      }
+    }
+  },
+  "options_custom_rules_active_one": {
+    "message": "$COUNT$ rule active",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "options_custom_rules_active_other": {
+    "message": "$COUNT$ rules active",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "12"
+      }
+    }
+  },
+  "options_custom_saved_one": {
+    "message": "Saved — $COUNT$ rule active.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "options_custom_saved_other": {
+    "message": "Saved — $COUNT$ rules active.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "12"
+      }
+    }
+  },
+  "options_dark_mode_paid": {
+    "message": "Dark mode (paid)"
+  },
+  "options_dev_unlock_applied": {
+    "message": "Dev unlock applied (unpacked only)."
+  },
+  "options_element_hiding_off": {
+    "message": "Element hiding off"
+  },
+  "options_element_hiding_scriptlets_off": {
+    "message": "Element hiding + scriptlets off"
+  },
+  "options_enable_dark_mode": {
+    "message": "Enable dark mode"
+  },
+  "options_enable_filter_list": {
+    "message": "Enable filter list $TITLE$",
+    "placeholders": {
+      "title": {
+        "content": "$1",
+        "example": "EasyPrivacy"
+      }
+    }
+  },
+  "options_every_site_where_you_changed_something_in": {
+    "message": "Every site where you changed something, in one place. Repair steps keep ad blocking on and only switch off the part that broke the page; allowlisted sites get no blocking at all."
+  },
+  "options_example_com": {
+    "message": "example.com"
+  },
+  "options_export_failed": {
+    "message": "Export failed."
+  },
+  "options_export_settings": {
+    "message": "Export settings"
+  },
+  "options_export_your_lists_site_rules_and_preferences": {
+    "message": "Export your lists, site rules and preferences as a file, or restore them on another machine. Purchases are not included — restore those with the email from your receipt."
+  },
+  "options_exported_file": {
+    "message": "Exported $FILE$",
+    "placeholders": {
+      "file": {
+        "content": "$1",
+        "example": "stampstack-settings.json"
+      }
+    }
+  },
+  "options_extensionpay_not_configured": {
+    "message": "ExtensionPay not configured"
+  },
+  "options_filter_error_line": {
+    "message": "Line $LINE$: $REASON$",
+    "placeholders": {
+      "line": {
+        "content": "$1",
+        "example": "12"
+      },
+      "reason": {
+        "content": "$2",
+        "example": "unsupported network rule"
+      }
+    }
+  },
+  "options_filter_lists": {
+    "message": "Filter lists"
+  },
+  "options_force_off": {
+    "message": "Force off"
+  },
+  "options_force_on": {
+    "message": "Force on"
+  },
+  "options_force_on_or_off_for_specific_hostnames": {
+    "message": "Force on or off for specific hostnames. Clear an entry to follow the global toggle."
+  },
+  "options_group_ads": {
+    "message": "Ads"
+  },
+  "options_group_annoyances": {
+    "message": "Annoyances"
+  },
+  "options_group_privacy": {
+    "message": "Privacy"
+  },
+  "options_group_security": {
+    "message": "Security"
+  },
+  "options_hide_shorts_entry_points_and_redirect_shorts": {
+    "message": "Hide Shorts entry points and redirect Shorts URLs"
+  },
+  "options_import_failed": {
+    "message": "Import failed."
+  },
+  "options_import_settings": {
+    "message": "Import settings…"
+  },
+  "options_license_buy_hint": {
+    "message": "Buy opens ExtensionPay / Stripe ($$2 one-time). Already paid? Restore with the email from your receipt. Ad blocking stays free either way."
+  },
+  "options_license_free": {
+    "message": "Free — purchase required to enable"
+  },
+  "options_license_local_cache_hint": {
+    "message": "Using a local license cache (ExtensionPay id missing in this build)."
+  },
+  "options_license_paid": {
+    "message": "Paid — unlocked"
+  },
+  "options_license_paid_email": {
+    "message": "Paid — unlocked · $EMAIL$",
+    "placeholders": {
+      "email": {
+        "content": "$1",
+        "example": "user@example.com"
+      }
+    }
+  },
+  "options_license_paid_grace": {
+    "message": "Paid — unlocked (offline grace)"
+  },
+  "options_license_paid_grace_email": {
+    "message": "Paid — unlocked (offline grace) · $EMAIL$",
+    "placeholders": {
+      "email": {
+        "content": "$1",
+        "example": "user@example.com"
+      }
+    }
+  },
+  "options_license_refresh_hint": {
+    "message": "License refreshes from ExtensionPay when online. Offline grace lasts up to 14 days."
+  },
+  "options_license_unavailable_hint": {
+    "message": "Purchases unavailable in this build — update StampStack from the Chrome Web Store."
+  },
+  "options_license_unpacked_hint": {
+    "message": "ExtensionPay not configured in this build. Unpacked: use Dev unlock to test dark mode."
+  },
+  "options_list_age_aging": {
+    "message": "Filter lists refreshed $WHEN$ ($DATE$) — a StampStack update will refresh them soon.",
+    "placeholders": {
+      "when": {
+        "content": "$1"
+      },
+      "date": {
+        "content": "$2"
+      }
+    }
+  },
+  "options_list_age_day_one": {
+    "message": "$DAYS$ day ago",
+    "placeholders": {
+      "days": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "options_list_age_day_other": {
+    "message": "$DAYS$ days ago",
+    "placeholders": {
+      "days": {
+        "content": "$1",
+        "example": "12"
+      }
+    }
+  },
+  "options_list_age_fresh": {
+    "message": "Filter lists refreshed $WHEN$ ($DATE$)",
+    "placeholders": {
+      "when": {
+        "content": "$1"
+      },
+      "date": {
+        "content": "$2"
+      }
+    }
+  },
+  "options_list_age_stale": {
+    "message": "Filter lists refreshed $WHEN$ ($DATE$) — behind upstream. A new StampStack version will refresh them.",
+    "placeholders": {
+      "when": {
+        "content": "$1"
+      },
+      "date": {
+        "content": "$2"
+      }
+    }
+  },
+  "options_list_age_today": {
+    "message": "today"
+  },
+  "options_list_age_unknown": {
+    "message": "Filter list date unavailable for this build."
+  },
+  "options_list_not_active": {
+    "message": "Not active — Chrome's shared rule limit is full. $COUNT$ network rules are not loaded; element hiding for this list still works.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "120,377"
+      }
+    }
+  },
+  "options_list_rule_count": {
+    "message": "$COUNT$ network rules · cosmetics follow this toggle",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "120,377"
+      }
+    }
+  },
+  "options_loading": {
+    "message": "Loading…"
+  },
+  "options_manifest_v3_ad_amp_tracker_blocker_ubo": {
+    "message": "Manifest V3 ad & tracker blocker · uBO-parity within the rules"
+  },
+  "options_my_filters": {
+    "message": "My filters"
+  },
+  "options_network_rules_active": {
+    "message": "network rules active"
+  },
+  "options_no_blocking_at_all": {
+    "message": "No blocking at all"
+  },
+  "options_no_filter_lists": {
+    "message": "No filter lists available. Reinstall StampStack or contact support."
+  },
+  "options_none_yet": {
+    "message": "None yet."
+  },
+  "options_optional_one_time_unlock_that_darkens_ordinary": {
+    "message": "Optional one-time unlock that darkens ordinary web pages (smart invert). Surfaces that are already dark are left alone rather than inverted into light. Independent of pause and the site allowlist — ad blocking stays free. Reinstalling? Use Restore purchase with the email from your ExtensionPay / Stripe receipt."
+  },
+  "options_override_value": {
+    "message": "Override value"
+  },
+  "options_paid_sponsored_feed_tiles_and_in_player": {
+    "message": "Paid / “Sponsored” feed tiles and in-player ad UI"
+  },
+  "options_per_site_overrides": {
+    "message": "Per-site overrides"
+  },
+  "options_refresh_license": {
+    "message": "Refresh license"
+  },
+  "options_regex_rules_1000": {
+    "message": "regex rules / 1000"
+  },
+  "options_remove": {
+    "message": "Remove"
+  },
+  "options_requests_blocked": {
+    "message": "requests blocked"
+  },
+  "options_rule": {
+    "message": "Rule"
+  },
+  "options_rules_active_reduced": {
+    "message": "rules active (reduced)"
+  },
+  "options_save_filters": {
+    "message": "Save filters"
+  },
+  "options_settings_imported": {
+    "message": "Settings imported."
+  },
+  "options_site_rules": {
+    "message": "Site rules"
+  },
+  "options_site_rules_load_failed": {
+    "message": "Could not load site rules."
+  },
+  "options_skip_segments": {
+    "message": "Skip $CATEGORY$ segments",
+    "placeholders": {
+      "category": {
+        "content": "$1",
+        "example": "Sponsor"
+      }
+    }
+  },
+  "options_sponsor_all_categories_off": {
+    "message": "Every category is off — StampStack will not contact the SponsorBlock API."
+  },
+  "options_sponsor_cat_interaction_hint": {
+    "message": "“Like, comment and subscribe” asides."
+  },
+  "options_sponsor_cat_interaction_label": {
+    "message": "Interaction reminder"
+  },
+  "options_sponsor_cat_intro_hint": {
+    "message": "Title cards and animated intros with no content."
+  },
+  "options_sponsor_cat_intro_label": {
+    "message": "Intro / intermission"
+  },
+  "options_sponsor_cat_music_offtopic_hint": {
+    "message": "Non-music parts of a music video."
+  },
+  "options_sponsor_cat_music_offtopic_label": {
+    "message": "Non-music section"
+  },
+  "options_sponsor_cat_outro_hint": {
+    "message": "Credits and endcards after the content ends."
+  },
+  "options_sponsor_cat_outro_label": {
+    "message": "Outro / endcards"
+  },
+  "options_sponsor_cat_preview_hint": {
+    "message": "Recaps of this video, or of a previous one."
+  },
+  "options_sponsor_cat_preview_label": {
+    "message": "Preview / recap"
+  },
+  "options_sponsor_cat_selfpromo_hint": {
+    "message": "Unpaid plugs for the creator’s own merch or Patreon."
+  },
+  "options_sponsor_cat_selfpromo_label": {
+    "message": "Self-promotion"
+  },
+  "options_sponsor_cat_sponsor_hint": {
+    "message": "Paid promotion, paid referrals, direct advertising."
+  },
+  "options_sponsor_cat_sponsor_label": {
+    "message": "Sponsor"
+  },
+  "options_sponsorblock_skip": {
+    "message": "SponsorBlock skip"
+  },
+  "options_stampstack_settings": {
+    "message": "StampStack — Settings"
+  },
+  "options_stat_unavailable": {
+    "message": "n/a"
+  },
+  "options_toggle_lists_on_or_off_this_enables": {
+    "message": "Toggle lists on or off. This enables or disables each list’s network rules, cosmetics, and scriptlets together. List contents ship with the extension; updates arrive with new StampStack versions."
+  },
+  "options_which_segments_to_skip": {
+    "message": "Which segments to skip"
+  },
+  "options_youtube_intro": {
+    "message": "Extra controls for YouTube. Promoted-video hiding removes paid feed tiles and scrubs player ad payloads. Shorts blocking hides Shorts shelves and leaves /shorts/ pages. SponsorBlock skips mid-video sponsor segments using the community database at sponsor.ajay.app."
+  },
+  "popup_alt": {
+    "message": "Alt"
+  },
+  "popup_block_on_this_site": {
+    "message": "Block on this site"
+  },
+  "popup_block_shorts": {
+    "message": "Block Shorts"
+  },
+  "popup_blocked_here": {
+    "message": "blocked here"
+  },
+  "popup_blocked_total": {
+    "message": "blocked total"
+  },
+  "popup_blocking_is_off_here": {
+    "message": "Blocking is off here"
+  },
+  "popup_blocking_off_allowlisted": {
+    "message": "Blocking off (allowlisted)"
+  },
+  "popup_blocking_off_via": {
+    "message": "Blocking off (via $HOST$)",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
+  },
+  "popup_blocking_on_this_site": {
+    "message": "Blocking on this site"
+  },
+  "popup_breakage_build_failed": {
+    "message": "Could not build a report. Contact $EMAIL$",
+    "placeholders": {
+      "email": {
+        "content": "$1",
+        "example": "support@example.com"
+      }
+    }
+  },
+  "popup_breakage_copied": {
+    "message": "Draft copied — opening your email app if one is available. Send to $EMAIL$",
+    "placeholders": {
+      "email": {
+        "content": "$1",
+        "example": "support@example.com"
+      }
+    }
+  },
+  "popup_breakage_no_app": {
+    "message": "No email app opened. Report $HOST$ to $EMAIL$",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "example.com"
+      },
+      "email": {
+        "content": "$2",
+        "example": "support@example.com"
+      }
+    }
+  },
+  "popup_breakage_no_app_copied": {
+    "message": "No email app opened — the report is on your clipboard. Send it to $EMAIL$",
+    "placeholders": {
+      "email": {
+        "content": "$1",
+        "example": "support@example.com"
+      }
+    }
+  },
+  "popup_breakage_opening": {
+    "message": "Opening your email app if available — send to $EMAIL$",
+    "placeholders": {
+      "email": {
+        "content": "$1",
+        "example": "support@example.com"
+      }
+    }
+  },
+  "popup_buy_dark_mode": {
+    "message": "Buy dark mode"
+  },
+  "popup_checkout_unavailable": {
+    "message": "Checkout unavailable. Try Restore purchase, or open Options."
+  },
+  "popup_checkout_unavailable_unpacked": {
+    "message": "Checkout unavailable — use Dev unlock or set ExtensionPay id in Options."
+  },
+  "popup_copies_a_draft_when_possible_and_opens": {
+    "message": "Copies a draft when possible and opens your email app if one is available. Includes the site name and your StampStack settings — not the page URL or its content."
+  },
+  "popup_dark_hint_already_paid": {
+    "message": "Already paid? Restore purchase with the email from your receipt. Ad blocking stays free."
+  },
+  "popup_dark_hint_dev_unlock": {
+    "message": "Unpacked dev: use Dev unlock to test dark mode without paying."
+  },
+  "popup_dark_hint_extpay_unconfigured": {
+    "message": "ExtensionPay not configured — use Dev unlock here, or Options."
+  },
+  "popup_dark_hint_purchases_unavailable": {
+    "message": "Purchases unavailable in this build — update StampStack from the store."
+  },
+  "popup_dark_hint_restricted_page": {
+    "message": "Not available on Chrome Web Store pages — Chrome blocks extensions from modifying these."
+  },
+  "popup_dark_mode": {
+    "message": "Dark mode"
+  },
+  "popup_dark_mode_is_off_here": {
+    "message": "Dark mode is off here"
+  },
+  "popup_dark_mode_is_on_here": {
+    "message": "Dark mode is on here"
+  },
+  "popup_dark_mode_on_all_sites": {
+    "message": "Dark mode on all sites"
+  },
+  "popup_dark_mode_on_this_page": {
+    "message": "Dark mode on this page"
+  },
+  "popup_dark_summary_off": {
+    "message": "off"
+  },
+  "popup_dark_summary_off_here": {
+    "message": "off here"
+  },
+  "popup_dark_summary_on_here": {
+    "message": "on here"
+  },
+  "popup_dark_summary_unavailable": {
+    "message": "not available here"
+  },
+  "popup_details": {
+    "message": "Details"
+  },
+  "popup_dev_unlock_failed": {
+    "message": "Dev unlock failed"
+  },
+  "popup_dev_unlock_unpacked": {
+    "message": "Dev unlock (unpacked)"
+  },
+  "popup_does_not_run_on_this_page": {
+    "message": "StampStack does not run on this page"
+  },
+  "popup_enable_on_all_sites": {
+    "message": "Enable on all sites"
+  },
+  "popup_everything_is_on_for_this_site": {
+    "message": "Everything is on for this site."
+  },
+  "popup_filter_lists_amp_settings": {
+    "message": "Filter lists & settings →"
+  },
+  "popup_hide": {
+    "message": "Hide"
+  },
+  "popup_hide_promoted_videos": {
+    "message": "Hide promoted videos"
+  },
+  "popup_not_available_on_this_page": {
+    "message": "Not available on this page"
+  },
+  "popup_on_this_page": {
+    "message": "On this page"
+  },
+  "popup_pause_everywhere": {
+    "message": "Pause everywhere"
+  },
+  "popup_pause_stampstack_everywhere": {
+    "message": "Pause StampStack everywhere"
+  },
+  "popup_paused_globally": {
+    "message": "Paused globally"
+  },
+  "popup_paused_no_rules_active": {
+    "message": "Paused — no rules active"
+  },
+  "popup_pick_which_segment_types_to_skip_in": {
+    "message": "Pick which segment types to skip in Settings."
+  },
+  "popup_picker_could_not_start": {
+    "message": "The picker could not start here."
+  },
+  "popup_reload": {
+    "message": "Reload"
+  },
+  "popup_reload_the_page_to_apply_this": {
+    "message": "Reload the page to apply this."
+  },
+  "popup_repair_hint_allowlist": {
+    "message": "Last resort — this site gets its ads and trackers back."
+  },
+  "popup_repair_hint_cosmetics": {
+    "message": "Fixes collapsed layouts, blank gaps and stuck menus."
+  },
+  "popup_repair_hint_injection": {
+    "message": "Fixes players and logins that break on anti-adblock patches."
+  },
+  "popup_repair_next_allowlist": {
+    "message": "Turn blocking off for this site"
+  },
+  "popup_repair_next_cosmetics": {
+    "message": "Stop hiding elements here"
+  },
+  "popup_repair_next_injection": {
+    "message": "Also stop running scriptlets here"
+  },
+  "popup_repair_state_allowlisted": {
+    "message": "Blocking is off for this site — nothing here is filtered."
+  },
+  "popup_repair_state_cosmetics": {
+    "message": "Element hiding is off here. Ads and scriptlets are still active."
+  },
+  "popup_repair_state_injection": {
+    "message": "Element hiding and scriptlets are off here. Ads are still blocked."
+  },
+  "popup_report_ad_slot_one": {
+    "message": "$COUNT$ ad slot hidden.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "popup_report_ad_slots_many": {
+    "message": "$COUNT$ ad slots hidden.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "4"
+      }
+    }
+  },
+  "popup_report_list_truncated": {
+    "message": "list truncated"
+  },
+  "popup_report_no_known_trackers": {
+    "message": "No known trackers recognized here."
+  },
+  "popup_report_no_third_party": {
+    "message": "No third-party connections seen."
+  },
+  "popup_report_other_host_one": {
+    "message": "$COUNT$ other third-party host not recognized by name",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "popup_report_other_hosts_many": {
+    "message": "$COUNT$ other third-party hosts not recognized by name",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "3"
+      }
+    }
+  },
+  "popup_report_reload_to_see": {
+    "message": "Reload the page to see what it connects to."
+  },
+  "popup_report_state_blocked": {
+    "message": "blocked"
+  },
+  "popup_report_state_unlisted": {
+    "message": "not in our lists"
+  },
+  "popup_report_tracker_one": {
+    "message": "Reached out to $COUNT$ known tracker.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "popup_report_tracker_one_rules": {
+    "message": "Reached out to $COUNT$ known tracker — StampStack has rules for $BLOCKED$.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      },
+      "blocked": {
+        "content": "$2",
+        "example": "1"
+      }
+    }
+  },
+  "popup_report_trackers_many": {
+    "message": "Reached out to $COUNT$ known trackers.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "7"
+      }
+    }
+  },
+  "popup_report_trackers_many_rules": {
+    "message": "Reached out to $COUNT$ known trackers — StampStack has rules for $BLOCKED$.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "7"
+      },
+      "blocked": {
+        "content": "$2",
+        "example": "5"
+      }
+    }
+  },
+  "popup_reset_to_global_default": {
+    "message": "↺ Reset to global default"
+  },
+  "popup_restore_purchase": {
+    "message": "Restore purchase"
+  },
+  "popup_restore_unavailable": {
+    "message": "Restore unavailable. Open Options → Restore purchase."
+  },
+  "popup_rules_active": {
+    "message": "$COUNT$ blocking rules active",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "120,377"
+      }
+    }
+  },
+  "popup_rules_active_degraded": {
+    "message": "$COUNT$ rules active — a list could not load, see Settings",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "120,377"
+      }
+    }
+  },
+  "popup_settings": {
+    "message": "Settings"
+  },
+  "popup_shift": {
+    "message": "Shift"
+  },
+  "popup_site_toggle_failed": {
+    "message": "Could not change this site — see Settings"
+  },
+  "popup_skip_sponsor_segments": {
+    "message": "Skip sponsor segments"
+  },
+  "popup_stampstack": {
+    "message": "StampStack"
+  },
+  "popup_stampstack_is_paused": {
+    "message": "StampStack is paused"
+  },
+  "popup_still_broken_tell_the_developer": {
+    "message": "Still broken? Tell the developer"
+  },
+  "popup_summary_paused": {
+    "message": "paused"
+  },
+  "popup_this_page": {
+    "message": "This page"
+  },
+  "popup_undo_turn_filtering_back_on": {
+    "message": "Undo — turn filtering back on"
+  },
+  "popup_youtube": {
+    "message": "YouTube"
+  },
+  "popup_youtube_summary_on": {
+    "message": "$COUNT$ of 3 on",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "2"
+      }
+    }
+  }
+}

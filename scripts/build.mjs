@@ -181,6 +181,11 @@ function copyStatic() {
   }
   copyText(join(SRC, 'content', 'dark-mode.css'), join(DIST, 'dark-mode.css'));
   cpSync(join(SRC, 'icons'), join(DIST, 'icons'), { recursive: true });
+
+  // _locales must sit at the package root for chrome.i18n to find it. Chrome picks the
+  // browser's UI language and falls back to default_locale, so nothing detects anything.
+  const localesSrc = join(SRC, '_locales');
+  if (existsSync(localesSrc)) cpSync(localesSrc, join(DIST, '_locales'), { recursive: true });
   copyTree(join(SRC, 'redirects'), join(DIST, 'redirects'));
 
   // In-extension privacy page (also publish docs/privacy-policy.html on the web).

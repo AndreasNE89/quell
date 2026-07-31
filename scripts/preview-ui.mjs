@@ -87,6 +87,13 @@ if (process.argv.includes('--list')) {
   process.exit(0);
 }
 
+// Locale for the preview: --locale=zh_CN renders a translation instead of English.
+const previewLocale = arg('locale', 'en');
+const catalogPath = join(ROOT, 'src', '_locales', previewLocale, 'messages.json');
+const previewCatalog = existsSync(catalogPath)
+  ? JSON.parse(readFileSync(catalogPath, 'utf8'))
+  : JSON.parse(readFileSync(join(ROOT, 'src', '_locales', 'en', 'messages.json'), 'utf8'));
+
 const page = arg('page', 'popup');
 const stateId = arg('state', 'unpaid');
 const state = STATES[stateId];
@@ -194,7 +201,9 @@ function chromeStub() {
   };
 
   return `<script>
-window.chrome = {
+// Merge, not replace: i18n-stub.js already put chrome.i18n here and a plain assignment
+// would drop it, leaving every msg() call returning ''.
+window.chrome = Object.assign(window.chrome || {}, {
   runtime: {
     sendMessage: (m) => Promise.resolve(${JSON.stringify(replies)}[m.type] ?? null),
     openOptionsPage: () => {},
@@ -208,7 +217,7 @@ window.chrome = {
     reload: () => {},
     sendMessage: () => Promise.resolve(null),
   },
-};
+});
 </script>`;
 }
 
@@ -216,10 +225,40 @@ rmSync(OUT, { recursive: true, force: true });
 mkdirSync(OUT, { recursive: true });
 for (const f of [`${page}.html`, `${page}.css`, `${page}.js`]) cpSync(join(DIST, f), join(OUT, f));
 
+// The i18n stub lives in its own file rather than inside the chromeStub template literal.
+// Inlined, its `${` and backslash sequences were consumed by the enclosing template and it
+// emitted a truncated function — the page then ran with no chrome.i18n and every msg() call
+// returned '', which looked like a translation bug rather than a harness bug.
+writeFileSync(
+  join(OUT, 'i18n-stub.js'),
+  [
+    '// Stands in for chrome.i18n so the preview shows real copy, not empty labels.',
+    `window.__PREVIEW_CATALOG__ = ${JSON.stringify(previewCatalog)};`,
+    `window.__PREVIEW_LOCALE__ = ${JSON.stringify(previewLocale.replace('_', '-'))};`,
+    'window.chrome = window.chrome || {};',
+    'window.chrome.i18n = {',
+    '  getUILanguage: () => window.__PREVIEW_LOCALE__,',
+    '  getMessage: (key, subs) => {',
+    '    const entry = window.__PREVIEW_CATALOG__[key];',
+    '    if (!entry) return "";',
+    '    const args = subs == null ? [] : (Array.isArray(subs) ? subs : [subs]);',
+    '    let out = entry.message;',
+    '    const ph = entry.placeholders || {};',
+    '    for (const name of Object.keys(ph)) {',
+    '      const idx = Number(String(ph[name].content || "").slice(1)) - 1;',
+    '      out = out.split("$" + name + "$").join(args[idx] == null ? "" : args[idx]);',
+    '      out = out.split("$" + name.toUpperCase() + "$").join(args[idx] == null ? "" : args[idx]);',
+    '    }',
+    '    return out.split("$$").join("$");',
+    '  },',
+    '};',
+  ].join('\n'),
+);
+
 let html = readFileSync(join(OUT, `${page}.html`), 'utf8');
 html = html.replace(
   `<script type="module" src="${page}.js"></script>`,
-  `${chromeStub()}\n    <script type="module" src="${page}.js"></script>`,
+  `<script src="i18n-stub.js"></script>\n    ${chromeStub()}\n    <script type="module" src="${page}.js"></script>`,
 );
 // A neutral backdrop so the panel's own edges are visible when it is not in a real popup.
 html = html.replace(

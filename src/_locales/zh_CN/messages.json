@@ -1,0 +1,828 @@
+{
+  "options_add": {
+    "message": "添加"
+  },
+  "options_add_a_site": {
+    "message": "添加站点"
+  },
+  "options_auto_skip_sponsors_intros_outros_self_promo": {
+    "message": "自动跳过赞助、片头、片尾、自我推广和互动提醒"
+  },
+  "options_backup": {
+    "message": "备份"
+  },
+  "options_blocked_count_dev_only": {
+    "message": "拦截计数（仅开发版）"
+  },
+  "options_buy_dark_mode_2": {
+    "message": "购买深色模式（$$2）"
+  },
+  "options_buy_dark_mode_price": {
+    "message": "购买深色模式（$PRICE$）",
+    "placeholders": {
+      "price": {
+        "content": "$1",
+        "example": "$2"
+      }
+    }
+  },
+  "options_checking_license": {
+    "message": "正在检查授权…"
+  },
+  "options_clear": {
+    "message": "清除"
+  },
+  "options_custom_filters_intro": {
+    "message": "你自己的元素隐藏规则，每行一条。弹窗中的元素选择器会写入这里。格式：example.com##.selector —— 一个主机名，然后是 ##，再是 CSS 选择器。"
+  },
+  "options_custom_lines_ignored_one": {
+    "message": "已忽略 $COUNT$ 行。",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "options_custom_lines_ignored_other": {
+    "message": "已忽略 $COUNT$ 行。",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "3"
+      }
+    }
+  },
+  "options_custom_rules_active_one": {
+    "message": "$COUNT$ 条规则生效",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "options_custom_rules_active_other": {
+    "message": "$COUNT$ 条规则生效",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "12"
+      }
+    }
+  },
+  "options_custom_saved_one": {
+    "message": "已保存 — $COUNT$ 条规则生效。",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "options_custom_saved_other": {
+    "message": "已保存 — $COUNT$ 条规则生效。",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "12"
+      }
+    }
+  },
+  "options_dark_mode_paid": {
+    "message": "深色模式（付费）"
+  },
+  "options_dev_unlock_applied": {
+    "message": "已应用开发解锁（仅限未打包版本）。"
+  },
+  "options_element_hiding_off": {
+    "message": "元素隐藏已关闭"
+  },
+  "options_element_hiding_scriptlets_off": {
+    "message": "元素隐藏 + 脚本片段已关闭"
+  },
+  "options_enable_dark_mode": {
+    "message": "启用深色模式"
+  },
+  "options_enable_filter_list": {
+    "message": "启用过滤规则列表 $TITLE$",
+    "placeholders": {
+      "title": {
+        "content": "$1",
+        "example": "EasyPrivacy"
+      }
+    }
+  },
+  "options_every_site_where_you_changed_something_in": {
+    "message": "你改动过的所有站点，集中在一处。修复步骤会保持广告拦截开启，只关掉弄坏页面的那一部分；已加入白名单的站点则完全不拦截。"
+  },
+  "options_example_com": {
+    "message": "example.com"
+  },
+  "options_export_failed": {
+    "message": "导出失败。"
+  },
+  "options_export_settings": {
+    "message": "导出设置"
+  },
+  "options_export_your_lists_site_rules_and_preferences": {
+    "message": "将你的列表、站点规则和偏好导出为文件，或在另一台设备上恢复。不含已购项目 — 请用收据里的邮箱恢复。"
+  },
+  "options_exported_file": {
+    "message": "已导出 $FILE$",
+    "placeholders": {
+      "file": {
+        "content": "$1",
+        "example": "stampstack-settings.json"
+      }
+    }
+  },
+  "options_extensionpay_not_configured": {
+    "message": "未配置 ExtensionPay"
+  },
+  "options_filter_error_line": {
+    "message": "第 $LINE$ 行：$REASON$",
+    "placeholders": {
+      "line": {
+        "content": "$1",
+        "example": "12"
+      },
+      "reason": {
+        "content": "$2",
+        "example": "unsupported network rule"
+      }
+    }
+  },
+  "options_filter_lists": {
+    "message": "过滤规则列表"
+  },
+  "options_force_off": {
+    "message": "强制关闭"
+  },
+  "options_force_on": {
+    "message": "强制开启"
+  },
+  "options_force_on_or_off_for_specific_hostnames": {
+    "message": "对特定主机名强制开启或关闭。清空条目即可跟随全局开关。"
+  },
+  "options_group_ads": {
+    "message": "广告"
+  },
+  "options_group_annoyances": {
+    "message": "烦扰内容"
+  },
+  "options_group_privacy": {
+    "message": "隐私"
+  },
+  "options_group_security": {
+    "message": "安全"
+  },
+  "options_hide_shorts_entry_points_and_redirect_shorts": {
+    "message": "隐藏 Shorts 入口并重定向 Shorts 网址"
+  },
+  "options_import_failed": {
+    "message": "导入失败。"
+  },
+  "options_import_settings": {
+    "message": "导入设置…"
+  },
+  "options_license_buy_hint": {
+    "message": "购买会打开 ExtensionPay / Stripe（一次性 $$2）。已经付过款？用收据里的邮箱恢复。无论如何，广告拦截始终免费。"
+  },
+  "options_license_free": {
+    "message": "免费 — 需购买后才能启用"
+  },
+  "options_license_local_cache_hint": {
+    "message": "正在使用本地授权缓存（此版本缺少 ExtensionPay id）。"
+  },
+  "options_license_paid": {
+    "message": "已付费 — 已解锁"
+  },
+  "options_license_paid_email": {
+    "message": "已付费 — 已解锁 · $EMAIL$",
+    "placeholders": {
+      "email": {
+        "content": "$1",
+        "example": "user@example.com"
+      }
+    }
+  },
+  "options_license_paid_grace": {
+    "message": "已付费 — 已解锁（离线宽限期）"
+  },
+  "options_license_paid_grace_email": {
+    "message": "已付费 — 已解锁（离线宽限期）· $EMAIL$",
+    "placeholders": {
+      "email": {
+        "content": "$1",
+        "example": "user@example.com"
+      }
+    }
+  },
+  "options_license_refresh_hint": {
+    "message": "联网时授权会从 ExtensionPay 刷新。离线宽限期最长 14 天。"
+  },
+  "options_license_unavailable_hint": {
+    "message": "此版本无法购买 — 请从 Chrome 应用商店更新 StampStack。"
+  },
+  "options_license_unpacked_hint": {
+    "message": "此版本未配置 ExtensionPay。未打包版本：用开发解锁测试深色模式。"
+  },
+  "options_list_age_aging": {
+    "message": "过滤规则列表更新时间：$WHEN$（$DATE$）—— StampStack 更新后会刷新。",
+    "placeholders": {
+      "when": {
+        "content": "$1"
+      },
+      "date": {
+        "content": "$2"
+      }
+    }
+  },
+  "options_list_age_day_one": {
+    "message": "$DAYS$ 天前",
+    "placeholders": {
+      "days": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "options_list_age_day_other": {
+    "message": "$DAYS$ 天前",
+    "placeholders": {
+      "days": {
+        "content": "$1",
+        "example": "12"
+      }
+    }
+  },
+  "options_list_age_fresh": {
+    "message": "过滤规则列表更新时间：$WHEN$（$DATE$）",
+    "placeholders": {
+      "when": {
+        "content": "$1"
+      },
+      "date": {
+        "content": "$2"
+      }
+    }
+  },
+  "options_list_age_stale": {
+    "message": "过滤规则列表更新时间：$WHEN$（$DATE$）—— 已落后于上游。新版 StampStack 会刷新它们。",
+    "placeholders": {
+      "when": {
+        "content": "$1"
+      },
+      "date": {
+        "content": "$2"
+      }
+    }
+  },
+  "options_list_age_today": {
+    "message": "今天"
+  },
+  "options_list_age_unknown": {
+    "message": "此版本无过滤规则日期信息。"
+  },
+  "options_list_not_active": {
+    "message": "未生效 — Chrome 的共享规则上限已满。$COUNT$ 条网络规则未加载；此列表的元素隐藏仍然有效。",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "120,377"
+      }
+    }
+  },
+  "options_list_rule_count": {
+    "message": "$COUNT$ 条网络规则 · 元素隐藏跟随此开关",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "120,377"
+      }
+    }
+  },
+  "options_loading": {
+    "message": "加载中…"
+  },
+  "options_manifest_v3_ad_amp_tracker_blocker_ubo": {
+    "message": "Manifest V3 广告与跟踪器拦截扩展 · 在规则允许范围内对齐 uBO"
+  },
+  "options_my_filters": {
+    "message": "我的过滤规则"
+  },
+  "options_network_rules_active": {
+    "message": "生效网络规则"
+  },
+  "options_no_blocking_at_all": {
+    "message": "完全不拦截"
+  },
+  "options_no_filter_lists": {
+    "message": "没有可用的过滤规则列表。请重装 StampStack 或联系技术支持。"
+  },
+  "options_none_yet": {
+    "message": "暂无。"
+  },
+  "options_optional_one_time_unlock_that_darkens_ordinary": {
+    "message": "可选的一次性解锁，把普通网页变暗（智能反色）。本来就是深色的界面会保持原样，不会被反色成浅色。与暂停和站点白名单互不影响 — 广告拦截始终免费。重新安装了？请用 ExtensionPay / Stripe 收据里的邮箱执行“恢复购买”。"
+  },
+  "options_override_value": {
+    "message": "覆盖值"
+  },
+  "options_paid_sponsored_feed_tiles_and_in_player": {
+    "message": "推广/“赞助”信息流卡片和播放器内广告界面"
+  },
+  "options_per_site_overrides": {
+    "message": "按站点覆盖设置"
+  },
+  "options_refresh_license": {
+    "message": "刷新授权"
+  },
+  "options_regex_rules_1000": {
+    "message": "正则规则 / 1000"
+  },
+  "options_remove": {
+    "message": "移除"
+  },
+  "options_requests_blocked": {
+    "message": "已拦截请求"
+  },
+  "options_rule": {
+    "message": "规则"
+  },
+  "options_rules_active_reduced": {
+    "message": "生效规则（已缩减）"
+  },
+  "options_save_filters": {
+    "message": "保存过滤规则"
+  },
+  "options_settings_imported": {
+    "message": "设置已导入。"
+  },
+  "options_site_rules": {
+    "message": "站点规则"
+  },
+  "options_site_rules_load_failed": {
+    "message": "无法加载站点规则。"
+  },
+  "options_skip_segments": {
+    "message": "跳过 $CATEGORY$ 片段",
+    "placeholders": {
+      "category": {
+        "content": "$1",
+        "example": "Sponsor"
+      }
+    }
+  },
+  "options_sponsor_all_categories_off": {
+    "message": "所有类别都已关闭 — StampStack 不会请求 SponsorBlock API。"
+  },
+  "options_sponsor_cat_interaction_hint": {
+    "message": "“点赞、评论、订阅”之类的插话。"
+  },
+  "options_sponsor_cat_interaction_label": {
+    "message": "互动提醒"
+  },
+  "options_sponsor_cat_intro_hint": {
+    "message": "无实质内容的标题卡和动画片头。"
+  },
+  "options_sponsor_cat_intro_label": {
+    "message": "片头 / 间隔"
+  },
+  "options_sponsor_cat_music_offtopic_hint": {
+    "message": "音乐视频中的非音乐部分。"
+  },
+  "options_sponsor_cat_music_offtopic_label": {
+    "message": "非音乐片段"
+  },
+  "options_sponsor_cat_outro_hint": {
+    "message": "正片结束后的字幕和结束画面。"
+  },
+  "options_sponsor_cat_outro_label": {
+    "message": "片尾 / 结束画面"
+  },
+  "options_sponsor_cat_preview_hint": {
+    "message": "本片或前作的内容回顾。"
+  },
+  "options_sponsor_cat_preview_label": {
+    "message": "预告 / 回顾"
+  },
+  "options_sponsor_cat_selfpromo_hint": {
+    "message": "创作者对自家周边或 Patreon 的无偿宣传。"
+  },
+  "options_sponsor_cat_selfpromo_label": {
+    "message": "自我推广"
+  },
+  "options_sponsor_cat_sponsor_hint": {
+    "message": "付费推广、付费推荐、直接广告。"
+  },
+  "options_sponsor_cat_sponsor_label": {
+    "message": "赞助"
+  },
+  "options_sponsorblock_skip": {
+    "message": "SponsorBlock 跳过"
+  },
+  "options_stampstack_settings": {
+    "message": "StampStack — 设置"
+  },
+  "options_stat_unavailable": {
+    "message": "无数据"
+  },
+  "options_toggle_lists_on_or_off_this_enables": {
+    "message": "开启或关闭列表。这会同时启用或禁用该列表的网络规则、元素隐藏和脚本片段。列表内容随扩展一起发布；更新会随 StampStack 新版本到来。"
+  },
+  "options_which_segments_to_skip": {
+    "message": "要跳过哪些片段"
+  },
+  "options_youtube_intro": {
+    "message": "YouTube 的额外控制。隐藏推广视频会移除信息流中的付费卡片并清除播放器广告数据。拦截 Shorts 会隐藏 Shorts 版块并离开 /shorts/ 页面。SponsorBlock 使用 sponsor.ajay.app 的社区数据库跳过视频中的赞助片段。"
+  },
+  "popup_alt": {
+    "message": "Alt"
+  },
+  "popup_block_on_this_site": {
+    "message": "在此站点拦截"
+  },
+  "popup_block_shorts": {
+    "message": "拦截 Shorts"
+  },
+  "popup_blocked_here": {
+    "message": "本页拦截"
+  },
+  "popup_blocked_total": {
+    "message": "累计拦截"
+  },
+  "popup_blocking_is_off_here": {
+    "message": "此处拦截已关闭"
+  },
+  "popup_blocking_off_allowlisted": {
+    "message": "拦截已关闭（已加入白名单）"
+  },
+  "popup_blocking_off_via": {
+    "message": "拦截已关闭（经由 $HOST$）",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
+  },
+  "popup_blocking_on_this_site": {
+    "message": "此站点拦截已开启"
+  },
+  "popup_breakage_build_failed": {
+    "message": "无法生成报告。请联系 $EMAIL$",
+    "placeholders": {
+      "email": {
+        "content": "$1",
+        "example": "support@example.com"
+      }
+    }
+  },
+  "popup_breakage_copied": {
+    "message": "草稿已复制 — 如有邮件应用会为你打开。请发送至 $EMAIL$",
+    "placeholders": {
+      "email": {
+        "content": "$1",
+        "example": "support@example.com"
+      }
+    }
+  },
+  "popup_breakage_no_app": {
+    "message": "没有打开邮件应用。请将 $HOST$ 反馈至 $EMAIL$",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "example.com"
+      },
+      "email": {
+        "content": "$2",
+        "example": "support@example.com"
+      }
+    }
+  },
+  "popup_breakage_no_app_copied": {
+    "message": "没有打开邮件应用 — 报告已复制到剪贴板。请发送至 $EMAIL$",
+    "placeholders": {
+      "email": {
+        "content": "$1",
+        "example": "support@example.com"
+      }
+    }
+  },
+  "popup_breakage_opening": {
+    "message": "如有邮件应用会为你打开 — 请发送至 $EMAIL$",
+    "placeholders": {
+      "email": {
+        "content": "$1",
+        "example": "support@example.com"
+      }
+    }
+  },
+  "popup_buy_dark_mode": {
+    "message": "购买深色模式"
+  },
+  "popup_checkout_unavailable": {
+    "message": "无法结账。请试试恢复购买，或打开设置。"
+  },
+  "popup_checkout_unavailable_unpacked": {
+    "message": "无法结账 — 请用开发解锁，或在设置中填写 ExtensionPay id。"
+  },
+  "popup_copies_a_draft_when_possible_and_opens": {
+    "message": "会尽量复制草稿，并在有邮件应用时打开。包含站点名称和你的 StampStack 设置 — 不含页面网址或内容。"
+  },
+  "popup_dark_hint_already_paid": {
+    "message": "已经付过款？用收据里的邮箱恢复购买。广告拦截始终免费。"
+  },
+  "popup_dark_hint_dev_unlock": {
+    "message": "未打包开发版：用开发解锁免付费测试深色模式。"
+  },
+  "popup_dark_hint_extpay_unconfigured": {
+    "message": "未配置 ExtensionPay — 请在此用开发解锁，或前往设置。"
+  },
+  "popup_dark_hint_purchases_unavailable": {
+    "message": "此版本无法购买 — 请从商店更新 StampStack。"
+  },
+  "popup_dark_hint_restricted_page": {
+    "message": "Chrome 应用商店页面不可用 — Chrome 禁止扩展修改这些页面。"
+  },
+  "popup_dark_mode": {
+    "message": "深色模式"
+  },
+  "popup_dark_mode_is_off_here": {
+    "message": "此处深色模式已关闭"
+  },
+  "popup_dark_mode_is_on_here": {
+    "message": "此处深色模式已开启"
+  },
+  "popup_dark_mode_on_all_sites": {
+    "message": "在所有站点启用深色模式"
+  },
+  "popup_dark_mode_on_this_page": {
+    "message": "在此页面启用深色模式"
+  },
+  "popup_dark_summary_off": {
+    "message": "已关闭"
+  },
+  "popup_dark_summary_off_here": {
+    "message": "此处已关闭"
+  },
+  "popup_dark_summary_on_here": {
+    "message": "此处已开启"
+  },
+  "popup_dark_summary_unavailable": {
+    "message": "此处不可用"
+  },
+  "popup_details": {
+    "message": "详情"
+  },
+  "popup_dev_unlock_failed": {
+    "message": "开发解锁失败"
+  },
+  "popup_dev_unlock_unpacked": {
+    "message": "开发解锁（未打包）"
+  },
+  "popup_does_not_run_on_this_page": {
+    "message": "StampStack 不在此页面运行"
+  },
+  "popup_enable_on_all_sites": {
+    "message": "在所有站点启用"
+  },
+  "popup_everything_is_on_for_this_site": {
+    "message": "此站点的所有功能都已开启。"
+  },
+  "popup_filter_lists_amp_settings": {
+    "message": "过滤规则列表与设置 →"
+  },
+  "popup_hide": {
+    "message": "隐藏"
+  },
+  "popup_hide_promoted_videos": {
+    "message": "隐藏推广视频"
+  },
+  "popup_not_available_on_this_page": {
+    "message": "此页面不可用"
+  },
+  "popup_on_this_page": {
+    "message": "在此页面"
+  },
+  "popup_pause_everywhere": {
+    "message": "全局暂停"
+  },
+  "popup_pause_stampstack_everywhere": {
+    "message": "在所有站点暂停 StampStack"
+  },
+  "popup_paused_globally": {
+    "message": "已全局暂停"
+  },
+  "popup_paused_no_rules_active": {
+    "message": "已暂停 — 没有规则生效"
+  },
+  "popup_pick_which_segment_types_to_skip_in": {
+    "message": "在设置中选择要跳过的片段类型。"
+  },
+  "popup_picker_could_not_start": {
+    "message": "选择器无法在此启动。"
+  },
+  "popup_reload": {
+    "message": "重新加载"
+  },
+  "popup_reload_the_page_to_apply_this": {
+    "message": "重新加载页面以应用。"
+  },
+  "popup_repair_hint_allowlist": {
+    "message": "最后手段 — 此站点的广告和跟踪器会回来。"
+  },
+  "popup_repair_hint_cosmetics": {
+    "message": "修复塌陷的布局、空白间隙和卡住的菜单。"
+  },
+  "popup_repair_hint_injection": {
+    "message": "修复因反广告拦截补丁而损坏的播放器和登录。"
+  },
+  "popup_repair_next_allowlist": {
+    "message": "关闭此站点的拦截"
+  },
+  "popup_repair_next_cosmetics": {
+    "message": "停止在此隐藏元素"
+  },
+  "popup_repair_next_injection": {
+    "message": "同时停止在此运行脚本片段"
+  },
+  "popup_repair_state_allowlisted": {
+    "message": "此站点的拦截已关闭 — 此处不做任何过滤。"
+  },
+  "popup_repair_state_cosmetics": {
+    "message": "此处元素隐藏已关闭。广告和脚本片段仍在生效。"
+  },
+  "popup_repair_state_injection": {
+    "message": "此处元素隐藏和脚本片段已关闭。广告仍会被拦截。"
+  },
+  "popup_report_ad_slot_one": {
+    "message": "已隐藏 $COUNT$ 个广告位。",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "popup_report_ad_slots_many": {
+    "message": "已隐藏 $COUNT$ 个广告位。",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "4"
+      }
+    }
+  },
+  "popup_report_list_truncated": {
+    "message": "列表已截断"
+  },
+  "popup_report_no_known_trackers": {
+    "message": "此处未识别出已知跟踪器。"
+  },
+  "popup_report_no_third_party": {
+    "message": "未看到第三方连接。"
+  },
+  "popup_report_other_host_one": {
+    "message": "另有 $COUNT$ 个第三方主机无法按名称识别",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "popup_report_other_hosts_many": {
+    "message": "另有 $COUNT$ 个第三方主机无法按名称识别",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "3"
+      }
+    }
+  },
+  "popup_report_reload_to_see": {
+    "message": "重新加载页面即可看到它连接了哪些地方。"
+  },
+  "popup_report_state_blocked": {
+    "message": "已拦截"
+  },
+  "popup_report_state_unlisted": {
+    "message": "不在我们的列表中"
+  },
+  "popup_report_tracker_one": {
+    "message": "连接了 $COUNT$ 个已知跟踪器。",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "popup_report_tracker_one_rules": {
+    "message": "连接了 $COUNT$ 个已知跟踪器 — StampStack 对其中 $BLOCKED$ 个有规则。",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      },
+      "blocked": {
+        "content": "$2",
+        "example": "1"
+      }
+    }
+  },
+  "popup_report_trackers_many": {
+    "message": "连接了 $COUNT$ 个已知跟踪器。",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "7"
+      }
+    }
+  },
+  "popup_report_trackers_many_rules": {
+    "message": "连接了 $COUNT$ 个已知跟踪器 — StampStack 对其中 $BLOCKED$ 个有规则。",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "7"
+      },
+      "blocked": {
+        "content": "$2",
+        "example": "5"
+      }
+    }
+  },
+  "popup_reset_to_global_default": {
+    "message": "↺ 重置为全局默认"
+  },
+  "popup_restore_purchase": {
+    "message": "恢复购买"
+  },
+  "popup_restore_unavailable": {
+    "message": "无法恢复。请打开设置 → 恢复购买。"
+  },
+  "popup_rules_active": {
+    "message": "$COUNT$ 条拦截规则生效",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "120,377"
+      }
+    }
+  },
+  "popup_rules_active_degraded": {
+    "message": "$COUNT$ 条规则生效 — 有一个列表未能加载，见设置",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "120,377"
+      }
+    }
+  },
+  "popup_settings": {
+    "message": "设置"
+  },
+  "popup_shift": {
+    "message": "Shift"
+  },
+  "popup_site_toggle_failed": {
+    "message": "无法更改此站点 — 见设置"
+  },
+  "popup_skip_sponsor_segments": {
+    "message": "跳过赞助片段"
+  },
+  "popup_stampstack": {
+    "message": "StampStack"
+  },
+  "popup_stampstack_is_paused": {
+    "message": "StampStack 已暂停"
+  },
+  "popup_still_broken_tell_the_developer": {
+    "message": "仍然有问题？告诉开发者"
+  },
+  "popup_summary_paused": {
+    "message": "已暂停"
+  },
+  "popup_this_page": {
+    "message": "此页面"
+  },
+  "popup_undo_turn_filtering_back_on": {
+    "message": "撤销 — 重新开启过滤"
+  },
+  "popup_youtube": {
+    "message": "YouTube"
+  },
+  "popup_youtube_summary_on": {
+    "message": "$COUNT$/3 已开启",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "2"
+      }
+    }
+  }
+}

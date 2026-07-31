@@ -1,6 +1,6 @@
 {
   "comment": "Integrity record for the lists compiled into a release. Written by `npm run update-lists`; verify with `npm run check-lists`. The .txt files themselves are the source of truth.",
-  "updated": "2026-07-27T10:33:18.658Z",
+  "updated": "2026-07-31T09:38:45.133Z",
   "lists": {
     "quell-seed": {
       "file": "quell-seed.txt",
@@ -9,28 +9,38 @@
     },
     "easylist": {
       "file": "easylist.txt",
-      "bytes": 2195487,
-      "sha256": "228667f34f04d6ab9a5fd0d168dad06d6f9185c845ed9f60a49f3906cb07cc66"
+      "bytes": 2217798,
+      "sha256": "24ab8b488d686590741a96947ceb3b5e54680ce08417e0fd552733f7395c3678"
     },
     "easyprivacy": {
       "file": "easyprivacy.txt",
-      "bytes": 1490265,
-      "sha256": "cb52c9bbc806e4243e0ec3fd96adba71d907a83e635143b9ed52404d0310d39d"
+      "bytes": 1491692,
+      "sha256": "c6981599d8f5d829285d3c8bb03d934d1df94c4f52748963a66f8965e6cbff75"
     },
     "ubo-filters": {
       "file": "ubo-filters.txt",
-      "bytes": 1840221,
-      "sha256": "7448851ec09c2b17959e532c70d5a56f56f65735a2a2d86d6e4403a24b9ba6f0"
+      "bytes": 1845147,
+      "sha256": "b1fc256e7d50a7e687ebb998719c001eb1f2f75832ee7b3247cde730cab95960"
     },
     "ubo-badware": {
       "file": "ubo-badware.txt",
-      "bytes": 146606,
-      "sha256": "07b47233f4747a9277fc37e0291b2ea47c667baf230ce140c0a2078a45f11eb6"
+      "bytes": 146745,
+      "sha256": "d0665496d4c6ecf27a2a76ef784596385bd99fbdb475b0d411f3cbf92dad95b9"
     },
     "easylist-cookie": {
       "file": "easylist-cookie.txt",
-      "bytes": 875705,
-      "sha256": "8a7cae157a478ef460d4981894f2a32e980404b5582ab864842e321651df756d"
+      "bytes": 879761,
+      "sha256": "52940ced2ee07db256f90270c477185c079c6aa3a55ac79de13564fb3fbffc79"
+    },
+    "easylist-china": {
+      "file": "easylist-china.txt",
+      "bytes": 552646,
+      "sha256": "69991e7b566e2ad6a8dc3bc8adecd4e7f3290eb230d45b2787cf571b3f571ac2"
+    },
+    "cjx-annoyance": {
+      "file": "cjx-annoyance.txt",
+      "bytes": 57183,
+      "sha256": "fad81cab3aa74edc3be44b90060b1d18cc0ce3916f4ee0e30549431d6eba20f1"
     }
   }
 }

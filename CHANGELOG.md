@@ -2,6 +2,17 @@
 
 Written for users, not for the commit log. Internal refactors and test-only work are omitted.
 
+## 2.2.0
+
+- **中文界面 · Chinese interface.** StampStack now speaks Simplified and Traditional Chinese,
+  and picks your language automatically from your browser's — nothing to configure.
+- **Chinese filter lists.** EasyList China (12,046 rules) is switched on automatically when
+  your browser is set to Chinese, with CJX's Annoyance List available alongside it in Settings.
+  EasyList and EasyPrivacy barely touch Chinese ad networks, so this is the difference between
+  the extension looking right and actually blocking anything on the sites you use.
+- The interface is translated everywhere else too — any language Chrome supports falls back to
+  English until someone translates it.
+
 ## 2.1.1
 
 - **Fixed: "Block on this site" did nothing.** The switch was there, it moved when you dragged
