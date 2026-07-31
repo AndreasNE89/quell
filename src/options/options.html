@@ -30,12 +30,7 @@
 
       <section>
         <h2 data-i18n="popup_youtube">YouTube</h2>
-        <p class="hint">
-          Extra controls for YouTube. Promoted-video hiding removes paid feed tiles and
-          scrubs player ad payloads. Shorts blocking hides Shorts shelves and leaves
-          <code>/shorts/</code> pages. SponsorBlock skips mid-video sponsor segments
-          using the community database at sponsor.ajay.app.
-        </p>
+        <p class="hint" data-i18n="options_youtube_intro">Extra controls for YouTube. Promoted-video hiding removes paid feed tiles and scrubs player ad payloads. Shorts blocking hides Shorts shelves and leaves /shorts/ pages. SponsorBlock skips mid-video sponsor segments using the community database at sponsor.ajay.app.</p>
         <div class="lists">
           <div class="list-item">
             <div class="list-info">
@@ -169,12 +164,7 @@
 
       <section>
         <h2 data-i18n="options_my_filters">My filters</h2>
-        <p class="hint">
-          Your own element-hiding rules, one per line. The popup's element picker writes here.
-          Format: <code>example.com##.ad-slot</code> to hide, <code>example.com#@#.ad-slot</code>
-          to cancel a rule, <code>!</code> to start a comment. Network rules
-          (<code>||host^</code>) are not supported yet.
-        </p>
+        <p class="hint" data-i18n="options_custom_filters_intro">Your own element-hiding rules, one per line. The popup's element picker writes here. Format: example.com##.selector — one hostname, then ##, then a CSS selector.</p>
         <textarea
           id="customFilters"
           class="filter-editor"

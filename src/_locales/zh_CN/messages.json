@@ -32,6 +32,9 @@
   "options_clear": {
     "message": "清除"
   },
+  "options_custom_filters_intro": {
+    "message": "你自己的元素隐藏规则，每行一条。弹窗中的元素选择器会写入这里。格式：example.com##.selector —— 一个主机名，然后是 ##，再是 CSS 选择器。"
+  },
   "options_custom_lines_ignored_one": {
     "message": "已忽略 $COUNT$ 行。",
     "placeholders": {
@@ -225,6 +228,63 @@
   "options_license_unpacked_hint": {
     "message": "此版本未配置 ExtensionPay。未打包版本：用开发解锁测试深色模式。"
   },
+  "options_list_age_aging": {
+    "message": "过滤规则列表更新于$WHEN$（$DATE$）—— StampStack 更新后会刷新。",
+    "placeholders": {
+      "when": {
+        "content": "$1"
+      },
+      "date": {
+        "content": "$2"
+      }
+    }
+  },
+  "options_list_age_day_one": {
+    "message": "$DAYS$ 天前",
+    "placeholders": {
+      "days": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "options_list_age_day_other": {
+    "message": "$DAYS$ 天前",
+    "placeholders": {
+      "days": {
+        "content": "$1",
+        "example": "12"
+      }
+    }
+  },
+  "options_list_age_fresh": {
+    "message": "过滤规则列表更新于$WHEN$（$DATE$）",
+    "placeholders": {
+      "when": {
+        "content": "$1"
+      },
+      "date": {
+        "content": "$2"
+      }
+    }
+  },
+  "options_list_age_stale": {
+    "message": "过滤规则列表更新于$WHEN$（$DATE$）—— 已落后于上游。新版 StampStack 会刷新它们。",
+    "placeholders": {
+      "when": {
+        "content": "$1"
+      },
+      "date": {
+        "content": "$2"
+      }
+    }
+  },
+  "options_list_age_today": {
+    "message": "今天"
+  },
+  "options_list_age_unknown": {
+    "message": "此版本无过滤规则日期信息。"
+  },
   "options_list_not_active": {
     "message": "未生效 — Chrome 的共享规则上限已满。$COUNT$ 条网络规则未加载；此列表的元素隐藏仍然有效。",
     "placeholders": {
@@ -247,19 +307,19 @@
     "message": "加载中…"
   },
   "options_manifest_v3_ad_amp_tracker_blocker_ubo": {
-    "message": "Manifest V3 广告与跟踪器拦截 · 在规则允许范围内对齐 uBO"
+    "message": "Manifest V3 广告与跟踪器拦截扩展 · 在规则允许范围内对齐 uBO"
   },
   "options_my_filters": {
     "message": "我的过滤规则"
   },
   "options_network_rules_active": {
-    "message": "条网络规则生效"
+    "message": "生效网络规则"
   },
   "options_no_blocking_at_all": {
     "message": "完全不拦截"
   },
   "options_no_filter_lists": {
-    "message": "没有可用的过滤规则列表。请重装 StampStack 或联系支持。"
+    "message": "没有可用的过滤规则列表。请重装 StampStack 或联系技术支持。"
   },
   "options_none_yet": {
     "message": "暂无。"
@@ -271,28 +331,28 @@
     "message": "覆盖值"
   },
   "options_paid_sponsored_feed_tiles_and_in_player": {
-    "message": "推广 /“赞助”信息流卡片和播放器内广告界面"
+    "message": "推广/“赞助”信息流卡片和播放器内广告界面"
   },
   "options_per_site_overrides": {
-    "message": "按站点覆盖"
+    "message": "按站点覆盖设置"
   },
   "options_refresh_license": {
     "message": "刷新授权"
   },
   "options_regex_rules_1000": {
-    "message": "条正则规则 / 1000"
+    "message": "正则规则 / 1000"
   },
   "options_remove": {
     "message": "移除"
   },
   "options_requests_blocked": {
-    "message": "个请求被拦截"
+    "message": "已拦截请求"
   },
   "options_rule": {
     "message": "规则"
   },
   "options_rules_active_reduced": {
-    "message": "条规则生效（已缩减）"
+    "message": "生效规则（已缩减）"
   },
   "options_save_filters": {
     "message": "保存过滤规则"
@@ -318,6 +378,48 @@
   "options_sponsor_all_categories_off": {
     "message": "所有类别都已关闭 — StampStack 不会请求 SponsorBlock API。"
   },
+  "options_sponsor_cat_interaction_hint": {
+    "message": "“点赞、评论、订阅”之类的插话。"
+  },
+  "options_sponsor_cat_interaction_label": {
+    "message": "互动提醒"
+  },
+  "options_sponsor_cat_intro_hint": {
+    "message": "无实质内容的标题卡和动画片头。"
+  },
+  "options_sponsor_cat_intro_label": {
+    "message": "片头 / 间隔"
+  },
+  "options_sponsor_cat_music_offtopic_hint": {
+    "message": "音乐视频中的非音乐部分。"
+  },
+  "options_sponsor_cat_music_offtopic_label": {
+    "message": "非音乐片段"
+  },
+  "options_sponsor_cat_outro_hint": {
+    "message": "正片结束后的字幕和结束画面。"
+  },
+  "options_sponsor_cat_outro_label": {
+    "message": "片尾 / 结束画面"
+  },
+  "options_sponsor_cat_preview_hint": {
+    "message": "本片或前作的内容回顾。"
+  },
+  "options_sponsor_cat_preview_label": {
+    "message": "预告 / 回顾"
+  },
+  "options_sponsor_cat_selfpromo_hint": {
+    "message": "创作者对自家周边或 Patreon 的无偿宣传。"
+  },
+  "options_sponsor_cat_selfpromo_label": {
+    "message": "自我推广"
+  },
+  "options_sponsor_cat_sponsor_hint": {
+    "message": "付费推广、付费推荐、直接广告。"
+  },
+  "options_sponsor_cat_sponsor_label": {
+    "message": "赞助"
+  },
   "options_sponsorblock_skip": {
     "message": "SponsorBlock 跳过"
   },
@@ -325,13 +427,16 @@
     "message": "StampStack — 设置"
   },
   "options_stat_unavailable": {
-    "message": "不适用"
+    "message": "无数据"
   },
   "options_toggle_lists_on_or_off_this_enables": {
     "message": "开启或关闭列表。这会同时启用或禁用该列表的网络规则、元素隐藏和脚本片段。列表内容随扩展一起发布；更新会随 StampStack 新版本到来。"
   },
   "options_which_segments_to_skip": {
     "message": "要跳过哪些片段"
+  },
+  "options_youtube_intro": {
+    "message": "YouTube 的额外控制。隐藏推广视频会移除信息流中的付费卡片并清除播放器广告数据。拦截 Shorts 会隐藏 Shorts 版块并离开 /shorts/ 页面。SponsorBlock 使用 sponsor.ajay.app 的社区数据库跳过视频中的赞助片段。"
   },
   "popup_alt": {
     "message": "Alt"
@@ -343,7 +448,7 @@
     "message": "拦截 Shorts"
   },
   "popup_blocked_here": {
-    "message": "在此拦截"
+    "message": "本页拦截"
   },
   "popup_blocked_total": {
     "message": "累计拦截"
@@ -425,7 +530,7 @@
     "message": "无法结账 — 请用开发解锁，或在设置中填写 ExtensionPay id。"
   },
   "popup_copies_a_draft_when_possible_and_opens": {
-    "message": "尽可能复制一份草稿，并在有邮件应用时打开它。包含站点名称和你的 StampStack 设置 — 不含页面网址或内容。"
+    "message": "会尽量复制草稿，并在有邮件应用时打开。包含站点名称和你的 StampStack 设置 — 不含页面网址或内容。"
   },
   "popup_dark_hint_already_paid": {
     "message": "已经付过款？用收据里的邮箱恢复购买。广告拦截始终免费。"
@@ -440,7 +545,7 @@
     "message": "此版本无法购买 — 请从商店更新 StampStack。"
   },
   "popup_dark_hint_restricted_page": {
-    "message": "在 Chrome 应用商店页面上不可用 — Chrome 禁止扩展修改这些页面。"
+    "message": "Chrome 应用商店页面不可用 — Chrome 禁止扩展修改这些页面。"
   },
   "popup_dark_mode": {
     "message": "深色模式"
@@ -545,7 +650,7 @@
     "message": "同时停止在此运行脚本片段"
   },
   "popup_repair_state_allowlisted": {
-    "message": "此站点的拦截已关闭 — 这里的一切都不过滤。"
+    "message": "此站点的拦截已关闭 — 此处不做任何过滤。"
   },
   "popup_repair_state_cosmetics": {
     "message": "此处元素隐藏已关闭。广告和脚本片段仍在生效。"
@@ -712,7 +817,7 @@
     "message": "YouTube"
   },
   "popup_youtube_summary_on": {
-    "message": "已开启 $COUNT$ / 3",
+    "message": "$COUNT$/3 已开启",
     "placeholders": {
       "count": {
         "content": "$1",

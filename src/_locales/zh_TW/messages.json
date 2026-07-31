@@ -32,6 +32,9 @@
   "options_clear": {
     "message": "清除"
   },
+  "options_custom_filters_intro": {
+    "message": "你自己的元素隱藏規則，每行一條。彈出視窗中的元素挑選器會寫入這裡。格式：example.com##.selector — 先是一個主機名稱，接著 ##，再接 CSS 選擇器。"
+  },
   "options_custom_lines_ignored_one": {
     "message": "已忽略 $COUNT$ 行。",
     "placeholders": {
@@ -111,7 +114,7 @@
     }
   },
   "options_every_site_where_you_changed_something_in": {
-    "message": "你調整過的網站都集中在這裡。修復步驟會保留廣告攔截，只關掉弄壞頁面的那一部分；已加入白名單的網站則完全不攔截。"
+    "message": "你調整過的網站都集中在這裡。修復步驟會保留廣告攔截，只關掉造成頁面異常的那一部分；已加入白名單的網站則完全不攔截。"
   },
   "options_example_com": {
     "message": "example.com"
@@ -175,7 +178,7 @@
     "message": "安全"
   },
   "options_hide_shorts_entry_points_and_redirect_shorts": {
-    "message": "隱藏 Shorts 入口並改寫 Shorts 網址"
+    "message": "隱藏 Shorts 入口並重新導向 Shorts 網址"
   },
   "options_import_failed": {
     "message": "匯入失敗。"
@@ -225,8 +228,65 @@
   "options_license_unpacked_hint": {
     "message": "此版本未設定 ExtensionPay。未封裝版本：請用開發解鎖測試深色模式。"
   },
+  "options_list_age_aging": {
+    "message": "過濾規則清單更新時間：$WHEN$（$DATE$）— 近期的 StampStack 更新會一併更新清單。",
+    "placeholders": {
+      "when": {
+        "content": "$1"
+      },
+      "date": {
+        "content": "$2"
+      }
+    }
+  },
+  "options_list_age_day_one": {
+    "message": "$DAYS$ 天前",
+    "placeholders": {
+      "days": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "options_list_age_day_other": {
+    "message": "$DAYS$ 天前",
+    "placeholders": {
+      "days": {
+        "content": "$1",
+        "example": "12"
+      }
+    }
+  },
+  "options_list_age_fresh": {
+    "message": "過濾規則清單更新時間：$WHEN$（$DATE$）",
+    "placeholders": {
+      "when": {
+        "content": "$1"
+      },
+      "date": {
+        "content": "$2"
+      }
+    }
+  },
+  "options_list_age_stale": {
+    "message": "過濾規則清單更新時間：$WHEN$（$DATE$）— 已落後於上游。新版 StampStack 會更新清單。",
+    "placeholders": {
+      "when": {
+        "content": "$1"
+      },
+      "date": {
+        "content": "$2"
+      }
+    }
+  },
+  "options_list_age_today": {
+    "message": "今天"
+  },
+  "options_list_age_unknown": {
+    "message": "此版本無法取得過濾規則清單的日期。"
+  },
   "options_list_not_active": {
-    "message": "未生效 — Chrome 的共用規則額度已滿。有 $COUNT$ 條網路規則未載入；此清單的元素隱藏仍然有效。",
+    "message": "未生效 — 已達 Chrome 的共用規則上限。有 $COUNT$ 條網路規則未載入；此清單的元素隱藏仍然有效。",
     "placeholders": {
       "count": {
         "content": "$1",
@@ -286,7 +346,7 @@
     "message": "移除"
   },
   "options_requests_blocked": {
-    "message": "個請求被攔截"
+    "message": "已攔截的請求"
   },
   "options_rule": {
     "message": "規則"
@@ -318,6 +378,48 @@
   "options_sponsor_all_categories_off": {
     "message": "所有類別都已關閉 — StampStack 不會連線 SponsorBlock API。"
   },
+  "options_sponsor_cat_interaction_hint": {
+    "message": "「按讚、留言、訂閱」之類的插話。"
+  },
+  "options_sponsor_cat_interaction_label": {
+    "message": "互動提醒"
+  },
+  "options_sponsor_cat_intro_hint": {
+    "message": "無實質內容的標題卡和動畫片頭。"
+  },
+  "options_sponsor_cat_intro_label": {
+    "message": "片頭 / 間隔"
+  },
+  "options_sponsor_cat_music_offtopic_hint": {
+    "message": "音樂影片中的非音樂部分。"
+  },
+  "options_sponsor_cat_music_offtopic_label": {
+    "message": "非音樂片段"
+  },
+  "options_sponsor_cat_outro_hint": {
+    "message": "正片結束後的字幕和結束畫面。"
+  },
+  "options_sponsor_cat_outro_label": {
+    "message": "片尾 / 結束畫面"
+  },
+  "options_sponsor_cat_preview_hint": {
+    "message": "本片或前作的內容回顧。"
+  },
+  "options_sponsor_cat_preview_label": {
+    "message": "預告 / 回顧"
+  },
+  "options_sponsor_cat_selfpromo_hint": {
+    "message": "創作者對自家周邊或 Patreon 的無償宣傳。"
+  },
+  "options_sponsor_cat_selfpromo_label": {
+    "message": "自我宣傳"
+  },
+  "options_sponsor_cat_sponsor_hint": {
+    "message": "付費推廣、付費推薦、直接廣告。"
+  },
+  "options_sponsor_cat_sponsor_label": {
+    "message": "贊助"
+  },
   "options_sponsorblock_skip": {
     "message": "SponsorBlock 略過"
   },
@@ -333,6 +435,9 @@
   "options_which_segments_to_skip": {
     "message": "要略過哪些片段"
   },
+  "options_youtube_intro": {
+    "message": "YouTube 的額外控制項。隱藏推廣影片會移除付費的動態方塊，並清除播放器的廣告資料。攔截 Shorts 會隱藏 Shorts 區塊並離開 /shorts/ 頁面。SponsorBlock 會使用 sponsor.ajay.app 的社群資料庫略過影片中的贊助片段。"
+  },
   "popup_alt": {
     "message": "Alt"
   },
@@ -343,10 +448,10 @@
     "message": "攔截 Shorts"
   },
   "popup_blocked_here": {
-    "message": "在此攔截"
+    "message": "本頁攔截數"
   },
   "popup_blocked_total": {
-    "message": "累計攔截"
+    "message": "累計攔截數"
   },
   "popup_blocking_is_off_here": {
     "message": "此處已關閉攔截"
@@ -500,7 +605,7 @@
     "message": "此頁面無法使用"
   },
   "popup_on_this_page": {
-    "message": "本頁面上"
+    "message": "本頁面"
   },
   "popup_pause_everywhere": {
     "message": "全部暫停"
@@ -518,7 +623,7 @@
     "message": "可在設定中選擇要略過的片段類型。"
   },
   "popup_picker_could_not_start": {
-    "message": "選取工具無法在此啟動。"
+    "message": "元素挑選器無法在此啟動。"
   },
   "popup_reload": {
     "message": "重新載入"
@@ -533,7 +638,7 @@
     "message": "可修復版面塌陷、空白區塊與卡住的選單。"
   },
   "popup_repair_hint_injection": {
-    "message": "可修復因反廣告攔截修補而故障的播放器與登入。"
+    "message": "可修復因反廣告攔截修補而失效的播放器與登入。"
   },
   "popup_repair_next_allowlist": {
     "message": "關閉此網站的攔截"
@@ -608,7 +713,7 @@
     "message": "不在我們的清單中"
   },
   "popup_report_tracker_one": {
-    "message": "連往了 $COUNT$ 個已知追蹤器。",
+    "message": "曾連線至 $COUNT$ 個已知追蹤器。",
     "placeholders": {
       "count": {
         "content": "$1",
@@ -617,7 +722,7 @@
     }
   },
   "popup_report_tracker_one_rules": {
-    "message": "連往了 $COUNT$ 個已知追蹤器 — StampStack 有其中 $BLOCKED$ 個的規則。",
+    "message": "曾連線至 $COUNT$ 個已知追蹤器 — StampStack 有其中 $BLOCKED$ 個的規則。",
     "placeholders": {
       "count": {
         "content": "$1",
@@ -630,7 +735,7 @@
     }
   },
   "popup_report_trackers_many": {
-    "message": "連往了 $COUNT$ 個已知追蹤器。",
+    "message": "曾連線至 $COUNT$ 個已知追蹤器。",
     "placeholders": {
       "count": {
         "content": "$1",
@@ -639,7 +744,7 @@
     }
   },
   "popup_report_trackers_many_rules": {
-    "message": "連往了 $COUNT$ 個已知追蹤器 — StampStack 有其中 $BLOCKED$ 個的規則。",
+    "message": "曾連線至 $COUNT$ 個已知追蹤器 — StampStack 有其中 $BLOCKED$ 個的規則。",
     "placeholders": {
       "count": {
         "content": "$1",
@@ -697,7 +802,7 @@
     "message": "StampStack 已暫停"
   },
   "popup_still_broken_tell_the_developer": {
-    "message": "還是壞的嗎？告訴開發者"
+    "message": "還是有問題嗎？告訴開發者"
   },
   "popup_summary_paused": {
     "message": "已暫停"
@@ -706,13 +811,13 @@
     "message": "此頁面"
   },
   "popup_undo_turn_filtering_back_on": {
-    "message": "復原 — 重新開啟過濾"
+    "message": "復原 — 重新開啟過濾功能"
   },
   "popup_youtube": {
     "message": "YouTube"
   },
   "popup_youtube_summary_on": {
-    "message": "3 項中開啟 $COUNT$ 項",
+    "message": "$COUNT$/3 已開啟",
     "placeholders": {
       "count": {
         "content": "$1",

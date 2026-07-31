@@ -32,6 +32,9 @@
   "options_clear": {
     "message": "Clear"
   },
+  "options_custom_filters_intro": {
+    "message": "Your own element-hiding rules, one per line. The popup's element picker writes here. Format: example.com##.selector — one hostname, then ##, then a CSS selector."
+  },
   "options_custom_lines_ignored_one": {
     "message": "$COUNT$ line ignored.",
     "placeholders": {
@@ -225,6 +228,63 @@
   "options_license_unpacked_hint": {
     "message": "ExtensionPay not configured in this build. Unpacked: use Dev unlock to test dark mode."
   },
+  "options_list_age_aging": {
+    "message": "Filter lists refreshed $WHEN$ ($DATE$) — a StampStack update will refresh them soon.",
+    "placeholders": {
+      "when": {
+        "content": "$1"
+      },
+      "date": {
+        "content": "$2"
+      }
+    }
+  },
+  "options_list_age_day_one": {
+    "message": "$DAYS$ day ago",
+    "placeholders": {
+      "days": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "options_list_age_day_other": {
+    "message": "$DAYS$ days ago",
+    "placeholders": {
+      "days": {
+        "content": "$1",
+        "example": "12"
+      }
+    }
+  },
+  "options_list_age_fresh": {
+    "message": "Filter lists refreshed $WHEN$ ($DATE$)",
+    "placeholders": {
+      "when": {
+        "content": "$1"
+      },
+      "date": {
+        "content": "$2"
+      }
+    }
+  },
+  "options_list_age_stale": {
+    "message": "Filter lists refreshed $WHEN$ ($DATE$) — behind upstream. A new StampStack version will refresh them.",
+    "placeholders": {
+      "when": {
+        "content": "$1"
+      },
+      "date": {
+        "content": "$2"
+      }
+    }
+  },
+  "options_list_age_today": {
+    "message": "today"
+  },
+  "options_list_age_unknown": {
+    "message": "Filter list date unavailable for this build."
+  },
   "options_list_not_active": {
     "message": "Not active — Chrome's shared rule limit is full. $COUNT$ network rules are not loaded; element hiding for this list still works.",
     "placeholders": {
@@ -318,6 +378,48 @@
   "options_sponsor_all_categories_off": {
     "message": "Every category is off — StampStack will not contact the SponsorBlock API."
   },
+  "options_sponsor_cat_interaction_hint": {
+    "message": "“Like, comment and subscribe” asides."
+  },
+  "options_sponsor_cat_interaction_label": {
+    "message": "Interaction reminder"
+  },
+  "options_sponsor_cat_intro_hint": {
+    "message": "Title cards and animated intros with no content."
+  },
+  "options_sponsor_cat_intro_label": {
+    "message": "Intro / intermission"
+  },
+  "options_sponsor_cat_music_offtopic_hint": {
+    "message": "Non-music parts of a music video."
+  },
+  "options_sponsor_cat_music_offtopic_label": {
+    "message": "Non-music section"
+  },
+  "options_sponsor_cat_outro_hint": {
+    "message": "Credits and endcards after the content ends."
+  },
+  "options_sponsor_cat_outro_label": {
+    "message": "Outro / endcards"
+  },
+  "options_sponsor_cat_preview_hint": {
+    "message": "Recaps of this video, or of a previous one."
+  },
+  "options_sponsor_cat_preview_label": {
+    "message": "Preview / recap"
+  },
+  "options_sponsor_cat_selfpromo_hint": {
+    "message": "Unpaid plugs for the creator’s own merch or Patreon."
+  },
+  "options_sponsor_cat_selfpromo_label": {
+    "message": "Self-promotion"
+  },
+  "options_sponsor_cat_sponsor_hint": {
+    "message": "Paid promotion, paid referrals, direct advertising."
+  },
+  "options_sponsor_cat_sponsor_label": {
+    "message": "Sponsor"
+  },
   "options_sponsorblock_skip": {
     "message": "SponsorBlock skip"
   },
@@ -332,6 +434,9 @@
   },
   "options_which_segments_to_skip": {
     "message": "Which segments to skip"
+  },
+  "options_youtube_intro": {
+    "message": "Extra controls for YouTube. Promoted-video hiding removes paid feed tiles and scrubs player ad payloads. Shorts blocking hides Shorts shelves and leaves /shorts/ pages. SponsorBlock skips mid-video sponsor segments using the community database at sponsor.ajay.app."
   },
   "popup_alt": {
     "message": "Alt"

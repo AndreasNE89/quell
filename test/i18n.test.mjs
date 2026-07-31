@@ -38,11 +38,20 @@ function keysUsed() {
   // ternaries for singular/plural, a GROUP_LABEL lookup map, multi-line calls. Matching only
   // the direct-literal form reported 25 live keys as orphans. The `popup_`/`options_` prefix
   // makes these unambiguous — nothing else in the source is shaped like that.
+  const prefixes = [];
   for (const f of ['src/popup/popup.ts', 'src/options/options.ts']) {
     const ts = readFileSync(f, 'utf8');
     for (const m of ts.matchAll(/['"`]((?:popup|options)_[a-z0-9_]+)['"`]/g)) used.add(m[1]);
+    // Keys assembled at runtime: msg(`options_list_age_${level}`). The literal part is a
+    // prefix, and every catalog key under it is reachable.
+    for (const m of ts.matchAll(/`((?:popup|options)_[a-z0-9_]*)\$\{/g)) prefixes.push(m[1]);
   }
-  return used;
+  return { used, prefixes };
+}
+
+/** A key counts as used if it is named outright or falls under a runtime-built prefix. */
+function isUsed(key, { used, prefixes }) {
+  return used.has(key) || prefixes.some((p) => key.startsWith(p));
 }
 
 test('the default locale exists', () => {
@@ -56,19 +65,21 @@ test('the manifest declares the default locale', () => {
 
 test('every key the code uses exists in the default locale', () => {
   const en = catalog(DEFAULT_LOCALE);
-  const missing = [...keysUsed()].filter((k) => !(k in en)).sort();
+  const { used } = keysUsed();
+  const missing = [...used].filter((k) => !(k in en)).sort();
   assert.deepEqual(missing, [], 'these render as empty text, not as an error');
 });
 
 test('the code actually uses the catalog', () => {
   // Guards the check above: if the extractors matched nothing, "no missing keys" is vacuous.
-  assert.ok(keysUsed().size >= 60, `expected the catalog to be in use, found ${keysUsed().size} keys`);
+  const n = keysUsed().used.size;
+  assert.ok(n >= 60, `expected the catalog to be in use, found ${n} keys`);
 });
 
 test('no orphaned messages in the default locale', () => {
-  const used = keysUsed();
+  const index = keysUsed();
   const orphans = Object.keys(catalog(DEFAULT_LOCALE))
-    .filter((k) => !used.has(k))
+    .filter((k) => !isUsed(k, index))
     .sort();
   assert.deepEqual(orphans, [], 'unused entries drift out of date and mislead translators');
 });

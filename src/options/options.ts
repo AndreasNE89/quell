@@ -67,7 +67,18 @@ async function loadStats(): Promise<void> {
   // could not previously say. Left unsaid, protection decays with nothing to show for it.
   const age = listAge(s.listsGeneratedAt, Date.now());
   const ageEl = $('listAge');
-  ageEl.textContent = age.text;
+  // Built from the parts, not from age.text. That string stays English on purpose — it also
+  // goes into the breakage-report email, which is read by the developer, not the user.
+  const when =
+    age.days === 0
+      ? msg('options_list_age_today')
+      : msg(age.days === 1 ? 'options_list_age_day_one' : 'options_list_age_day_other', [
+          String(age.days),
+        ]);
+  ageEl.textContent =
+    age.level === 'unknown'
+      ? msg('options_list_age_unknown')
+      : msg(`options_list_age_${age.level}`, [when, age.date]);
   ageEl.classList.toggle('list-warn', age.level === 'stale');
 }
 
@@ -165,10 +176,12 @@ function categoryRow(c: SponsorCategoriesData['categories'][number]): HTMLElemen
   info.className = 'list-info';
   const title = document.createElement('div');
   title.className = 'list-title';
-  title.textContent = c.label;
+  // The service worker sends English labels; translate them here. Falling back to what it
+  // sent means a category added upstream still shows rather than rendering blank.
+  title.textContent = msg(`options_sponsor_cat_${c.id}_label`) || c.label;
   const meta = document.createElement('div');
   meta.className = 'list-meta';
-  meta.textContent = c.hint;
+  meta.textContent = msg(`options_sponsor_cat_${c.id}_hint`) || c.hint;
   info.append(title, meta);
 
   const sw = document.createElement('label');
