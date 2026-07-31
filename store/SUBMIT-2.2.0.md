@@ -3,7 +3,7 @@
 Chinese support: interface and filter lists.
 
 **Package:** `release/stampstack-2.2.0.zip`
-**sha256:** `605ac07ef2d0b7ea3d5f1835c7f20b6aaffdbdd8a517e680c086f85366a6deb4`
+**sha256:** `cc156deca042bc94aecbb0ef4aa2810c6afce1d1ac08a81f33ba4ba46e455ba1`
 **Size:** 2.90 MiB · 46 files · 135,775 DNR rules across 8 rulesets
 
 ---
