@@ -11,6 +11,7 @@ import { nextSiteFix } from '../shared/site-fix.js';
 import type { BreakageReport } from '../shared/breakage-report.js';
 import { SUPPORT_EMAIL } from '../shared/constants.js';
 import { isValidMatchPatternHost, normalizeHostname } from '../shared/hostname.js';
+import { applyI18n, msg } from '../shared/i18n.js';
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -68,8 +69,10 @@ const el = {
   darkHint: $('darkHint'),
 };
 
-function send(msg: Message): Promise<unknown> {
-  return chrome.runtime.sendMessage(msg);
+// Named `payload`, not `msg`: `msg` is the i18n lookup at module scope and shadowing it here
+// would make a translated string silently resolve to a Message object.
+function send(payload: Message): Promise<unknown> {
+  return chrome.runtime.sendMessage(payload);
 }
 
 function sleep(ms: number): Promise<void> {
@@ -77,42 +80,42 @@ function sleep(ms: number): Promise<void> {
 }
 
 /** Cold service-worker wakes can drop the first sendMessage; match the content-script retry. */
-async function sendWithRetry<T>(msg: Message, attempts = 5): Promise<T | null> {
+async function sendWithRetry<T>(payload: Message, attempts = 5): Promise<T | null> {
   let lastErr: unknown;
   for (let i = 0; i < attempts; i++) {
     try {
-      const resp = (await send(msg)) as T | null | undefined;
+      const resp = (await send(payload)) as T | null | undefined;
       if (resp != null) return resp;
     } catch (e) {
       lastErr = e;
     }
     await sleep(50 * (i + 1));
   }
-  if (lastErr) console.warn('[StampStack] sendMessage failed after retries', msg.type, lastErr);
+  if (lastErr) console.warn('[StampStack] sendMessage failed after retries', payload.type, lastErr);
   return null;
 }
 
 function render(data: PopupData): void {
   const blockingHere = !data.paused && !data.allowlisted && !!data.hostname;
-  el.host.textContent = data.hostname ?? 'This page';
+  el.host.textContent = data.hostname ?? msg('popup_this_page');
   // No hostname means chrome://, about:, file:, the PDF viewer, … — nothing is being blocked
   // there and the toggle does nothing, so say that rather than claiming blocking is on.
   el.siteSub.textContent = !data.hostname
-    ? 'StampStack does not run on this page'
+    ? msg('popup_does_not_run_on_this_page')
     : data.paused
-      ? 'StampStack is paused'
+      ? msg('popup_stampstack_is_paused')
       : data.allowlisted
-        ? 'Blocking is off here'
-        : 'Blocking on this site';
+        ? msg('popup_blocking_is_off_here')
+        : msg('popup_blocking_on_this_site');
 
   el.siteToggle.checked = blockingHere;
   el.siteToggle.disabled = data.paused || !data.hostname;
-  if (!data.hostname) el.siteToggleLabel.textContent = 'Not available on this page';
+  if (!data.hostname) el.siteToggleLabel.textContent = msg('popup_not_available_on_this_page');
   else if (data.coveredBy)
-    el.siteToggleLabel.textContent = `Blocking off (via ${data.coveredBy})`;
-  else if (data.allowlisted) el.siteToggleLabel.textContent = 'Blocking off (allowlisted)';
-  else if (data.paused) el.siteToggleLabel.textContent = 'Paused globally';
-  else el.siteToggleLabel.textContent = 'Block on this site';
+    el.siteToggleLabel.textContent = msg('popup_blocking_off_via', [data.coveredBy]);
+  else if (data.allowlisted) el.siteToggleLabel.textContent = msg('popup_blocking_off_allowlisted');
+  else if (data.paused) el.siteToggleLabel.textContent = msg('popup_paused_globally');
+  else el.siteToggleLabel.textContent = msg('popup_block_on_this_site');
 
   el.pauseToggle.checked = data.paused;
   el.ytSponsoredToggle.checked = data.youtubeBlockSponsored;
@@ -132,10 +135,10 @@ function render(data: PopupData): void {
     el.totalBlocked.textContent = data.blockedTotal.toLocaleString();
   } else {
     el.ruleCount.textContent = data.paused
-      ? 'Paused — no rules active'
+      ? msg('popup_paused_no_rules_active')
       : data.degraded
-        ? `${data.activeRuleCount.toLocaleString()} rules active — a list could not load, see Settings`
-        : `${data.activeRuleCount.toLocaleString()} blocking rules active`;
+        ? msg('popup_rules_active_degraded', [data.activeRuleCount.toLocaleString()])
+        : msg('popup_rules_active', [data.activeRuleCount.toLocaleString()]);
     el.ruleCount.classList.toggle('warn', !data.paused && data.degraded);
   }
 
@@ -143,7 +146,9 @@ function render(data: PopupData): void {
   const ytOn = [data.youtubeBlockSponsored, data.youtubeBlockShorts, data.youtubeSponsorBlock].filter(
     Boolean,
   ).length;
-  el.ytSummary.textContent = data.paused ? 'paused' : `${ytOn} of 3 on`;
+  el.ytSummary.textContent = data.paused
+    ? msg('popup_summary_paused')
+    : msg('popup_youtube_summary_on', [String(ytOn)]);
 
   // Same reason as the repair panel: a picked selector is stored per host and cosmetic
   // matching drops hosts that are not valid match patterns, so picking on one would appear
@@ -185,7 +190,7 @@ function renderRepair(data: PopupData): void {
   // moment.
   el.repairLadder.hidden = data.allowlisted;
   if (data.allowlisted) {
-    el.repairState.textContent = 'Blocking is off for this site — nothing here is filtered.';
+    el.repairState.textContent = msg('popup_repair_state_allowlisted');
     return;
   }
 
@@ -194,20 +199,20 @@ function renderRepair(data: PopupData): void {
 
   el.repairState.textContent =
     level === 'injection'
-      ? 'Element hiding and scriptlets are off here. Ads are still blocked.'
+      ? msg('popup_repair_state_injection')
       : level === 'cosmetics'
-        ? 'Element hiding is off here. Ads and scriptlets are still active.'
-        : 'Everything is on for this site.';
+        ? msg('popup_repair_state_cosmetics')
+        : msg('popup_everything_is_on_for_this_site');
 
   if (next === 'cosmetics') {
-    el.repairNext.textContent = 'Stop hiding elements here';
-    el.repairHint.textContent = 'Fixes collapsed layouts, blank gaps and stuck menus.';
+    el.repairNext.textContent = msg('popup_repair_next_cosmetics');
+    el.repairHint.textContent = msg('popup_repair_hint_cosmetics');
   } else if (next === 'injection') {
-    el.repairNext.textContent = 'Also stop running scriptlets here';
-    el.repairHint.textContent = 'Fixes players and logins that break on anti-adblock patches.';
+    el.repairNext.textContent = msg('popup_repair_next_injection');
+    el.repairHint.textContent = msg('popup_repair_hint_injection');
   } else {
-    el.repairNext.textContent = 'Turn blocking off for this site';
-    el.repairHint.textContent = 'Last resort — this site gets its ads and trackers back.';
+    el.repairNext.textContent = msg('popup_repair_next_allowlist');
+    el.repairHint.textContent = msg('popup_repair_hint_allowlist');
   }
   el.repairNext.dataset['level'] = next ?? 'allowlist';
   el.repairReset.hidden = level == null;
@@ -222,12 +227,12 @@ function renderDarkMode(data: DarkModeData): void {
   el.darkSummary.textContent = !data.paid
     ? data.license.priceLabel
     : data.restricted
-      ? 'not available here'
+      ? msg('popup_dark_summary_unavailable')
       : data.apply
-        ? 'on here'
+        ? msg('popup_dark_summary_on_here')
         : data.enabled
-          ? 'off here'
-          : 'off';
+          ? msg('popup_dark_summary_off_here')
+          : msg('popup_dark_summary_off');
 
   if (!data.paid) {
     // Locked: only the upsell + config hint. Hide the toggles.
@@ -242,16 +247,15 @@ function renderDarkMode(data: DarkModeData): void {
     if (data.license.unpacked) {
       el.darkHint.hidden = false;
       el.darkHint.textContent = data.license.configured
-        ? 'Unpacked dev: use Dev unlock to test dark mode without paying.'
-        : 'ExtensionPay not configured — use Dev unlock here, or Options.';
+        ? msg('popup_dark_hint_dev_unlock')
+        : msg('popup_dark_hint_extpay_unconfigured');
     } else if (!data.license.configured) {
       el.darkHint.hidden = false;
-      el.darkHint.textContent = 'Purchases unavailable in this build — update StampStack from the store.';
+      el.darkHint.textContent = msg('popup_dark_hint_purchases_unavailable');
     } else {
       // Production unpaid: nudge restore so reinstalls convert without support tickets.
       el.darkHint.hidden = false;
-      el.darkHint.textContent =
-        'Already paid? Restore purchase with the email from your receipt. Ad blocking stays free.';
+      el.darkHint.textContent = msg('popup_dark_hint_already_paid');
     }
     return;
   }
@@ -268,8 +272,7 @@ function renderDarkMode(data: DarkModeData): void {
     el.darkSiteRow.hidden = true;
     el.darkResetBtn.hidden = true;
     el.darkHint.hidden = false;
-    el.darkHint.textContent =
-      'Not available on Chrome Web Store pages — Chrome blocks extensions from modifying these.';
+    el.darkHint.textContent = msg('popup_dark_hint_restricted_page');
     return;
   }
   el.darkHint.hidden = true;
@@ -280,7 +283,9 @@ function renderDarkMode(data: DarkModeData): void {
   if (hasHost) {
     el.darkSiteToggle.checked = data.apply;
     el.darkSiteToggle.disabled = false;
-    el.darkSiteLabel.textContent = data.apply ? 'Dark mode is on here' : 'Dark mode is off here';
+    el.darkSiteLabel.textContent = data.apply
+      ? msg('popup_dark_mode_is_on_here')
+      : msg('popup_dark_mode_is_off_here');
     el.darkSiteHost.textContent = host!;
   }
   // Show the reset link only when this page overrides the global default.
@@ -300,8 +305,8 @@ function renderReport(report: PageReport): void {
     // Pause / allowlist already say so elsewhere; only explain the non-obvious cases.
     if (report.reason === 'no-content-script') {
       el.report.hidden = false;
-      el.reportTitle.textContent = 'On this page';
-      el.reportSummary.textContent = 'Reload the page to see what it connects to.';
+      el.reportTitle.textContent = msg('popup_on_this_page');
+      el.reportSummary.textContent = msg('popup_report_reload_to_see');
       el.reportToggle.hidden = true;
       el.reportList.hidden = true;
       el.reportFoot.hidden = true;
@@ -318,18 +323,32 @@ function renderReport(report: PageReport): void {
   const withRules = report.trackers.filter((t) => t.blocked).length;
   const parts: string[] = [];
 
+  // Each branch is one whole sentence: singular and plural are separate messages because the
+  // plural rule and the word order both differ per language, and a suffix cannot be translated.
   if (named) {
-    parts.push(
-      `Reached out to ${named} known ${named === 1 ? 'tracker' : 'trackers'}` +
-        (withRules ? ` — StampStack has rules for ${withRules}.` : '.'),
-    );
+    if (withRules) {
+      parts.push(
+        msg(named === 1 ? 'popup_report_tracker_one_rules' : 'popup_report_trackers_many_rules', [
+          String(named),
+          String(withRules),
+        ]),
+      );
+    } else {
+      parts.push(
+        msg(named === 1 ? 'popup_report_tracker_one' : 'popup_report_trackers_many', [String(named)]),
+      );
+    }
   } else if (report.unnamedThirdParty) {
-    parts.push('No known trackers recognized here.');
+    parts.push(msg('popup_report_no_known_trackers'));
   } else {
-    parts.push('No third-party connections seen.');
+    parts.push(msg('popup_report_no_third_party'));
   }
   if (report.hiddenElements) {
-    parts.push(`${report.hiddenElements} ad ${report.hiddenElements === 1 ? 'slot' : 'slots'} hidden.`);
+    parts.push(
+      msg(report.hiddenElements === 1 ? 'popup_report_ad_slot_one' : 'popup_report_ad_slots_many', [
+        String(report.hiddenElements),
+      ]),
+    );
   }
   el.reportSummary.textContent = parts.join(' ');
 
@@ -344,7 +363,7 @@ function renderReport(report: PageReport): void {
     state.className = 'report-state';
     // "not in our lists" is the honest phrasing: we know we have no rule, we do not know
     // whether the request itself succeeded.
-    state.textContent = t.blocked ? 'blocked' : 'not in our lists';
+    state.textContent = t.blocked ? msg('popup_report_state_blocked') : msg('popup_report_state_unlisted');
     li.append(name, state);
     el.reportList.append(li);
   }
@@ -352,10 +371,15 @@ function renderReport(report: PageReport): void {
   const foot: string[] = [];
   if (report.unnamedThirdParty) {
     foot.push(
-      `${report.unnamedThirdParty} other third-party ${report.unnamedThirdParty === 1 ? 'host' : 'hosts'} not recognized by name`,
+      msg(
+        report.unnamedThirdParty === 1
+          ? 'popup_report_other_host_one'
+          : 'popup_report_other_hosts_many',
+        [String(report.unnamedThirdParty)],
+      ),
     );
   }
-  if (report.truncated) foot.push('list truncated');
+  if (report.truncated) foot.push(msg('popup_report_list_truncated'));
   el.reportFoot.textContent = foot.join(' · ');
   el.reportFoot.hidden = foot.length === 0 || el.reportList.hidden;
 }
@@ -364,7 +388,7 @@ el.reportToggle.addEventListener('click', () => {
   const show = el.reportList.hidden;
   el.reportList.hidden = !show;
   el.reportFoot.hidden = !show || !el.reportFoot.textContent;
-  el.reportToggle.textContent = show ? 'Hide' : 'Details';
+  el.reportToggle.textContent = show ? msg('popup_hide') : msg('popup_details');
 });
 
 let current: PopupData | null = null;
@@ -408,7 +432,7 @@ el.pickBtn.addEventListener('click', async () => {
   const r = (await send({ type: 'picker:start' })) as { ok: boolean; error?: string } | null;
   if (!r?.ok) {
     el.pickHint.hidden = false;
-    el.pickHint.textContent = r?.error ?? 'The picker could not start here.';
+    el.pickHint.textContent = r?.error ?? msg('popup_picker_could_not_start');
     return;
   }
   window.close();
@@ -488,7 +512,7 @@ el.reportBreakage.addEventListener('click', async () => {
       hostname: current.hostname,
     });
     if (!report) {
-      noteFailed(`Could not build a report. Contact ${SUPPORT_EMAIL}`);
+      noteFailed(msg('popup_breakage_build_failed', [SUPPORT_EMAIL]));
       return;
     }
 
@@ -505,8 +529,8 @@ el.reportBreakage.addEventListener('click', async () => {
     // Paint before tabs.create closes this popup. Double-rAF gives the layout a frame.
     noteSent(
       copied
-        ? `Draft copied — opening your email app if one is available. Send to ${report.to}`
-        : `Opening your email app if available — send to ${report.to}`,
+        ? msg('popup_breakage_copied', [report.to])
+        : msg('popup_breakage_opening', [report.to]),
     );
     await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
 
@@ -517,13 +541,13 @@ el.reportBreakage.addEventListener('click', async () => {
       // clipboard the user still has everything they need, so that stays the success accent;
       // without it there is nothing to act on and it is a failure.
       if (copied) {
-        noteSent(`No email app opened — the report is on your clipboard. Send it to ${report.to}`);
+        noteSent(msg('popup_breakage_no_app_copied', [report.to]));
       } else {
-        noteFailed(`No email app opened. Report ${current.hostname} to ${report.to}`);
+        noteFailed(msg('popup_breakage_no_app', [current.hostname, report.to]));
       }
     }
   } catch {
-    noteFailed(`Could not build a report. Contact ${SUPPORT_EMAIL}`);
+    noteFailed(msg('popup_breakage_build_failed', [SUPPORT_EMAIL]));
   } finally {
     el.reportBreakage.disabled = false;
   }
@@ -542,7 +566,7 @@ el.siteToggle.addEventListener('change', async () => {
   });
   if (!data) {
     el.siteToggle.checked = !wanted; // Never leave the switch claiming a state we did not reach.
-    el.siteToggleLabel.textContent = 'Could not change this site — see Settings';
+    el.siteToggleLabel.textContent = msg('popup_site_toggle_failed');
     el.siteToggleLabel.classList.add('warn');
     return;
   }
@@ -601,8 +625,8 @@ el.darkBuyBtn.addEventListener('click', async () => {
     el.darkHint.textContent =
       r?.error ??
       (darkCurrent?.license.unpacked
-        ? 'Checkout unavailable — use Dev unlock or set ExtensionPay id in Options.'
-        : 'Checkout unavailable. Try Restore purchase, or open Options.');
+        ? msg('popup_checkout_unavailable_unpacked')
+        : msg('popup_checkout_unavailable'));
   }
   el.darkBuyBtn.disabled = false;
   void refresh();
@@ -613,8 +637,7 @@ el.darkRestoreBtn.addEventListener('click', async () => {
   const r = (await send({ type: 'license:openRestore' })) as { ok: boolean; error?: string };
   if (!r?.ok) {
     el.darkHint.hidden = false;
-    el.darkHint.textContent =
-      r?.error ?? 'Restore unavailable. Open Options → Restore purchase.';
+    el.darkHint.textContent = r?.error ?? msg('popup_restore_unavailable');
   }
   el.darkRestoreBtn.disabled = !darkCurrent?.license.configured;
   void refresh();
@@ -630,7 +653,7 @@ el.darkDevUnlockBtn.addEventListener('click', async () => {
   el.darkDevUnlockBtn.disabled = false;
   if (!r?.ok) {
     el.darkHint.hidden = false;
-    el.darkHint.textContent = r?.error ?? 'Dev unlock failed';
+    el.darkHint.textContent = r?.error ?? msg('popup_dev_unlock_failed');
     return;
   }
   if (r.darkMode) renderDarkMode(r.darkMode);
@@ -666,5 +689,8 @@ function openOptions(): void {
 }
 el.optionsBtn.addEventListener('click', openOptions);
 el.openOptions.addEventListener('click', openOptions);
+
+// Before the first paint: static markup must not flash English and then switch.
+applyI18n();
 
 void refresh();

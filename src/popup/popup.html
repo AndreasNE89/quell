@@ -4,15 +4,15 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="stylesheet" href="popup.css" />
-    <title>StampStack</title>
+    <title data-i18n="popup_stampstack">StampStack</title>
   </head>
   <body>
     <header class="head">
       <div class="brand">
         <span class="dot" id="statusDot"></span>
-        <span class="name">StampStack</span>
+        <span class="name" data-i18n="popup_stampstack">StampStack</span>
       </div>
-      <button class="icon-btn" id="optionsBtn" title="Settings" aria-label="Settings">⚙</button>
+      <button class="icon-btn" id="optionsBtn" title="Settings" data-i18n-attr="title:popup_settings" aria-label="Settings">⚙</button>
     </header>
 
     <!-- Site status and its toggle in ONE block. They were two stacked blocks saying
@@ -21,16 +21,16 @@
       <div class="site-main">
         <div class="site-text">
           <div class="site-host" id="host">—</div>
-          <div class="site-sub" id="siteSub">Blocking on this site</div>
+          <div class="site-sub" id="siteSub" data-i18n="popup_blocking_on_this_site">Blocking on this site</div>
         </div>
         <!-- A label, like every other switch in this popup. This one was a bare <span> and so
              had no way to receive a click at all. -->
         <label class="switch">
-          <input type="checkbox" id="siteToggle" aria-label="Block on this site" />
+          <input type="checkbox" id="siteToggle" aria-label="Block on this site" data-i18n-attr="aria-label:popup_block_on_this_site" />
           <span class="slider"></span>
         </label>
       </div>
-      <div class="site-note" id="siteToggleLabel">Block on this site</div>
+      <div class="site-note" id="siteToggleLabel" data-i18n="popup_block_on_this_site">Block on this site</div>
     </section>
 
     <div class="actions">
@@ -43,7 +43,7 @@
     </div>
     <p class="pick-hint" id="pickHint" hidden></p>
     <p class="shortcut-hint">
-      Tip: <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd> starts the picker without opening this
+      Tip: <kbd data-i18n="popup_alt">Alt</kbd>+<kbd data-i18n="popup_shift">Shift</kbd>+<kbd>X</kbd> starts the picker without opening this
       panel.
     </p>
 
@@ -51,13 +51,13 @@
          blocking, so offer the cheap fixes before handing the site back its ads. -->
     <div class="repair" id="repair">
       <div class="repair-panel" id="repairPanel" hidden>
-        <p class="repair-lead" id="repairState">Everything is on for this site.</p>
+        <p class="repair-lead" id="repairState" data-i18n="popup_everything_is_on_for_this_site">Everything is on for this site.</p>
         <!-- The rungs only mean anything while we are still filtering this site. Reporting
              does not, so it lives outside this wrapper. -->
         <div id="repairLadder">
           <button type="button" class="repair-step" id="repairNext"></button>
           <p class="repair-hint" id="repairHint"></p>
-          <button type="button" class="repair-reset link-btn" id="repairReset" hidden>
+          <button type="button" class="repair-reset link-btn" id="repairReset" hidden data-i18n="popup_undo_turn_filtering_back_on">
             Undo — turn filtering back on
           </button>
         </div>
@@ -65,10 +65,10 @@
              giving up: someone who allowlisted the site is the person most worth hearing
              from. Nothing is sent from here — this opens a draft they read and send. -->
         <div class="repair-report">
-          <button type="button" class="link-btn" id="reportBreakage">
+          <button type="button" class="link-btn" id="reportBreakage" data-i18n="popup_still_broken_tell_the_developer">
             Still broken? Tell the developer
           </button>
-          <p class="repair-report-note" id="reportBreakageNote">
+          <p class="repair-report-note" id="reportBreakageNote" data-i18n="popup_copies_a_draft_when_possible_and_opens">
             Copies a draft when possible and opens your email app if one is available. Includes
             the site name and your StampStack settings — not the page URL or its content.
           </p>
@@ -77,18 +77,18 @@
     </div>
 
     <p class="reload-note" id="reloadNote" hidden>
-      <span>Reload the page to apply this.</span>
-      <button type="button" id="reloadBtn" class="link-btn">Reload</button>
+      <span data-i18n="popup_reload_the_page_to_apply_this">Reload the page to apply this.</span>
+      <button type="button" id="reloadBtn" class="link-btn" data-i18n="popup_reload">Reload</button>
     </p>
 
     <div class="stats" id="stats">
       <div class="stat">
         <div class="stat-num" id="tabBlocked">0</div>
-        <div class="stat-label">blocked here</div>
+        <div class="stat-label" data-i18n="popup_blocked_here">blocked here</div>
       </div>
       <div class="stat">
         <div class="stat-num" id="totalBlocked">0</div>
-        <div class="stat-label">blocked total</div>
+        <div class="stat-label" data-i18n="popup_blocked_total">blocked total</div>
       </div>
     </div>
 
@@ -100,8 +100,8 @@
          withholds per-request match data from store builds, so nothing here is inferred. -->
     <section class="report" id="report" hidden>
       <div class="report-head">
-        <span class="report-title" id="reportTitle">On this page</span>
-        <button type="button" class="link-btn" id="reportToggle">Details</button>
+        <span class="report-title" id="reportTitle" data-i18n="popup_on_this_page">On this page</span>
+        <button type="button" class="link-btn" id="reportToggle" data-i18n="popup_details">Details</button>
       </div>
       <p class="report-summary" id="reportSummary"></p>
       <ul class="report-list" id="reportList" hidden></ul>
@@ -113,61 +113,61 @@
          no information. -->
     <details class="group">
       <summary class="group-head">
-        <span class="group-title">YouTube</span>
+        <span class="group-title" data-i18n="popup_youtube">YouTube</span>
         <span class="group-state" id="ytSummary"></span>
       </summary>
       <div class="group-body">
         <label class="switch-row">
-          <span>Hide promoted videos</span>
+          <span data-i18n="popup_hide_promoted_videos">Hide promoted videos</span>
           <span class="switch">
-            <input type="checkbox" id="ytSponsoredToggle" aria-label="Hide promoted videos" />
+            <input type="checkbox" id="ytSponsoredToggle" aria-label="Hide promoted videos" data-i18n-attr="aria-label:popup_hide_promoted_videos" />
             <span class="slider"></span>
           </span>
         </label>
         <label class="switch-row">
-          <span>Block Shorts</span>
+          <span data-i18n="popup_block_shorts">Block Shorts</span>
           <span class="switch">
-            <input type="checkbox" id="ytShortsToggle" aria-label="Block Shorts" />
+            <input type="checkbox" id="ytShortsToggle" aria-label="Block Shorts" data-i18n-attr="aria-label:popup_block_shorts" />
             <span class="slider"></span>
           </span>
         </label>
         <label class="switch-row">
-          <span>Skip sponsor segments</span>
+          <span data-i18n="popup_skip_sponsor_segments">Skip sponsor segments</span>
           <span class="switch">
-            <input type="checkbox" id="ytSponsorBlockToggle" aria-label="Skip sponsor segments" />
+            <input type="checkbox" id="ytSponsorBlockToggle" aria-label="Skip sponsor segments" data-i18n-attr="aria-label:popup_skip_sponsor_segments" />
             <span class="slider"></span>
           </span>
         </label>
-        <p class="group-foot">Pick which segment types to skip in Settings.</p>
+        <p class="group-foot" data-i18n="popup_pick_which_segment_types_to_skip_in">Pick which segment types to skip in Settings.</p>
       </div>
     </details>
 
     <details class="group">
       <summary class="group-head">
-        <span class="group-title">Dark mode</span>
+        <span class="group-title" data-i18n="popup_dark_mode">Dark mode</span>
         <span class="group-state" id="darkSummary"></span>
       </summary>
       <div class="group-body">
         <!-- Primary: one-click dark mode for the current page -->
         <label class="switch-row dark-site-row" id="darkSiteRow" hidden>
           <span class="dark-site-text">
-            <span id="darkSiteLabel">Dark mode on this page</span>
+            <span id="darkSiteLabel" data-i18n="popup_dark_mode_on_this_page">Dark mode on this page</span>
             <span class="dark-site-host" id="darkSiteHost"></span>
           </span>
           <span class="switch">
-            <input type="checkbox" id="darkSiteToggle" aria-label="Dark mode on this page" />
+            <input type="checkbox" id="darkSiteToggle" aria-label="Dark mode on this page" data-i18n-attr="aria-label:popup_dark_mode_on_this_page" />
             <span class="slider"></span>
           </span>
         </label>
-        <button type="button" class="dark-reset-link" id="darkResetBtn" hidden>
+        <button type="button" class="dark-reset-link" id="darkResetBtn" hidden data-i18n="popup_reset_to_global_default">
           ↺ Reset to global default
         </button>
 
         <!-- Secondary: default for every site -->
         <label class="switch-row" id="darkModeRow" hidden>
-          <span id="darkModeLabel">Enable on all sites</span>
+          <span id="darkModeLabel" data-i18n="popup_enable_on_all_sites">Enable on all sites</span>
           <span class="switch">
-            <input type="checkbox" id="darkModeToggle" aria-label="Dark mode on all sites" />
+            <input type="checkbox" id="darkModeToggle" aria-label="Dark mode on all sites" data-i18n-attr="aria-label:popup_dark_mode_on_all_sites" />
             <span class="slider"></span>
           </span>
         </label>
@@ -178,11 +178,11 @@
             <span id="darkPrice">$2</span> unlock — separate from ad blocking.
             Reinstalling? Use Restore purchase with your receipt email.
           </p>
-          <button type="button" class="btn-buy" id="darkBuyBtn">Buy dark mode</button>
-          <button type="button" class="btn-buy btn-secondary" id="darkRestoreBtn">
+          <button type="button" class="btn-buy" id="darkBuyBtn" data-i18n="popup_buy_dark_mode">Buy dark mode</button>
+          <button type="button" class="btn-buy btn-secondary" id="darkRestoreBtn" data-i18n="popup_restore_purchase">
             Restore purchase
           </button>
-          <button type="button" class="btn-buy btn-dev" id="darkDevUnlockBtn" hidden>
+          <button type="button" class="btn-buy btn-dev" id="darkDevUnlockBtn" hidden data-i18n="popup_dev_unlock_unpacked">
             Dev unlock (unpacked)
           </button>
         </div>
@@ -193,13 +193,13 @@
 
     <footer class="foot">
       <label class="switch-row pause-row">
-        <span>Pause everywhere</span>
+        <span data-i18n="popup_pause_everywhere">Pause everywhere</span>
         <span class="switch">
-          <input type="checkbox" id="pauseToggle" aria-label="Pause StampStack everywhere" />
+          <input type="checkbox" id="pauseToggle" aria-label="Pause StampStack everywhere" data-i18n-attr="aria-label:popup_pause_stampstack_everywhere" />
           <span class="slider"></span>
         </span>
       </label>
-      <button class="link" id="openOptions">Filter lists &amp; settings →</button>
+      <button class="link" id="openOptions" data-i18n="popup_filter_lists_amp_settings">Filter lists &amp; settings →</button>
     </footer>
 
     <script type="module" src="popup.js"></script>

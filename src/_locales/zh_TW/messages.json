@@ -1,0 +1,723 @@
+{
+  "options_add": {
+    "message": "新增"
+  },
+  "options_add_a_site": {
+    "message": "新增網站"
+  },
+  "options_auto_skip_sponsors_intros_outros_self_promo": {
+    "message": "自動略過贊助、片頭、片尾、自我宣傳與互動提醒"
+  },
+  "options_backup": {
+    "message": "備份"
+  },
+  "options_blocked_count_dev_only": {
+    "message": "攔截次數（僅開發版）"
+  },
+  "options_buy_dark_mode_2": {
+    "message": "購買深色模式（$$2）"
+  },
+  "options_buy_dark_mode_price": {
+    "message": "購買深色模式（$PRICE$）",
+    "placeholders": {
+      "price": {
+        "content": "$1",
+        "example": "$2"
+      }
+    }
+  },
+  "options_checking_license": {
+    "message": "正在檢查授權…"
+  },
+  "options_clear": {
+    "message": "清除"
+  },
+  "options_custom_lines_ignored_one": {
+    "message": "已忽略 $COUNT$ 行。",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "options_custom_lines_ignored_other": {
+    "message": "已忽略 $COUNT$ 行。",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "3"
+      }
+    }
+  },
+  "options_custom_rules_active_one": {
+    "message": "$COUNT$ 條規則生效中",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "options_custom_rules_active_other": {
+    "message": "$COUNT$ 條規則生效中",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "12"
+      }
+    }
+  },
+  "options_custom_saved_one": {
+    "message": "已儲存 — $COUNT$ 條規則生效中。",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "options_custom_saved_other": {
+    "message": "已儲存 — $COUNT$ 條規則生效中。",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "12"
+      }
+    }
+  },
+  "options_dark_mode_paid": {
+    "message": "深色模式（付費）"
+  },
+  "options_dev_unlock_applied": {
+    "message": "已套用開發解鎖（僅限未封裝版本）。"
+  },
+  "options_element_hiding_off": {
+    "message": "元素隱藏已關閉"
+  },
+  "options_element_hiding_scriptlets_off": {
+    "message": "元素隱藏與腳本片段已關閉"
+  },
+  "options_enable_dark_mode": {
+    "message": "啟用深色模式"
+  },
+  "options_enable_filter_list": {
+    "message": "啟用過濾規則清單 $TITLE$",
+    "placeholders": {
+      "title": {
+        "content": "$1",
+        "example": "EasyPrivacy"
+      }
+    }
+  },
+  "options_every_site_where_you_changed_something_in": {
+    "message": "你調整過的網站都集中在這裡。修復步驟會保留廣告攔截，只關掉弄壞頁面的那一部分；已加入白名單的網站則完全不攔截。"
+  },
+  "options_example_com": {
+    "message": "example.com"
+  },
+  "options_export_failed": {
+    "message": "匯出失敗。"
+  },
+  "options_export_settings": {
+    "message": "匯出設定"
+  },
+  "options_export_your_lists_site_rules_and_preferences": {
+    "message": "將你的清單、網站規則與偏好設定匯出成檔案，或在另一台電腦上還原。購買紀錄不包含在內 — 請用收據上的電子郵件還原。"
+  },
+  "options_exported_file": {
+    "message": "已匯出 $FILE$",
+    "placeholders": {
+      "file": {
+        "content": "$1",
+        "example": "stampstack-settings.json"
+      }
+    }
+  },
+  "options_extensionpay_not_configured": {
+    "message": "尚未設定 ExtensionPay"
+  },
+  "options_filter_error_line": {
+    "message": "第 $LINE$ 行：$REASON$",
+    "placeholders": {
+      "line": {
+        "content": "$1",
+        "example": "12"
+      },
+      "reason": {
+        "content": "$2",
+        "example": "unsupported network rule"
+      }
+    }
+  },
+  "options_filter_lists": {
+    "message": "過濾規則清單"
+  },
+  "options_force_off": {
+    "message": "強制關閉"
+  },
+  "options_force_on": {
+    "message": "強制開啟"
+  },
+  "options_force_on_or_off_for_specific_hostnames": {
+    "message": "針對特定主機名稱強制開啟或關閉。清除項目即可跟隨全域開關。"
+  },
+  "options_group_ads": {
+    "message": "廣告"
+  },
+  "options_group_annoyances": {
+    "message": "干擾元素"
+  },
+  "options_group_privacy": {
+    "message": "隱私"
+  },
+  "options_group_security": {
+    "message": "安全"
+  },
+  "options_hide_shorts_entry_points_and_redirect_shorts": {
+    "message": "隱藏 Shorts 入口並改寫 Shorts 網址"
+  },
+  "options_import_failed": {
+    "message": "匯入失敗。"
+  },
+  "options_import_settings": {
+    "message": "匯入設定…"
+  },
+  "options_license_buy_hint": {
+    "message": "購買會開啟 ExtensionPay / Stripe（一次性 $$2）。已經付款了嗎？請用收據上的電子郵件還原。無論如何，廣告攔截都維持免費。"
+  },
+  "options_license_free": {
+    "message": "免費 — 需購買才能啟用"
+  },
+  "options_license_local_cache_hint": {
+    "message": "正在使用本機授權快取（此版本缺少 ExtensionPay id）。"
+  },
+  "options_license_paid": {
+    "message": "已付款 — 已解鎖"
+  },
+  "options_license_paid_email": {
+    "message": "已付款 — 已解鎖 · $EMAIL$",
+    "placeholders": {
+      "email": {
+        "content": "$1",
+        "example": "user@example.com"
+      }
+    }
+  },
+  "options_license_paid_grace": {
+    "message": "已付款 — 已解鎖（離線寬限期）"
+  },
+  "options_license_paid_grace_email": {
+    "message": "已付款 — 已解鎖（離線寬限期）· $EMAIL$",
+    "placeholders": {
+      "email": {
+        "content": "$1",
+        "example": "user@example.com"
+      }
+    }
+  },
+  "options_license_refresh_hint": {
+    "message": "連上網路時會從 ExtensionPay 更新授權。離線寬限期最長 14 天。"
+  },
+  "options_license_unavailable_hint": {
+    "message": "此版本無法購買 — 請從 Chrome 線上應用程式商店更新 StampStack。"
+  },
+  "options_license_unpacked_hint": {
+    "message": "此版本未設定 ExtensionPay。未封裝版本：請用開發解鎖測試深色模式。"
+  },
+  "options_list_not_active": {
+    "message": "未生效 — Chrome 的共用規則額度已滿。有 $COUNT$ 條網路規則未載入；此清單的元素隱藏仍然有效。",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "120,377"
+      }
+    }
+  },
+  "options_list_rule_count": {
+    "message": "$COUNT$ 條網路規則 · 元素隱藏跟隨此開關",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "120,377"
+      }
+    }
+  },
+  "options_loading": {
+    "message": "載入中…"
+  },
+  "options_manifest_v3_ad_amp_tracker_blocker_ubo": {
+    "message": "Manifest V3 廣告與追蹤器攔截器 · 在規則允許範圍內對齊 uBO"
+  },
+  "options_my_filters": {
+    "message": "我的過濾規則"
+  },
+  "options_network_rules_active": {
+    "message": "網路規則生效中"
+  },
+  "options_no_blocking_at_all": {
+    "message": "完全不攔截"
+  },
+  "options_no_filter_lists": {
+    "message": "沒有可用的過濾規則清單。請重新安裝 StampStack 或聯絡技術支援。"
+  },
+  "options_none_yet": {
+    "message": "目前沒有。"
+  },
+  "options_optional_one_time_unlock_that_darkens_ordinary": {
+    "message": "選購的一次性解鎖，可把一般網頁變暗（智慧反轉）。原本就是深色的介面會保持原樣，不會被反轉成亮色。與暫停和網站白名單互不相干 — 廣告攔截維持免費。重新安裝了嗎？請用 ExtensionPay / Stripe 收據上的電子郵件執行還原購買。"
+  },
+  "options_override_value": {
+    "message": "覆寫值"
+  },
+  "options_paid_sponsored_feed_tiles_and_in_player": {
+    "message": "付費／「贊助」動態方塊與播放器內的廣告介面"
+  },
+  "options_per_site_overrides": {
+    "message": "各網站覆寫設定"
+  },
+  "options_refresh_license": {
+    "message": "重新整理授權"
+  },
+  "options_regex_rules_1000": {
+    "message": "正規表示式規則 / 1000"
+  },
+  "options_remove": {
+    "message": "移除"
+  },
+  "options_requests_blocked": {
+    "message": "個請求被攔截"
+  },
+  "options_rule": {
+    "message": "規則"
+  },
+  "options_rules_active_reduced": {
+    "message": "規則生效中（已縮減）"
+  },
+  "options_save_filters": {
+    "message": "儲存過濾規則"
+  },
+  "options_settings_imported": {
+    "message": "設定已匯入。"
+  },
+  "options_site_rules": {
+    "message": "網站規則"
+  },
+  "options_site_rules_load_failed": {
+    "message": "無法載入網站規則。"
+  },
+  "options_skip_segments": {
+    "message": "略過 $CATEGORY$ 片段",
+    "placeholders": {
+      "category": {
+        "content": "$1",
+        "example": "Sponsor"
+      }
+    }
+  },
+  "options_sponsor_all_categories_off": {
+    "message": "所有類別都已關閉 — StampStack 不會連線 SponsorBlock API。"
+  },
+  "options_sponsorblock_skip": {
+    "message": "SponsorBlock 略過"
+  },
+  "options_stampstack_settings": {
+    "message": "StampStack — 設定"
+  },
+  "options_stat_unavailable": {
+    "message": "無資料"
+  },
+  "options_toggle_lists_on_or_off_this_enables": {
+    "message": "開啟或關閉清單。這會一併啟用或停用該清單的網路規則、元素隱藏與腳本片段。清單內容隨擴充功能一起提供；更新會隨新版 StampStack 送達。"
+  },
+  "options_which_segments_to_skip": {
+    "message": "要略過哪些片段"
+  },
+  "popup_alt": {
+    "message": "Alt"
+  },
+  "popup_block_on_this_site": {
+    "message": "在此網站啟用攔截"
+  },
+  "popup_block_shorts": {
+    "message": "攔截 Shorts"
+  },
+  "popup_blocked_here": {
+    "message": "在此攔截"
+  },
+  "popup_blocked_total": {
+    "message": "累計攔截"
+  },
+  "popup_blocking_is_off_here": {
+    "message": "此處已關閉攔截"
+  },
+  "popup_blocking_off_allowlisted": {
+    "message": "攔截已關閉（已加入白名單）"
+  },
+  "popup_blocking_off_via": {
+    "message": "攔截已關閉（透過 $HOST$）",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
+  },
+  "popup_blocking_on_this_site": {
+    "message": "此網站攔截中"
+  },
+  "popup_breakage_build_failed": {
+    "message": "無法建立回報內容。請聯絡 $EMAIL$",
+    "placeholders": {
+      "email": {
+        "content": "$1",
+        "example": "support@example.com"
+      }
+    }
+  },
+  "popup_breakage_copied": {
+    "message": "草稿已複製 — 若有可用的郵件程式就會開啟。請寄到 $EMAIL$",
+    "placeholders": {
+      "email": {
+        "content": "$1",
+        "example": "support@example.com"
+      }
+    }
+  },
+  "popup_breakage_no_app": {
+    "message": "沒有開啟郵件程式。請把 $HOST$ 回報到 $EMAIL$",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "example.com"
+      },
+      "email": {
+        "content": "$2",
+        "example": "support@example.com"
+      }
+    }
+  },
+  "popup_breakage_no_app_copied": {
+    "message": "沒有開啟郵件程式 — 回報內容已在剪貼簿。請寄到 $EMAIL$",
+    "placeholders": {
+      "email": {
+        "content": "$1",
+        "example": "support@example.com"
+      }
+    }
+  },
+  "popup_breakage_opening": {
+    "message": "若有可用的郵件程式就會開啟 — 請寄到 $EMAIL$",
+    "placeholders": {
+      "email": {
+        "content": "$1",
+        "example": "support@example.com"
+      }
+    }
+  },
+  "popup_buy_dark_mode": {
+    "message": "購買深色模式"
+  },
+  "popup_checkout_unavailable": {
+    "message": "無法結帳。請試試還原購買，或開啟選項。"
+  },
+  "popup_checkout_unavailable_unpacked": {
+    "message": "無法結帳 — 請用開發解鎖，或在選項中設定 ExtensionPay id。"
+  },
+  "popup_copies_a_draft_when_possible_and_opens": {
+    "message": "會盡量複製一份草稿，並在有可用的郵件程式時開啟它。內容包含網站名稱與你的 StampStack 設定 — 不含頁面網址或內容。"
+  },
+  "popup_dark_hint_already_paid": {
+    "message": "已經付款了嗎？請用收據上的電子郵件還原購買。廣告攔截維持免費。"
+  },
+  "popup_dark_hint_dev_unlock": {
+    "message": "未封裝開發版：可用開發解鎖免付費測試深色模式。"
+  },
+  "popup_dark_hint_extpay_unconfigured": {
+    "message": "尚未設定 ExtensionPay — 請在此使用開發解鎖，或前往選項。"
+  },
+  "popup_dark_hint_purchases_unavailable": {
+    "message": "此版本無法購買 — 請從商店更新 StampStack。"
+  },
+  "popup_dark_hint_restricted_page": {
+    "message": "在 Chrome 線上應用程式商店頁面無法使用 — Chrome 不允許擴充功能修改這些頁面。"
+  },
+  "popup_dark_mode": {
+    "message": "深色模式"
+  },
+  "popup_dark_mode_is_off_here": {
+    "message": "此處的深色模式已關閉"
+  },
+  "popup_dark_mode_is_on_here": {
+    "message": "此處的深色模式已開啟"
+  },
+  "popup_dark_mode_on_all_sites": {
+    "message": "所有網站啟用深色模式"
+  },
+  "popup_dark_mode_on_this_page": {
+    "message": "此頁面啟用深色模式"
+  },
+  "popup_dark_summary_off": {
+    "message": "已關閉"
+  },
+  "popup_dark_summary_off_here": {
+    "message": "此處已關閉"
+  },
+  "popup_dark_summary_on_here": {
+    "message": "此處已開啟"
+  },
+  "popup_dark_summary_unavailable": {
+    "message": "此處無法使用"
+  },
+  "popup_details": {
+    "message": "詳細資料"
+  },
+  "popup_dev_unlock_failed": {
+    "message": "開發解鎖失敗"
+  },
+  "popup_dev_unlock_unpacked": {
+    "message": "開發解鎖（未封裝）"
+  },
+  "popup_does_not_run_on_this_page": {
+    "message": "StampStack 不會在此頁面執行"
+  },
+  "popup_enable_on_all_sites": {
+    "message": "在所有網站啟用"
+  },
+  "popup_everything_is_on_for_this_site": {
+    "message": "此網站的功能全部開啟。"
+  },
+  "popup_filter_lists_amp_settings": {
+    "message": "過濾規則清單與設定 →"
+  },
+  "popup_hide": {
+    "message": "隱藏"
+  },
+  "popup_hide_promoted_videos": {
+    "message": "隱藏推廣影片"
+  },
+  "popup_not_available_on_this_page": {
+    "message": "此頁面無法使用"
+  },
+  "popup_on_this_page": {
+    "message": "本頁面上"
+  },
+  "popup_pause_everywhere": {
+    "message": "全部暫停"
+  },
+  "popup_pause_stampstack_everywhere": {
+    "message": "在所有網站暫停 StampStack"
+  },
+  "popup_paused_globally": {
+    "message": "已全域暫停"
+  },
+  "popup_paused_no_rules_active": {
+    "message": "已暫停 — 沒有規則生效"
+  },
+  "popup_pick_which_segment_types_to_skip_in": {
+    "message": "可在設定中選擇要略過的片段類型。"
+  },
+  "popup_picker_could_not_start": {
+    "message": "選取工具無法在此啟動。"
+  },
+  "popup_reload": {
+    "message": "重新載入"
+  },
+  "popup_reload_the_page_to_apply_this": {
+    "message": "重新載入頁面才會套用。"
+  },
+  "popup_repair_hint_allowlist": {
+    "message": "最後手段 — 此網站的廣告與追蹤器會回來。"
+  },
+  "popup_repair_hint_cosmetics": {
+    "message": "可修復版面塌陷、空白區塊與卡住的選單。"
+  },
+  "popup_repair_hint_injection": {
+    "message": "可修復因反廣告攔截修補而故障的播放器與登入。"
+  },
+  "popup_repair_next_allowlist": {
+    "message": "關閉此網站的攔截"
+  },
+  "popup_repair_next_cosmetics": {
+    "message": "停止在此隱藏元素"
+  },
+  "popup_repair_next_injection": {
+    "message": "同時停止在此執行腳本片段"
+  },
+  "popup_repair_state_allowlisted": {
+    "message": "此網站已關閉攔截 — 這裡不會過濾任何東西。"
+  },
+  "popup_repair_state_cosmetics": {
+    "message": "此處已關閉元素隱藏。廣告攔截與腳本片段仍在運作。"
+  },
+  "popup_repair_state_injection": {
+    "message": "此處已關閉元素隱藏與腳本片段。廣告仍會被攔截。"
+  },
+  "popup_report_ad_slot_one": {
+    "message": "已隱藏 $COUNT$ 個廣告版位。",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "popup_report_ad_slots_many": {
+    "message": "已隱藏 $COUNT$ 個廣告版位。",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "4"
+      }
+    }
+  },
+  "popup_report_list_truncated": {
+    "message": "清單已截斷"
+  },
+  "popup_report_no_known_trackers": {
+    "message": "此處沒有辨識出已知的追蹤器。"
+  },
+  "popup_report_no_third_party": {
+    "message": "沒有看到第三方連線。"
+  },
+  "popup_report_other_host_one": {
+    "message": "另有 $COUNT$ 個無法辨識名稱的第三方主機",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "popup_report_other_hosts_many": {
+    "message": "另有 $COUNT$ 個無法辨識名稱的第三方主機",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "3"
+      }
+    }
+  },
+  "popup_report_reload_to_see": {
+    "message": "重新載入頁面就能看到它連往哪裡。"
+  },
+  "popup_report_state_blocked": {
+    "message": "已攔截"
+  },
+  "popup_report_state_unlisted": {
+    "message": "不在我們的清單中"
+  },
+  "popup_report_tracker_one": {
+    "message": "連往了 $COUNT$ 個已知追蹤器。",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "popup_report_tracker_one_rules": {
+    "message": "連往了 $COUNT$ 個已知追蹤器 — StampStack 有其中 $BLOCKED$ 個的規則。",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      },
+      "blocked": {
+        "content": "$2",
+        "example": "1"
+      }
+    }
+  },
+  "popup_report_trackers_many": {
+    "message": "連往了 $COUNT$ 個已知追蹤器。",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "7"
+      }
+    }
+  },
+  "popup_report_trackers_many_rules": {
+    "message": "連往了 $COUNT$ 個已知追蹤器 — StampStack 有其中 $BLOCKED$ 個的規則。",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "7"
+      },
+      "blocked": {
+        "content": "$2",
+        "example": "5"
+      }
+    }
+  },
+  "popup_reset_to_global_default": {
+    "message": "↺ 重設為全域預設值"
+  },
+  "popup_restore_purchase": {
+    "message": "還原購買"
+  },
+  "popup_restore_unavailable": {
+    "message": "無法還原。請開啟選項 → 還原購買。"
+  },
+  "popup_rules_active": {
+    "message": "$COUNT$ 條攔截規則生效中",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "120,377"
+      }
+    }
+  },
+  "popup_rules_active_degraded": {
+    "message": "$COUNT$ 條規則生效中 — 有清單無法載入，請看設定",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "120,377"
+      }
+    }
+  },
+  "popup_settings": {
+    "message": "設定"
+  },
+  "popup_shift": {
+    "message": "Shift"
+  },
+  "popup_site_toggle_failed": {
+    "message": "無法變更此網站 — 請看設定"
+  },
+  "popup_skip_sponsor_segments": {
+    "message": "略過贊助片段"
+  },
+  "popup_stampstack": {
+    "message": "StampStack"
+  },
+  "popup_stampstack_is_paused": {
+    "message": "StampStack 已暫停"
+  },
+  "popup_still_broken_tell_the_developer": {
+    "message": "還是壞的嗎？告訴開發者"
+  },
+  "popup_summary_paused": {
+    "message": "已暫停"
+  },
+  "popup_this_page": {
+    "message": "此頁面"
+  },
+  "popup_undo_turn_filtering_back_on": {
+    "message": "復原 — 重新開啟過濾"
+  },
+  "popup_youtube": {
+    "message": "YouTube"
+  },
+  "popup_youtube_summary_on": {
+    "message": "3 項中開啟 $COUNT$ 項",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "2"
+      }
+    }
+  }
+}

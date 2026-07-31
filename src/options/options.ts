@@ -15,19 +15,27 @@ import type {
 } from '../shared/types.js';
 import { siteFixLabel } from '../shared/site-fix.js';
 import { listAge } from '../shared/list-age.js';
+import { applyI18n, msg } from '../shared/i18n.js';
 import { STORAGE_KEY } from '../shared/constants.js';
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
-function send(msg: Message): Promise<unknown> {
-  return chrome.runtime.sendMessage(msg);
+function send(message: Message): Promise<unknown> {
+  return chrome.runtime.sendMessage(message);
 }
 
-const GROUP_LABEL: Record<ListGroup, string> = {
-  ads: 'Ads',
-  privacy: 'Privacy',
-  security: 'Security',
-  annoyances: 'Annoyances',
+const GROUP_KEY: Record<ListGroup, string> = {
+  ads: 'options_group_ads',
+  privacy: 'options_group_privacy',
+  security: 'options_group_security',
+  annoyances: 'options_group_annoyances',
+};
+
+// The ladder labels live in shared/site-fix.ts for the popup's benefit; the options page
+// translates them here rather than making that module depend on chrome.i18n.
+const SITE_FIX_KEY: Record<SiteFixLevel, string> = {
+  cosmetics: 'options_element_hiding_off',
+  injection: 'options_element_hiding_scriptlets_off',
 };
 
 async function loadStats(): Promise<void> {
@@ -37,16 +45,22 @@ async function loadStats(): Promise<void> {
   const activeRules = s.paused
     ? 0
     : s.lists.filter((l) => l.active).reduce((n, l) => n + l.ruleCount, 0);
-  $('statTotal').textContent = s.statsReliable ? s.blockedTotal.toLocaleString() : 'n/a';
+  $('statTotal').textContent = s.statsReliable
+    ? s.blockedTotal.toLocaleString()
+    : msg('options_stat_unavailable');
   $('statRules').textContent = activeRules.toLocaleString();
   const rulesLabel = document.querySelector('#statRules')?.parentElement?.querySelector('.card-label');
   if (rulesLabel) {
-    rulesLabel.textContent = s.degraded ? 'rules active (reduced)' : 'network rules active';
+    rulesLabel.textContent = msg(
+      s.degraded ? 'options_rules_active_reduced' : 'options_network_rules_active',
+    );
   }
   $('statRegex').textContent = String(s.regexRulesUsed);
   const totalLabel = document.querySelector('#statTotal')?.parentElement?.querySelector('.card-label');
   if (totalLabel) {
-    totalLabel.textContent = s.statsReliable ? 'requests blocked' : 'blocked count (dev only)';
+    totalLabel.textContent = msg(
+      s.statsReliable ? 'options_requests_blocked' : 'options_blocked_count_dev_only',
+    );
   }
 
   // Lists are frozen at build time, so their age is the one thing about coverage the UI
@@ -68,7 +82,7 @@ function listItem(l: ListsData['lists'][number]): HTMLElement {
   title.textContent = l.title;
   const badge = document.createElement('span');
   badge.className = 'badge';
-  badge.textContent = GROUP_LABEL[l.group] ?? l.group;
+  badge.textContent = msg(GROUP_KEY[l.group]) || l.group;
   title.appendChild(badge);
   const meta = document.createElement('div');
   meta.className = 'list-meta';
@@ -76,11 +90,9 @@ function listItem(l: ListsData['lists'][number]): HTMLElement {
     // The user asked for this list and Chrome refused to load it. Saying so is the whole
     // point — the toggle used to read "on" while the rules were not there.
     meta.classList.add('list-warn');
-    meta.textContent =
-      `Not active — Chrome's shared rule limit is full. ${l.ruleCount.toLocaleString()} ` +
-      'network rules are not loaded; element hiding for this list still works.';
+    meta.textContent = msg('options_list_not_active', [l.ruleCount.toLocaleString()]);
   } else {
-    meta.textContent = `${l.ruleCount.toLocaleString()} network rules · cosmetics follow this toggle`;
+    meta.textContent = msg('options_list_rule_count', [l.ruleCount.toLocaleString()]);
   }
   info.append(title, meta);
 
@@ -89,7 +101,7 @@ function listItem(l: ListsData['lists'][number]): HTMLElement {
   const input = document.createElement('input');
   input.type = 'checkbox';
   input.checked = l.enabled;
-  input.setAttribute('aria-label', `Enable filter list ${l.title}`);
+  input.setAttribute('aria-label', msg('options_enable_filter_list', [l.title]));
   const slider = document.createElement('span');
   slider.className = 'slider';
   sw.append(input, slider);
@@ -110,7 +122,7 @@ async function loadLists(): Promise<void> {
   const container = $('lists');
   container.textContent = '';
   if (!data.lists.length) {
-    container.textContent = 'No filter lists available. Reinstall StampStack or contact support.';
+    container.textContent = msg('options_no_filter_lists');
     return;
   }
   for (const l of data.lists) container.appendChild(listItem(l));
@@ -164,7 +176,7 @@ function categoryRow(c: SponsorCategoriesData['categories'][number]): HTMLElemen
   const input = document.createElement('input');
   input.type = 'checkbox';
   input.checked = c.enabled;
-  input.setAttribute('aria-label', `Skip ${c.label} segments`);
+  input.setAttribute('aria-label', msg('options_skip_segments', [c.label]));
   const slider = document.createElement('span');
   slider.className = 'slider';
   sw.append(input, slider);
@@ -188,7 +200,7 @@ function renderSponsorCategories(data: SponsorCategoriesData): void {
   container.textContent = '';
   for (const c of data.categories) container.append(categoryRow(c));
   $('sponsorCategoriesNote').textContent = data.allOff
-    ? 'Every category is off — StampStack will not contact the SponsorBlock API.'
+    ? msg('options_sponsor_all_categories_off')
     : '';
 }
 
@@ -202,7 +214,7 @@ function renderDarkOverrides(data: DarkModeData): void {
   container.textContent = '';
   const entries = Object.entries(data.siteOverrides);
   if (!entries.length) {
-    container.textContent = 'None yet.';
+    container.textContent = msg('options_none_yet');
     return;
   }
   for (const [host, override] of entries.sort(([a], [b]) => a.localeCompare(b))) {
@@ -215,12 +227,12 @@ function renderDarkOverrides(data: DarkModeData): void {
     title.textContent = host;
     const meta = document.createElement('div');
     meta.className = 'list-meta';
-    meta.textContent = override === 'on' ? 'Force on' : 'Force off';
+    meta.textContent = msg(override === 'on' ? 'options_force_on' : 'options_force_off');
     info.append(title, meta);
     const clear = document.createElement('button');
     clear.type = 'button';
     clear.className = 'override-clear';
-    clear.textContent = 'Clear';
+    clear.textContent = msg('options_clear');
     clear.addEventListener('click', async () => {
       await send({ type: 'darkmode:setSiteOverride', hostname: host, override: null });
       void loadDarkMode();
@@ -238,33 +250,45 @@ async function loadDarkMode(): Promise<void> {
   const hint = $('darkActionHint');
   const dev = $<HTMLButtonElement>('darkDevUnlock');
 
-  buy.textContent = `Buy dark mode (${data.license.priceLabel})`;
+  buy.textContent = msg('options_buy_dark_mode_price', [data.license.priceLabel]);
   toggle.checked = data.paid && data.enabled;
   toggle.disabled = !data.paid;
 
   if (data.paid) {
-    let statusText = 'Paid — unlocked';
-    if (data.license.grace) statusText += ' (offline grace)';
-    if (data.license.email) statusText += ` · ${data.license.email}`;
-    status.textContent = statusText;
-    hint.textContent = data.license.configured
-      ? 'License refreshes from ExtensionPay when online. Offline grace lasts up to 14 days.'
-      : 'Using a local license cache (ExtensionPay id missing in this build).';
+    // One whole sentence per state rather than glued-together fragments: "(offline grace)" and
+    // the email are not separable clauses in every language.
+    const email = data.license.email;
+    if (data.license.grace) {
+      status.textContent = email
+        ? msg('options_license_paid_grace_email', [email])
+        : msg('options_license_paid_grace');
+    } else {
+      status.textContent = email
+        ? msg('options_license_paid_email', [email])
+        : msg('options_license_paid');
+    }
+    hint.textContent = msg(
+      data.license.configured
+        ? 'options_license_refresh_hint'
+        : 'options_license_local_cache_hint',
+    );
   } else {
-    status.textContent = 'Free — purchase required to enable';
-    hint.textContent = data.license.configured
-      ? 'Buy opens ExtensionPay / Stripe ($2 one-time). Already paid? Restore with the email from your receipt. Ad blocking stays free either way.'
-      : data.license.unpacked
-        ? 'ExtensionPay not configured in this build. Unpacked: use Dev unlock to test dark mode.'
-        : 'Purchases unavailable in this build — update StampStack from the Chrome Web Store.';
+    status.textContent = msg('options_license_free');
+    hint.textContent = msg(
+      data.license.configured
+        ? 'options_license_buy_hint'
+        : data.license.unpacked
+          ? 'options_license_unpacked_hint'
+          : 'options_license_unavailable_hint',
+    );
   }
 
   buy.disabled = !data.license.configured && !data.license.unpacked;
   const restore = $<HTMLButtonElement>('darkRestore');
   restore.disabled = !data.license.configured;
   if (!data.license.configured) {
-    buy.title = 'ExtensionPay not configured';
-    restore.title = 'ExtensionPay not configured';
+    buy.title = msg('options_extensionpay_not_configured');
+    restore.title = msg('options_extensionpay_not_configured');
   } else {
     buy.title = '';
     restore.title = '';
@@ -316,7 +340,7 @@ $('darkRefresh').addEventListener('click', async () => {
 $('darkDevUnlock').addEventListener('click', async () => {
   const r = (await send({ type: 'license:devUnlock' })) as { ok: boolean; error?: string };
   if (!r?.ok && r?.error) $('darkActionHint').textContent = r.error;
-  else $('darkActionHint').textContent = 'Dev unlock applied (unpacked only).';
+  else $('darkActionHint').textContent = msg('options_dev_unlock_applied');
   void loadDarkMode();
 });
 
@@ -363,25 +387,25 @@ async function loadSiteRules(): Promise<void> {
   const container = $('siteRules');
   container.textContent = '';
   if (!data) {
-    container.textContent = 'Could not load site rules.';
+    container.textContent = msg('options_site_rules_load_failed');
     return;
   }
 
   const rows: { host: string; label: string; kind: 'fix' | 'allowlist' }[] = [
     ...Object.entries(data.siteFixes).map(([host, level]) => ({
       host,
-      label: siteFixLabel(level),
+      label: msg(SITE_FIX_KEY[level]) || siteFixLabel(level),
       kind: 'fix' as const,
     })),
     ...data.allowlist.map((host) => ({
       host,
-      label: 'No blocking at all',
+      label: msg('options_no_blocking_at_all'),
       kind: 'allowlist' as const,
     })),
   ].sort((a, b) => a.host.localeCompare(b.host));
 
   if (!rows.length) {
-    container.textContent = 'None yet.';
+    container.textContent = msg('options_none_yet');
     return;
   }
 
@@ -401,7 +425,7 @@ async function loadSiteRules(): Promise<void> {
     const clear = document.createElement('button');
     clear.type = 'button';
     clear.className = 'override-clear';
-    clear.textContent = 'Remove';
+    clear.textContent = msg('options_remove');
     clear.addEventListener('click', async () => {
       if (row.kind === 'allowlist') {
         await send({ type: 'popup:toggleSite', hostname: row.host, enabled: true });
@@ -443,7 +467,7 @@ function renderCustomErrors(data: CustomFiltersData): void {
   for (const err of data.errors) {
     const row = document.createElement('div');
     row.className = 'filter-error';
-    row.textContent = `Line ${err.line}: ${err.reason}`;
+    row.textContent = msg('options_filter_error_line', [String(err.line), err.reason]);
     box.append(row);
   }
 }
@@ -454,21 +478,42 @@ async function loadCustomFilters(): Promise<void> {
   const box = $<HTMLTextAreaElement>('customFilters');
   // Never clobber an in-progress edit when a storage event triggers a reload.
   if (document.activeElement !== box) box.value = data.text;
-  $('customStatus').textContent = `${data.count} rule${data.count === 1 ? '' : 's'} active`;
+  $('customStatus').textContent = rulesActiveText(data.count);
   renderCustomErrors(data);
+}
+
+// Chrome's message format has no plural rules, so singular and plural are separate whole
+// messages — a locale that needs a different split can still translate each one.
+function rulesActiveText(count: number): string {
+  const key = count === 1 ? 'options_custom_rules_active_one' : 'options_custom_rules_active_other';
+  return msg(key, [count.toLocaleString()]);
 }
 
 $<HTMLButtonElement>('customSave').addEventListener('click', async () => {
   const text = $<HTMLTextAreaElement>('customFilters').value;
   const data = (await send({ type: 'customfilters:set', text })) as CustomFiltersData | null;
   if (!data) return;
-  $('customStatus').textContent =
-    `Saved — ${data.count} rule${data.count === 1 ? '' : 's'} active` +
-    (data.errors.length ? `, ${data.errors.length} line(s) ignored` : '');
+  // Two complete sentences, not two fragments: word order inside each is the translator's.
+  const saved = msg(
+    data.count === 1 ? 'options_custom_saved_one' : 'options_custom_saved_other',
+    [data.count.toLocaleString()],
+  );
+  const ignored = data.errors.length
+    ? msg(
+        data.errors.length === 1
+          ? 'options_custom_lines_ignored_one'
+          : 'options_custom_lines_ignored_other',
+        [data.errors.length.toLocaleString()],
+      )
+    : '';
+  $('customStatus').textContent = ignored ? `${saved} ${ignored}` : saved;
   renderCustomErrors(data);
 });
 
 // --- Backup ----------------------------------------------------------------
+
+// Filename, not prose: it stays the same in every locale and is passed into the message.
+const BACKUP_FILENAME = 'stampstack-settings.json';
 
 function backupStatus(text: string): void {
   $('backupStatus').textContent = text;
@@ -477,7 +522,7 @@ function backupStatus(text: string): void {
 $<HTMLButtonElement>('exportBtn').addEventListener('click', async () => {
   const r = (await send({ type: 'settings:export' })) as { json: string } | null;
   if (!r) {
-    backupStatus('Export failed.');
+    backupStatus(msg('options_export_failed'));
     return;
   }
   // Object URL rather than a data: URL — settings can exceed data-URL length limits once a
@@ -485,10 +530,10 @@ $<HTMLButtonElement>('exportBtn').addEventListener('click', async () => {
   const url = URL.createObjectURL(new Blob([r.json], { type: 'application/json' }));
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'stampstack-settings.json';
+  a.download = BACKUP_FILENAME;
   a.click();
   URL.revokeObjectURL(url);
-  backupStatus('Exported stampstack-settings.json');
+  backupStatus(msg('options_exported_file', [BACKUP_FILENAME]));
 });
 
 $<HTMLButtonElement>('importBtn').addEventListener('click', () => {
@@ -505,10 +550,10 @@ $<HTMLInputElement>('importFile').addEventListener('change', async (e) => {
     | { ok: boolean; error?: string }
     | null;
   if (!r?.ok) {
-    backupStatus(r?.error ?? 'Import failed.');
+    backupStatus(r?.error ?? msg('options_import_failed'));
     return;
   }
-  backupStatus('Settings imported.');
+  backupStatus(msg('options_settings_imported'));
   void loadStats();
   void loadLists();
   void loadYoutubeOptions();
@@ -516,6 +561,10 @@ $<HTMLInputElement>('importFile').addEventListener('change', async (e) => {
   void loadSiteRules();
   void loadCustomFilters();
 });
+
+// Once, before anything loads: the loaders replace container contents afterwards, so this
+// must not run again or it would overwrite rendered rows with their placeholder text.
+applyI18n();
 
 void loadStats();
 void loadLists();

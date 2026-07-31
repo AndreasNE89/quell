@@ -4,32 +4,32 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="stylesheet" href="options.css" />
-    <title>StampStack — Settings</title>
+    <title data-i18n="options_stampstack_settings">StampStack — Settings</title>
   </head>
   <body>
     <main class="wrap">
       <header class="page-head">
         <h1><span class="dot"></span> StampStack</h1>
-        <p class="tagline">Manifest V3 ad &amp; tracker blocker · uBO-parity within the rules</p>
+        <p class="tagline" data-i18n="options_manifest_v3_ad_amp_tracker_blocker_ubo">Manifest V3 ad &amp; tracker blocker · uBO-parity within the rules</p>
       </header>
 
       <section class="cards">
         <div class="card">
           <div class="card-num" id="statTotal">0</div>
-          <div class="card-label">requests blocked</div>
+          <div class="card-label" data-i18n="options_requests_blocked">requests blocked</div>
         </div>
         <div class="card">
           <div class="card-num" id="statRules">0</div>
-          <div class="card-label">network rules active</div>
+          <div class="card-label" data-i18n="options_network_rules_active">network rules active</div>
         </div>
         <div class="card">
           <div class="card-num" id="statRegex">0</div>
-          <div class="card-label">regex rules / 1000</div>
+          <div class="card-label" data-i18n="options_regex_rules_1000">regex rules / 1000</div>
         </div>
       </section>
 
       <section>
-        <h2>YouTube</h2>
+        <h2 data-i18n="popup_youtube">YouTube</h2>
         <p class="hint">
           Extra controls for YouTube. Promoted-video hiding removes paid feed tiles and
           scrubs player ad payloads. Shorts blocking hides Shorts shelves and leaves
@@ -39,51 +39,51 @@
         <div class="lists">
           <div class="list-item">
             <div class="list-info">
-              <div class="list-title">Hide promoted videos</div>
-              <div class="list-meta">Paid / “Sponsored” feed tiles and in-player ad UI</div>
+              <div class="list-title" data-i18n="popup_hide_promoted_videos">Hide promoted videos</div>
+              <div class="list-meta" data-i18n="options_paid_sponsored_feed_tiles_and_in_player">Paid / “Sponsored” feed tiles and in-player ad UI</div>
             </div>
             <label class="switch">
-              <input type="checkbox" id="ytSponsored" aria-label="Hide promoted videos" />
+              <input type="checkbox" id="ytSponsored" aria-label="Hide promoted videos" data-i18n-attr="aria-label:popup_hide_promoted_videos" />
               <span class="slider"></span>
             </label>
           </div>
           <div class="list-item">
             <div class="list-info">
-              <div class="list-title">Block Shorts</div>
-              <div class="list-meta">Hide Shorts entry points and redirect Shorts URLs</div>
+              <div class="list-title" data-i18n="popup_block_shorts">Block Shorts</div>
+              <div class="list-meta" data-i18n="options_hide_shorts_entry_points_and_redirect_shorts">Hide Shorts entry points and redirect Shorts URLs</div>
             </div>
             <label class="switch">
-              <input type="checkbox" id="ytShorts" aria-label="Block Shorts" />
+              <input type="checkbox" id="ytShorts" aria-label="Block Shorts" data-i18n-attr="aria-label:popup_block_shorts" />
               <span class="slider"></span>
             </label>
           </div>
           <div class="list-item">
             <div class="list-info">
-              <div class="list-title">SponsorBlock skip</div>
-              <div class="list-meta">
+              <div class="list-title" data-i18n="options_sponsorblock_skip">SponsorBlock skip</div>
+              <div class="list-meta" data-i18n="options_auto_skip_sponsors_intros_outros_self_promo">
                 Auto-skip sponsors, intros, outros, self-promo, and interaction reminders
               </div>
             </div>
             <label class="switch">
-              <input type="checkbox" id="ytSponsorBlock" aria-label="SponsorBlock skip" />
+              <input type="checkbox" id="ytSponsorBlock" aria-label="SponsorBlock skip" data-i18n-attr="aria-label:options_sponsorblock_skip" />
               <span class="slider"></span>
             </label>
           </div>
         </div>
 
-        <h3 class="subhead">Which segments to skip</h3>
+        <h3 class="subhead" data-i18n="options_which_segments_to_skip">Which segments to skip</h3>
         <p class="hint">
-          Applies only while <strong>SponsorBlock skip</strong> is on above. StampStack asks the
+          Applies only while <strong data-i18n="options_sponsorblock_skip">SponsorBlock skip</strong> is on above. StampStack asks the
           API for the categories you pick here and nothing else — turn them all off and it never
           contacts the API at all.
         </p>
-        <div id="sponsorCategories" class="lists">Loading…</div>
+        <div id="sponsorCategories" class="lists" data-i18n="options_loading">Loading…</div>
         <p class="hint" id="sponsorCategoriesNote"></p>
       </section>
 
       <section>
-        <h2>Dark mode (paid)</h2>
-        <p class="hint">
+        <h2 data-i18n="options_dark_mode_paid">Dark mode (paid)</h2>
+        <p class="hint" data-i18n="options_optional_one_time_unlock_that_darkens_ordinary">
           Optional one-time unlock that darkens ordinary web pages (smart invert).
           Surfaces that are already dark are left alone rather than inverted into light.
           Independent of pause and the site allowlist — ad blocking stays free.
@@ -92,83 +92,83 @@
         <div class="lists">
           <div class="list-item">
             <div class="list-info">
-              <div class="list-title">Enable dark mode</div>
-              <div class="list-meta" id="darkLicenseStatus">Checking license…</div>
+              <div class="list-title" data-i18n="options_enable_dark_mode">Enable dark mode</div>
+              <div class="list-meta" id="darkLicenseStatus" data-i18n="options_checking_license">Checking license…</div>
             </div>
             <label class="switch">
-              <input type="checkbox" id="darkModeEnabled" aria-label="Enable dark mode" />
+              <input type="checkbox" id="darkModeEnabled" aria-label="Enable dark mode" data-i18n-attr="aria-label:options_enable_dark_mode" />
               <span class="slider"></span>
             </label>
           </div>
         </div>
         <div class="dark-actions">
-          <button type="button" class="btn" id="darkBuy">Buy dark mode ($2)</button>
-          <button type="button" class="btn btn-secondary" id="darkRestore">Restore purchase</button>
-          <button type="button" class="btn btn-secondary" id="darkRefresh">Refresh license</button>
-          <button type="button" class="btn btn-secondary" id="darkDevUnlock" hidden>
+          <button type="button" class="btn" id="darkBuy" data-i18n="options_buy_dark_mode_2">Buy dark mode ($2)</button>
+          <button type="button" class="btn btn-secondary" id="darkRestore" data-i18n="popup_restore_purchase">Restore purchase</button>
+          <button type="button" class="btn btn-secondary" id="darkRefresh" data-i18n="options_refresh_license">Refresh license</button>
+          <button type="button" class="btn btn-secondary" id="darkDevUnlock" hidden data-i18n="popup_dev_unlock_unpacked">
             Dev unlock (unpacked)
           </button>
         </div>
         <p class="hint" id="darkActionHint"></p>
-        <h3 class="subhead">Per-site overrides</h3>
-        <p class="hint">Force on or off for specific hostnames. Clear an entry to follow the global toggle.</p>
-        <div id="darkOverrides" class="lists">None yet.</div>
+        <h3 class="subhead" data-i18n="options_per_site_overrides">Per-site overrides</h3>
+        <p class="hint" data-i18n="options_force_on_or_off_for_specific_hostnames">Force on or off for specific hostnames. Clear an entry to follow the global toggle.</p>
+        <div id="darkOverrides" class="lists" data-i18n="options_none_yet">None yet.</div>
         <form class="override-form" id="darkOverrideForm">
           <input
             type="text"
             id="darkOverrideHost"
-            placeholder="example.com"
+            placeholder="example.com" data-i18n-attr="placeholder:options_example_com"
             aria-label="Hostname for dark mode override"
             autocomplete="off"
           />
-          <select id="darkOverrideValue" aria-label="Override value">
-            <option value="on">Force on</option>
-            <option value="off">Force off</option>
+          <select id="darkOverrideValue" aria-label="Override value" data-i18n-attr="aria-label:options_override_value">
+            <option value="on" data-i18n="options_force_on">Force on</option>
+            <option value="off" data-i18n="options_force_off">Force off</option>
           </select>
-          <button type="submit" class="btn btn-secondary">Add</button>
+          <button type="submit" class="btn btn-secondary" data-i18n="options_add">Add</button>
         </form>
       </section>
 
       <section>
-        <h2>Filter lists</h2>
-        <p class="hint">
+        <h2 data-i18n="options_filter_lists">Filter lists</h2>
+        <p class="hint" data-i18n="options_toggle_lists_on_or_off_this_enables">
           Toggle lists on or off. This enables or disables each list’s network rules,
           cosmetics, and scriptlets together. List contents ship with the extension;
           updates arrive with new StampStack versions.
         </p>
         <p class="hint list-age" id="listAge"></p>
-        <div id="lists" class="lists">Loading…</div>
+        <div id="lists" class="lists" data-i18n="options_loading">Loading…</div>
       </section>
 
       <section>
-        <h2>Site rules</h2>
-        <p class="hint">
+        <h2 data-i18n="options_site_rules">Site rules</h2>
+        <p class="hint" data-i18n="options_every_site_where_you_changed_something_in">
           Every site where you changed something, in one place. Repair steps keep ad blocking
           on and only switch off the part that broke the page; allowlisted sites get no
           blocking at all.
         </p>
-        <div id="siteRules" class="lists">Loading…</div>
+        <div id="siteRules" class="lists" data-i18n="options_loading">Loading…</div>
 
-        <h3 class="subhead">Add a site</h3>
+        <h3 class="subhead" data-i18n="options_add_a_site">Add a site</h3>
         <form id="siteRuleForm" class="override-form">
           <input
             type="text"
             id="siteRuleHost"
-            placeholder="example.com"
+            placeholder="example.com" data-i18n-attr="placeholder:options_example_com"
             aria-label="Site hostname"
             autocomplete="off"
           />
-          <select id="siteRuleLevel" aria-label="Rule">
-            <option value="cosmetics">Element hiding off</option>
-            <option value="injection">Element hiding + scriptlets off</option>
-            <option value="allowlist">No blocking at all</option>
+          <select id="siteRuleLevel" aria-label="Rule" data-i18n-attr="aria-label:options_rule">
+            <option value="cosmetics" data-i18n="options_element_hiding_off">Element hiding off</option>
+            <option value="injection" data-i18n="options_element_hiding_scriptlets_off">Element hiding + scriptlets off</option>
+            <option value="allowlist" data-i18n="options_no_blocking_at_all">No blocking at all</option>
           </select>
-          <button type="submit">Add</button>
+          <button type="submit" data-i18n="options_add">Add</button>
         </form>
       </section>
 
       <section>
-        <h2>My filters</h2>
+        <h2 data-i18n="options_my_filters">My filters</h2>
         <p class="hint">
           Your own element-hiding rules, one per line. The popup's element picker writes here.
           Format: <code>example.com##.ad-slot</code> to hide, <code>example.com#@#.ad-slot</code>
@@ -180,25 +180,25 @@
           class="filter-editor"
           rows="8"
           spellcheck="false"
-          aria-label="My filters"
+          aria-label="My filters" data-i18n-attr="aria-label:options_my_filters"
           placeholder="example.com##.sponsored-widget"
         ></textarea>
         <div class="backup-row">
-          <button type="button" id="customSave">Save filters</button>
+          <button type="button" id="customSave" data-i18n="options_save_filters">Save filters</button>
           <span class="hint" id="customStatus" role="status"></span>
         </div>
         <div id="customErrors" class="filter-errors"></div>
       </section>
 
       <section>
-        <h2>Backup</h2>
-        <p class="hint">
+        <h2 data-i18n="options_backup">Backup</h2>
+        <p class="hint" data-i18n="options_export_your_lists_site_rules_and_preferences">
           Export your lists, site rules and preferences as a file, or restore them on another
           machine. Purchases are not included — restore those with the email from your receipt.
         </p>
         <div class="backup-row">
-          <button type="button" id="exportBtn">Export settings</button>
-          <button type="button" id="importBtn">Import settings…</button>
+          <button type="button" id="exportBtn" data-i18n="options_export_settings">Export settings</button>
+          <button type="button" id="importBtn" data-i18n="options_import_settings">Import settings…</button>
           <input type="file" id="importFile" accept="application/json,.json" hidden />
         </div>
         <p class="hint" id="backupStatus" role="status"></p>

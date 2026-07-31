@@ -4,6 +4,7 @@
   "version": "2.1.1",
   "description": "Block ads and trackers with EasyList-style filters, cosmetics, and scriptlets — built for Manifest V3.",
   "minimum_chrome_version": "120",
+  "default_locale": "en",
   "permissions": [
     "declarativeNetRequest",
     "scripting",
