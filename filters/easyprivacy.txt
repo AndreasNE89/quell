@@ -1,9 +1,9 @@
 [Adblock Plus 1.1]
-! Version: 202607310928
+! Version: 202608010803
 ! Title: EasyPrivacy
-! Last modified: 31 Jul 2026 09:28 UTC
+! Last modified: 01 Aug 2026 08:03 UTC
 ! Expires: 4 days (update frequency)
-! Commit: 0e74a6ad65c1d6571620948ca3863cd5f428d515
+! Commit: b20b72c9eaf5e8899bb93e8514792cffec390d4b
 ! *** easylist:template_header.txt ***
 ! 
 ! Please report any unblocked adverts or problems
@@ -6766,6 +6766,7 @@ omni.soundestlink.com$image
 ||amusedbucket.com^
 ||analyzecorona.com^
 ||ancientact.com^
+||andfauna.net^
 ||animalcoder.com^
 ||annoyedairport.com^
 ||annoyingacoustics.com^
@@ -6819,6 +6820,7 @@ omni.soundestlink.com$image
 ||barcodetool.com^
 ||barkfactor.com^
 ||barqueue.com^
+||barrelcider.com^
 ||baseboosters.com^
 ||basilfish.com^
 ||basketballbelieve.com^
@@ -7213,6 +7215,7 @@ omni.soundestlink.com$image
 ||dinnerquartz.com^
 ||direfuldesk.com^
 ||disagreeabledrop.com^
+||discjockeys.net^
 ||discopond.com^
 ||discreetfield.com^
 ||discreetquarter.com^
@@ -7264,6 +7267,7 @@ omni.soundestlink.com$image
 ||effervescentvista.com^
 ||effulgentnook.com^
 ||effulgenttempest.com^
+||eggrecipe.com^
 ||eightgreens.com^
 ||eighthlayer.net^
 ||elasticchange.com^
@@ -15056,6 +15060,8 @@ $third-party,xmlhttprequest,domain=opensubtitles.org
 ||change.org/api-proxy/-/et
 ||change.org/api-proxy/-/event_tracker
 ||channel.io/front/v*/channels/*/events
+||chartkidmatt.com/nectar_analytics
+||chartkidmatt.com/page_view
 ||chase.com/apps/services/clientBeacon.html
 ||chat.groq.com/global_stats
 ||chatfuel.com/cf-analytics/
@@ -15065,6 +15071,7 @@ $third-party,xmlhttprequest,domain=opensubtitles.org
 ||chloro.trip.com^
 ||choosefi.com/api/site/track
 ||choosefi.com/block-event
+||choosefi.com/conversion-event
 ||chronicle.medal.tv^
 ||cidrap.umn.edu/core/modules/statistics
 ||cisco.com/c/dam/cdc/j/at.js
