@@ -6,7 +6,7 @@
     "message": "新增網站"
   },
   "options_auto_skip_sponsors_intros_outros_self_promo": {
-    "message": "自動略過贊助、片頭、片尾、自我宣傳與互動提醒"
+    "message": "自動略過贊助片段。可在下方選擇更多要略過的類別。"
   },
   "options_backup": {
     "message": "備份"

@@ -2,6 +2,23 @@
 
 Written for users, not for the commit log. Internal refactors and test-only work are omitted.
 
+## 2.2.1
+
+- **Fixed: sponsor skipping was far too aggressive.** It skipped much more than sponsor
+  segments, at what looked like random moments. Every one of the seven SponsorBlock
+  categories was on by default — so intros, outros, previews, "like and subscribe" asides
+  and non-music sections were all being auto-skipped, and community markers for those are
+  scattered all over videos. The default is now the same as the official SponsorBlock
+  extension: **sponsors only**. Everything else is opt-in under Settings → Which segments
+  to skip. If you had explicitly turned a category on, your choice is kept.
+- Skips no longer fire while a YouTube ad is playing — the player clock belongs to the ad
+  during those, which made skips land at genuinely random places.
+- The "Skipped — Undo" notice now shows in fullscreen, where skips used to be silent. Undo
+  remains the way to watch a segment: it seeks back and stops that segment skipping again
+  for the rest of the video.
+- Segments that run to the very end of a video (outros, for those who opt in) now skip to
+  just before the end. They previously never skipped at all.
+
 ## 2.2.0
 
 - **中文界面 · Chinese interface.** StampStack now speaks Simplified and Traditional Chinese,

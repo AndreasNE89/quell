@@ -28,19 +28,39 @@ export const SPONSORBLOCK_CATEGORY_INFO: Record<
 };
 
 /**
+ * Whether a category is skipped when the user has never touched its toggle.
+ *
+ * Only `sponsor` — matching the official SponsorBlock extension, whose default is to
+ * auto-skip sponsors and leave every other category opt-in. Shipping all seven on was the
+ * root of "it skips at seemingly random times": interaction reminders, previews and non-music
+ * sections are scattered mid-video, so a default-settings user got yanked around constantly
+ * with no idea why. Skipping content someone did not ask to lose is the one place this
+ * extension should under-reach.
+ */
+export const SPONSORBLOCK_DEFAULT_ON: Record<SponsorBlockCategory, boolean> = {
+  sponsor: true,
+  selfpromo: false,
+  interaction: false,
+  intro: false,
+  outro: false,
+  preview: false,
+  music_offtopic: false,
+};
+
+/**
  * Which categories to act on, given the user's settings.
  *
- * Absent or malformed settings fall back to every category, which is what shipped before this
- * was configurable — a stored blob from an older version must not silently reduce coverage.
+ * An explicit choice always wins; an absent key falls back to the category's own default.
+ * This deliberately changes behavior for older installs that never opened the category
+ * settings: they drop from all seven to sponsor-only. That is the fix, not a regression —
+ * "extremely aggressive, skips at seemingly random times" was reported against the old
+ * all-on default. Anyone who explicitly enabled a category keeps it.
  */
 export function enabledSponsorCategories(
   prefs: Partial<Record<string, boolean>> | undefined,
 ): SponsorBlockCategory[] {
-  if (!prefs || typeof prefs !== 'object') return [...SPONSORBLOCK_SKIP_CATEGORIES];
-  const on = SPONSORBLOCK_SKIP_CATEGORIES.filter((c) => prefs[c] !== false);
-  // Every category off means "skip nothing"; the caller shortcuts the request entirely rather
-  // than asking the API for an empty category list (which would 400).
-  return on;
+  const p = prefs && typeof prefs === 'object' ? prefs : {};
+  return SPONSORBLOCK_SKIP_CATEGORIES.filter((c) => p[c] ?? SPONSORBLOCK_DEFAULT_ON[c]);
 }
 
 export interface SponsorSegment {

@@ -6,7 +6,7 @@
     "message": "添加站点"
   },
   "options_auto_skip_sponsors_intros_outros_self_promo": {
-    "message": "自动跳过赞助、片头、片尾、自我推广和互动提醒"
+    "message": "自动跳过赞助片段。可在下方选择更多要跳过的类别。"
   },
   "options_backup": {
     "message": "备份"

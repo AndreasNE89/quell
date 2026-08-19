@@ -41,6 +41,7 @@ import {
   SPONSORBLOCK_SKIP_CATEGORIES,
   SPONSORBLOCK_CATEGORY_INFO,
   enabledSponsorCategories,
+  SPONSORBLOCK_DEFAULT_ON,
 } from '../shared/sponsorblock.js';
 import {
   ALLOWLIST_ID_START,
@@ -1000,7 +1001,9 @@ async function handleSponsorCategoriesGet(): Promise<SponsorCategoriesData> {
     id,
     label: SPONSORBLOCK_CATEGORY_INFO[id].label,
     hint: SPONSORBLOCK_CATEGORY_INFO[id].hint,
-    enabled: prefs[id] !== false,
+    // Same rule as the fetch path: explicit choice wins, absent falls back to the
+    // category's default. These two must agree or the toggles lie about what is skipped.
+    enabled: prefs[id] ?? SPONSORBLOCK_DEFAULT_ON[id],
   }));
   return { categories, allOff: categories.every((c) => !c.enabled) };
 }

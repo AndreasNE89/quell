@@ -6,7 +6,7 @@
     "message": "Add a site"
   },
   "options_auto_skip_sponsors_intros_outros_self_promo": {
-    "message": "Auto-skip sponsors, intros, outros, self-promo, and interaction reminders"
+    "message": "Auto-skip sponsor segments. Pick more categories to skip below."
   },
   "options_backup": {
     "message": "Backup"

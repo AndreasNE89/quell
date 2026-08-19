@@ -75,13 +75,32 @@ export function findSkipSegment(
 }
 
 function findPlayerVideo(): HTMLVideoElement | null {
-  return (
-    document.querySelector<HTMLVideoElement>('video.html5-main-video') ||
+  // #movie_player first: the hover-preview player (ytd-video-preview) also uses
+  // .html5-main-video, and it can precede the real player in document order — so the old
+  // class-first lookup could grab a thumbnail preview and "skip" inside that instead of the
+  // video being watched.
+  const main =
+    document.querySelector<HTMLVideoElement>('#movie_player video.html5-main-video') ||
     document.querySelector<HTMLVideoElement>('#movie_player video') ||
-    document.querySelector<HTMLVideoElement>('ytd-player video') ||
-    document.querySelector<HTMLVideoElement>('video')
-  );
+    document.querySelector<HTMLVideoElement>('ytd-player video');
+  if (main) return main;
+  for (const v of document.querySelectorAll<HTMLVideoElement>('video')) {
+    if (!v.closest('ytd-video-preview')) return v;
+  }
+  return null;
 }
+
+/**
+ * True while the main player is running an ad. During an ad the element's clock is the AD's
+ * — currentTime counts 0..30s through the ad — so every early-video segment "matches" and a
+ * skip fires at what looks like a random moment. Nothing may be skipped until content time
+ * is back on the clock.
+ */
+function playerShowingAd(): boolean {
+  const p = document.getElementById('movie_player');
+  return !!p && (p.classList.contains('ad-showing') || p.classList.contains('ad-interrupting'));
+}
+
 
 /** Segments the user undid; keyed by UUID so the same one is not re-skipped on this video. */
 const skipSuppressed = new Set<string>();
@@ -120,8 +139,14 @@ function showToast(hit: SponsorSegment, from: number): void {
       opacity: '0',
       transition: 'opacity 120ms ease',
     });
-    (document.documentElement || document.body).appendChild(el);
   }
+  // Re-parent on every show: while the player is fullscreen, only the fullscreened element
+  // renders, so a toast on <html> announced nothing — skips looked like random glitches with
+  // no explanation and no reachable Undo. A <video> cannot render children; use its parent.
+  const fs = document.fullscreenElement;
+  const root =
+    fs && fs.tagName !== 'VIDEO' ? fs : (fs?.parentElement ?? document.documentElement ?? document.body);
+  if (el.parentElement !== root) root.appendChild(el);
   el.textContent = '';
 
   const text = document.createElement('span');
@@ -236,20 +261,29 @@ function tick(): void {
   const video = findPlayerVideo();
   if (!video || video.paused) return;
 
-  const hit = findSkipSegment(segments, video.currentTime);
+  // During an ad the element clock is the ad's, not the video's — nothing may skip.
+  if (playerShowingAd()) return;
+
+  const t = video.currentTime;
+  // Scrubbing into a segment skips it, same as the official SponsorBlock. An earlier draft
+  // tried to detect deliberate scrubs from media-time jumps between ticks; adversarial review
+  // killed it with executed repros — background tabs throttle setInterval to once a minute,
+  // so every tick read as a 60s scrub and sponsors silently played, and an arrow-key nudge is
+  // indistinguishable from a scrub anyway. Undo on the toast is the escape hatch.
+  const hit = findSkipSegment(segments, t);
   if (!hit) return;
   if (skipSuppressed.has(hit.UUID ?? `${hit.segment[0]}`)) return;
 
   const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : null;
   let end = hit.segment[1];
-  // A bad or malicious segment must not be able to end the video. Land just short of the end
-  // rather than at it, so playback continues instead of firing `ended`.
-  if (duration != null) {
-    if (end >= duration - 0.5) return;
-    end = Math.min(end, duration - 0.25);
-  }
-  if (video.currentTime < end - 0.02) {
-    const from = video.currentTime;
+  // A segment must not be able to end the video: land just short, so playback continues
+  // instead of firing `ended`. Clamp rather than refuse — the old early-return for anything
+  // ending near the credits meant outro segments, whose normal shape runs to the very end,
+  // never skipped at all even when the category was opted on. The clamped landing point sits
+  // inside the segment; the t < end - 0.02 check below keeps that from looping.
+  if (duration != null) end = Math.min(end, duration - 0.25);
+  if (t < end - 0.02) {
+    const from = t;
     try {
       video.currentTime = end;
       showToast(hit, from);

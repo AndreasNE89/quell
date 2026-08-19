@@ -59,8 +59,8 @@ export interface Settings {
   /** The user's own cosmetic filters, as raw editable text (one rule per line). */
   customFilters: string;
   /**
-   * Per-category SponsorBlock opt-out. Absent key = enabled, so a settings blob written before
-   * this was configurable keeps the all-categories behavior it had.
+   * Per-category SponsorBlock choice. Absent key = the category's own default
+   * (SPONSORBLOCK_DEFAULT_ON — sponsor only). Explicit true/false always wins.
    */
   sponsorBlockCategories: Record<string, boolean>;
 }
