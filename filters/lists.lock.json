@@ -1,6 +1,6 @@
 {
   "comment": "Integrity record for the lists compiled into a release. Written by `npm run update-lists`; verify with `npm run check-lists`. The .txt files themselves are the source of truth.",
-  "updated": "2026-07-31T09:38:45.133Z",
+  "updated": "2026-08-15T06:37:54.739Z",
   "lists": {
     "quell-seed": {
       "file": "quell-seed.txt",
@@ -9,33 +9,33 @@
     },
     "easylist": {
       "file": "easylist.txt",
-      "bytes": 2217798,
-      "sha256": "24ab8b488d686590741a96947ceb3b5e54680ce08417e0fd552733f7395c3678"
+      "bytes": 2073066,
+      "sha256": "0b2eb91ba189b336de90223cbbfeb0b77d8205a2d8ea45fff87dec164334f54c"
     },
     "easyprivacy": {
       "file": "easyprivacy.txt",
-      "bytes": 1491692,
-      "sha256": "c6981599d8f5d829285d3c8bb03d934d1df94c4f52748963a66f8965e6cbff75"
+      "bytes": 1494146,
+      "sha256": "0ea1091a5599ecbc94b580f2a32fe424162645a875ccaf5c57e364396cdadd31"
     },
     "ubo-filters": {
       "file": "ubo-filters.txt",
-      "bytes": 1845147,
-      "sha256": "b1fc256e7d50a7e687ebb998719c001eb1f2f75832ee7b3247cde730cab95960"
+      "bytes": 1864356,
+      "sha256": "16f275e1bcdebfa8acee335271990da59622f1f2de0f16a69d9c6d64833514bf"
     },
     "ubo-badware": {
       "file": "ubo-badware.txt",
-      "bytes": 146745,
-      "sha256": "d0665496d4c6ecf27a2a76ef784596385bd99fbdb475b0d411f3cbf92dad95b9"
+      "bytes": 146510,
+      "sha256": "6ffe326d33a62ac2b6af0a57fe195d5b0209cf5a3f45175ac0deeea4e1cef481"
     },
     "easylist-cookie": {
       "file": "easylist-cookie.txt",
-      "bytes": 879761,
-      "sha256": "52940ced2ee07db256f90270c477185c079c6aa3a55ac79de13564fb3fbffc79"
+      "bytes": 883099,
+      "sha256": "a2ba5a8c6d1b09f589805616c54f2399368b172fd9a06c9eeb5b96a6f4083185"
     },
     "easylist-china": {
       "file": "easylist-china.txt",
-      "bytes": 552646,
-      "sha256": "69991e7b566e2ad6a8dc3bc8adecd4e7f3290eb230d45b2787cf571b3f571ac2"
+      "bytes": 554585,
+      "sha256": "cd97c4deee0a3ee030a0721f5e59c8eed2654d18ceeaab05727f7e13d653f4fb"
     },
     "cjx-annoyance": {
       "file": "cjx-annoyance.txt",
