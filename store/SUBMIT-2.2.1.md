@@ -3,7 +3,7 @@
 Single-issue fix: SponsorBlock skipping was far too aggressive.
 
 **Package:** `release/stampstack-2.2.1.zip`
-**sha256:** `94b09df2493f7bfc7df1477a44a52c735c3413955dcbbe43f4c4281db5743829`
+**sha256:** `96e2689f52fd1dd31028273429bfdb5e26a7d5155cd0715fb486aa52f48ee237`
 **Size:** 2.90 MiB · 46 files · 135,775 DNR rules across 8 rulesets
 
 ---

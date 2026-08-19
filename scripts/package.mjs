@@ -283,7 +283,11 @@ console.log(`  rulesets=${rules.length}: ${rules.map((r) => r.id).join(', ')}`);
 // while a release is still being assembled.
 {
   const digest = createHash('sha256').update(readFileSync(zipPath)).digest('hex');
-  console.log(`  sha256=${digest}`);
+  // The node version matters: the zip is deflate-compressed, and a zlib patch in a Node
+  // update changes the compressed bytes while the content stays identical. Two "different"
+  // hashes from identical trees cost half a day before that was understood — print the
+  // toolchain next to the hash so the next drift explains itself.
+  console.log(`  sha256=${digest} (node ${process.version})`);
   const docPath = join(ROOT, 'store', `SUBMIT-${version}.md`);
   if (existsSync(docPath)) {
     const doc = readFileSync(docPath, 'utf8');
@@ -295,6 +299,8 @@ console.log(`  rulesets=${rules.length}: ${rules.map((r) => r.id).join(', ')}`);
       console.log(`      doc: ${quoted}`);
       console.log(`      zip: ${digest}`);
       console.log('    Update it before submitting, or a reviewer is given a hash that does not verify.');
+      console.log('    (Identical source can hash differently across Node updates — the zip is');
+      console.log('    deflate-compressed, and zlib patches change the bytes, not the content.)');
     }
   }
 }
