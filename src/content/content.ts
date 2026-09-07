@@ -12,7 +12,8 @@ import type {
   Settings,
 } from '../shared/types.js';
 import { STORAGE_KEY } from '../shared/constants.js';
-import { queryProcedural } from '../engine/procedural.js';
+import { queryProcedural, proceduralMutationObserverInit } from '../engine/procedural.js';
+import { injectSpecificCss } from './specific-css.js';
 import {
   applyYoutubeFeatures,
   watchYoutubeSpa,
@@ -119,11 +120,8 @@ async function start(): Promise<void> {
     }
     if (resp.procedural.length) {
       const exprs = resp.procedural.map((p) => p.expr);
-      // attributes:true wakes the observer on every class/style change page-wide; only
-      // the attribute/style-sensitive ops actually need it, so scope it to those.
-      const watchAttributes = exprs.some((e) => /:(?:watch-attr|matches-attr|matches-css)/.test(e));
       runProcedural(exprs);
-      observe(() => runProcedural(exprs), watchAttributes);
+      observe(() => runProcedural(exprs), proceduralMutationObserverInit(exprs));
     }
   }
 
@@ -153,41 +151,16 @@ function send(msg: Message): Promise<unknown> {
   return chrome.runtime.sendMessage(msg);
 }
 
-/** Is `sel` a syntactically valid CSS selector? Guards against CSS breakout. */
-function isValidSelector(sel: string): boolean {
-  try {
-    document.createDocumentFragment().querySelector(sel);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/** Insert a <style> with the hostname-specific hide selectors (+ unhide overrides). */
-function injectSpecificCss(hide: string[], unhide: string[]): void {
-  const safeHide = hide.filter(isValidSelector);
-  const safeUnhide = unhide.filter(isValidSelector);
-  if (!safeHide.length && !safeUnhide.length) return;
-  let css = '';
-  if (safeHide.length) css += `${safeHide.join(',\n')} { display: none !important; }\n`;
-  if (safeUnhide.length) css += `${safeUnhide.join(',\n')} { display: revert !important; }\n`;
-
-  // Replace rather than stack: reapplyCosmetics can run many times per page as the user edits
-  // their filters, and appending a sheet each time would leave stale hides in force forever.
-  const existing = document.querySelector('style[data-StampStack="cosmetic"]');
-  const style = existing instanceof HTMLStyleElement ? existing : document.createElement('style');
-  style.setAttribute('data-StampStack', 'cosmetic');
-  style.textContent = css;
-  if (!existing) (document.head || document.documentElement).appendChild(style);
-}
-
 /** Re-fetch and re-apply cosmetics for this page (used after the user's filters change). */
 async function reapplyCosmetics(): Promise<void> {
   const resp = await sendWithRetry<CosmeticResponse>({
     type: 'cosmetic:get',
     hostname: location.hostname,
   });
-  if (!resp || resp.allowlisted) return;
+  if (!resp || resp.allowlisted) {
+    injectSpecificCss([], []);
+    return;
+  }
   injectSpecificCss(resp.hide, resp.unhide);
 }
 
@@ -297,7 +270,7 @@ function runProcedural(exprs: string[]): void {
 }
 
 /** Re-run procedural matching as the page mutates, throttled to once per frame. */
-function observe(run: () => void, watchAttributes: boolean): void {
+function observe(run: () => void, init: MutationObserverInit): void {
   let scheduled = false;
   const schedule = (): void => {
     if (scheduled) return;
@@ -308,12 +281,7 @@ function observe(run: () => void, watchAttributes: boolean): void {
     });
   };
   const obs = new MutationObserver(schedule);
-  const attach = (): void =>
-    obs.observe(document.documentElement, {
-      childList: true,
-      subtree: true,
-      attributes: watchAttributes,
-    });
+  const attach = (): void => obs.observe(document.documentElement, init);
   if (document.documentElement) attach();
   else document.addEventListener('DOMContentLoaded', attach, { once: true });
   document.addEventListener('DOMContentLoaded', run, { once: true });

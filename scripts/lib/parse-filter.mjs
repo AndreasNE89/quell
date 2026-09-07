@@ -10,6 +10,8 @@
 // Anything we can't represent is returned with `unsupported` populated so the compiler
 // can count and report coverage instead of silently dropping rules.
 
+import { isProceduralCosmeticBody } from './procedural-ops.mjs';
+
 /** Resource-type keywords (EasyList) → DNR resourceType. `null` = recognized but no DNR equivalent. */
 const RESOURCE_TYPE_MAP = {
   script: 'script',
@@ -89,15 +91,25 @@ function parseScriptletBody(body) {
   return { name, args: parts.map((p) => p.trim()) };
 }
 
-/** Split scriptlet args on commas, honoring backslash-escaped commas. */
-function splitArgs(s) {
+/**
+ * Split scriptlet args on commas.
+ *
+ * Only syntax-level escapes are consumed: `\,` → `,` and `\\` → `\`.
+ * Every other backslash is kept so regex arguments (`[^\n]`, `\?`, `\/`) survive.
+ */
+export function splitArgs(s) {
   const out = [];
   let cur = '';
   for (let i = 0; i < s.length; i++) {
     const ch = s[i];
     if (ch === '\\' && i + 1 < s.length) {
-      cur += s[i + 1];
-      i++;
+      const next = s[i + 1];
+      if (next === ',' || next === '\\') {
+        cur += next;
+        i++;
+        continue;
+      }
+      cur += '\\';
       continue;
     }
     if (ch === ',') {
@@ -147,7 +159,7 @@ function parseCosmetic(line, sep) {
   }
 
   const isException = sep.kind === 'unhide';
-  const procedural = !!sep.procedural || /:-abp-|:has\(|:has-text\(|:matches-css|:xpath\(|:upward\(|:not\(:has|:min-text-length/.test(body);
+  const procedural = !!sep.procedural || isProceduralCosmeticBody(body);
 
   return {
     type: 'cosmetic',

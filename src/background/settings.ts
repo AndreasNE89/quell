@@ -44,6 +44,75 @@ export async function loadSettings(): Promise<Settings> {
   return defaultSettings();
 }
 
+/** User-portable fields written into a settings backup. License and counters stay out. */
+export const PORTABLE_SETTING_KEYS = [
+  'paused',
+  'enabledLists',
+  'allowlist',
+  'siteFixes',
+  'youtubeBlockSponsored',
+  'youtubeBlockShorts',
+  'youtubeSponsorBlock',
+  'darkModeEnabled',
+  'darkModeSiteOverrides',
+  'customFilters',
+  'sponsorBlockCategories',
+] as const;
+
+export type PortableSettings = Pick<Settings, (typeof PORTABLE_SETTING_KEYS)[number]>;
+
+export function portableSettings(s: Settings): PortableSettings {
+  return {
+    paused: s.paused,
+    enabledLists: { ...s.enabledLists },
+    allowlist: [...s.allowlist],
+    siteFixes: { ...(s.siteFixes ?? {}) },
+    youtubeBlockSponsored: s.youtubeBlockSponsored,
+    youtubeBlockShorts: s.youtubeBlockShorts,
+    youtubeSponsorBlock: s.youtubeSponsorBlock,
+    darkModeEnabled: s.darkModeEnabled,
+    darkModeSiteOverrides: { ...s.darkModeSiteOverrides },
+    customFilters: s.customFilters ?? '',
+    sponsorBlockCategories: { ...(s.sponsorBlockCategories ?? {}) },
+  };
+}
+
+export function buildSettingsExportDocument(s: Settings): {
+  format: 'stampstack-settings';
+  version: 2;
+  settings: PortableSettings;
+} {
+  return {
+    format: 'stampstack-settings',
+    version: 2,
+    settings: portableSettings(s),
+  };
+}
+
+/**
+ * Overlay an imported settings object onto the current install.
+ *
+ * Keys absent from the file keep the current values. Older backups never contained
+ * `customFilters` / `sponsorBlockCategories`; treating a missing key as "reset to
+ * default" would delete picker rules and category choices on restore.
+ */
+export function applyImportedSettings(current: Settings, incoming: Partial<Settings>): Settings {
+  const next = mergeSettings(incoming);
+  next.blockedTotal = current.blockedTotal;
+  const out = next as unknown as Record<string, unknown>;
+  const keys = Object.keys(defaultSettings()) as (keyof Settings)[];
+  for (const key of keys) {
+    if (key === 'blockedTotal') continue;
+    if (!Object.prototype.hasOwnProperty.call(incoming, key)) {
+      const cur = current[key];
+      if (Array.isArray(cur)) out[key] = [...cur];
+      else if (cur && typeof cur === 'object') out[key] = { ...cur };
+      else out[key] = cur;
+    }
+  }
+  return next;
+}
+
 /** Merge stored partials over defaults; drop null/undefined so they can't wipe defaults. */
 export function mergeSettings(partial: Partial<Settings>): Settings {
   const base = defaultSettings();

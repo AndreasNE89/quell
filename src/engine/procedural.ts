@@ -8,7 +8,8 @@
 // handled by querySelectorAll. Everything is wrapped so one bad rule can't throw out
 // of the engine.
 
-const PROCEDURAL_OPS = new Set([
+/** Must stay identical to `scripts/lib/procedural-ops.mjs` — converter test compares them. */
+export const PROCEDURAL_OP_NAMES = [
   'has-text',
   'contains',
   '-abp-contains',
@@ -24,7 +25,9 @@ const PROCEDURAL_OPS = new Set([
   'if-not',
   'watch-attr',
   'remove',
-]);
+] as const;
+
+const PROCEDURAL_OPS = new Set<string>(PROCEDURAL_OP_NAMES);
 
 interface Op {
   name: string;
@@ -90,17 +93,31 @@ export function parseProcedural(selector: string): Parsed {
 function parseOps(s: string, ops: Op[]): void {
   let i = 0;
   while (i < s.length) {
-    while (i < s.length && s[i] === ' ') i++;
-    if (i >= s.length) break;
+    if (s[i] === ' ' || s[i] === '\t' || s[i] === '\n' || s[i] === '\r') {
+      while (i < s.length && /\s/.test(s[i]!)) i++;
+      if (i >= s.length) break;
+      if (s[i] === '>' || s[i] === '+' || s[i] === '~') {
+        const rest = s.slice(i).trim();
+        if (rest) ops.push({ name: 'selector', arg: rest });
+        break;
+      }
+      const rest = s.slice(i).trim();
+      if (rest) ops.push({ name: 'selector', arg: ` ${rest}` });
+      break;
+    }
+    if (s[i] === '>' || s[i] === '+' || s[i] === '~') {
+      const rest = s.slice(i).trim();
+      if (rest) ops.push({ name: 'selector', arg: rest });
+      break;
+    }
     if (s[i] !== ':') {
-      // Trailing CSS after a procedural op (e.g. `:has-text(x) > .inner`).
       const rest = s.slice(i).trim();
       if (rest) ops.push({ name: 'selector', arg: rest });
       break;
     }
     const m = /^:([-a-z]+)\(/.exec(s.slice(i));
     if (!m) {
-      // Bare `:hover` etc. — keep as trailing CSS rather than dropping it.
+      // Bare `:first-child` / `:hover` — compound continuation on the candidate itself.
       const rest = s.slice(i).trim();
       if (rest) ops.push({ name: 'selector', arg: rest });
       break;
@@ -113,6 +130,22 @@ function parseOps(s: string, ops: Op[]): void {
     ops.push({ name, arg: paren.arg.trim() });
     i = paren.end + 1;
   }
+}
+
+/**
+ * How a trailing CSS fragment after a procedural op applies.
+ * A leading space marks a descendant combinator; no leading space is a compound
+ * continuation (`:first-child`) tested on the candidate itself.
+ */
+export function trailingSelectorMode(
+  raw: string,
+): 'self' | 'descendant' | 'child' | 'next' | 'sibling' {
+  const trimmed = raw.trim();
+  if (trimmed.startsWith('>')) return 'child';
+  if (trimmed.startsWith('+')) return 'next';
+  if (trimmed.startsWith('~')) return 'sibling';
+  if (/^\s/.test(raw)) return 'descendant';
+  return 'self';
 }
 
 /** Strip a single pair of surrounding quotes, if present. */
@@ -257,30 +290,34 @@ function applyOp(els: Element[], op: Op): Element[] {
       return els;
     }
     case 'selector': {
-      // Trailing CSS after a procedural filter — narrow the matched set so we don't
-      // hide the wrong (ancestor) element.
-      const raw = op.arg.trim();
+      // Trailing CSS after a procedural filter — compound continuations (`:first-child`)
+      // test the candidate; combinators search relatives.
+      const raw = op.arg;
+      const trimmed = raw.trim();
+      const mode = trailingSelectorMode(raw);
       const out = new Set<Element>();
       for (const el of els) {
         try {
-          if (raw.startsWith('>')) {
-            const childSel = raw.replace(/^>\s*/, '');
+          if (mode === 'child') {
+            const childSel = trimmed.replace(/^>\s*/, '');
             for (const child of Array.from(el.children)) {
               if (child.matches(childSel)) out.add(child);
             }
-          } else if (raw.startsWith('+')) {
-            const sel = raw.replace(/^\+\s*/, '');
+          } else if (mode === 'next') {
+            const sel = trimmed.replace(/^\+\s*/, '');
             const sib = el.nextElementSibling;
             if (sib?.matches(sel)) out.add(sib);
-          } else if (raw.startsWith('~')) {
-            const sel = raw.replace(/^~\s*/, '');
+          } else if (mode === 'sibling') {
+            const sel = trimmed.replace(/^~\s*/, '');
             let sib = el.nextElementSibling;
             while (sib) {
               if (sib.matches(sel)) out.add(sib);
               sib = sib.nextElementSibling;
             }
-          } else {
-            for (const n of Array.from(el.querySelectorAll(raw))) out.add(n);
+          } else if (mode === 'descendant') {
+            for (const n of Array.from(el.querySelectorAll(trimmed))) out.add(n);
+          } else if (el.matches(trimmed)) {
+            out.add(el);
           }
         } catch {
           /* bad selector */
@@ -344,4 +381,25 @@ export function queryProcedural(selector: string, root: ParentNode = document): 
     els = applyOp(els, op);
   }
   return els;
+}
+
+/** MutationObserver options derived from the selectors' actual dependencies. */
+export function proceduralMutationObserverInit(exprs: string[]): MutationObserverInit {
+  const needsText = exprs.some((e) =>
+    /:(?:has-text|contains|-abp-contains|min-text-length)\(/.test(e),
+  );
+  const needsAttrOps = exprs.some((e) => /:(?:watch-attr|matches-attr|matches-css)/.test(e));
+  const needsPrefixAttrs = exprs.some((e) => {
+    const { prefix } = parseProcedural(e);
+    return /[.#\[]/.test(prefix);
+  });
+  const attributes = needsAttrOps || needsPrefixAttrs;
+  const init: MutationObserverInit = {
+    childList: true,
+    subtree: true,
+    characterData: needsText,
+    attributes,
+  };
+  if (attributes && !needsAttrOps) init.attributeFilter = ['class', 'id', 'style'];
+  return init;
 }

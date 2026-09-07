@@ -13,7 +13,14 @@ before(async () => {
   const outfile = join(tmpdir(), `quell-settings-${process.pid}.mjs`);
   await build({
     stdin: {
-      contents: `export { defaultSettings, mergeSettings } from './src/background/settings.js';`,
+      contents: `export {
+        defaultSettings,
+        mergeSettings,
+        portableSettings,
+        buildSettingsExportDocument,
+        applyImportedSettings,
+        PORTABLE_SETTING_KEYS,
+      } from './src/background/settings.js';`,
       resolveDir: ROOT,
       loader: 'ts',
     },
@@ -105,4 +112,69 @@ test('non-string allowlist entries are filtered out', () => {
 
 test('an allowlist of the wrong type does not wipe the default', () => {
   assert.deepEqual(mod.mergeSettings({ allowlist: 'example.com' }).allowlist, []);
+});
+
+test('should export every portable setting including custom filters and categories', () => {
+  const s = {
+    ...mod.defaultSettings(),
+    paused: true,
+    enabledLists: { easylist: false },
+    allowlist: ['keep.example'],
+    siteFixes: { 'broke.example': 'cosmetics' },
+    youtubeBlockSponsored: false,
+    youtubeBlockShorts: true,
+    youtubeSponsorBlock: false,
+    darkModeEnabled: true,
+    darkModeSiteOverrides: { 'news.example': 'on' },
+    customFilters: 'example.com##.ad',
+    sponsorBlockCategories: { sponsor: false, intro: true },
+    blockedTotal: 99,
+    darkModeAutoOff: { 'dark.example': true },
+  };
+  const doc = mod.buildSettingsExportDocument(s);
+  assert.equal(doc.format, 'stampstack-settings');
+  assert.equal(doc.version, 2);
+  for (const key of mod.PORTABLE_SETTING_KEYS) {
+    assert.ok(key in doc.settings, `export must include ${key}`);
+  }
+  assert.equal(doc.settings.customFilters, 'example.com##.ad');
+  assert.deepEqual(doc.settings.sponsorBlockCategories, { sponsor: false, intro: true });
+  assert.equal('blockedTotal' in doc.settings, false);
+  assert.equal('darkModeAutoOff' in doc.settings, false);
+
+  const restored = mod.applyImportedSettings(mod.defaultSettings(), doc.settings);
+  for (const key of mod.PORTABLE_SETTING_KEYS) {
+    assert.deepEqual(restored[key], doc.settings[key], `round-trip ${key}`);
+  }
+  assert.equal(restored.blockedTotal, 0, 'counters are never imported');
+});
+
+test('should keep current custom filters when an older export omits them', () => {
+  const current = {
+    ...mod.defaultSettings(),
+    customFilters: 'example.com##.ad',
+    sponsorBlockCategories: { sponsor: false, intro: true },
+    paused: false,
+  };
+  const incoming = {
+    paused: true,
+    enabledLists: {},
+    allowlist: [],
+    siteFixes: {},
+    youtubeBlockSponsored: true,
+    youtubeBlockShorts: false,
+    youtubeSponsorBlock: true,
+    darkModeEnabled: false,
+    darkModeSiteOverrides: {},
+  };
+  const next = mod.applyImportedSettings(current, incoming);
+  assert.equal(next.paused, true);
+  assert.equal(next.customFilters, 'example.com##.ad');
+  assert.deepEqual(next.sponsorBlockCategories, { sponsor: false, intro: true });
+});
+
+test('should apply empty custom filters when the export contains them', () => {
+  const current = { ...mod.defaultSettings(), customFilters: 'keep.com##.x' };
+  const next = mod.applyImportedSettings(current, { customFilters: '' });
+  assert.equal(next.customFilters, '');
 });

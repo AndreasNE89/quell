@@ -17,7 +17,8 @@ before(async () => {
   rgbToHsl, hslToRgb, rgbToCss,
   remapBackgroundColor, remapForegroundColor, remapBorderColor,
   remapGradient, remapBackgroundImage, splitBackgroundLayers,
-} from './src/shared/dark-mode-dynamic.js';`,
+} from './src/shared/dark-mode-dynamic.js';
+export { THEME_ATTRIBUTE_FILTER } from './src/content/dark-mode-dynamic.ts';`,
       resolveDir: ROOT,
       loader: 'ts',
     },
@@ -154,6 +155,13 @@ test('remapBackgroundImage: composite scrim + photo darkens the scrim, leaves th
   assert.doesNotMatch(out, /rgba\(255, 255, 255, 0\.92\)/, 'white scrim darkened');
   assert.equal(mod.remapBackgroundImage('url("https://x/a.png")'), null, 'pure image → no-op');
   assert.equal(mod.remapBackgroundImage('none'), null);
+});
+
+test('should watch theme data attributes, not only class and style', () => {
+  assert.ok(mod.THEME_ATTRIBUTE_FILTER.includes('data-theme'));
+  assert.ok(mod.THEME_ATTRIBUTE_FILTER.includes('data-color-mode'));
+  assert.ok(mod.THEME_ATTRIBUTE_FILTER.includes('class'));
+  assert.ok(mod.THEME_ATTRIBUTE_FILTER.includes('style'));
 });
 
 // helper: parse an rgb()/rgba() string back to {r,g,b,a} for assertions

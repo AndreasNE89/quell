@@ -111,7 +111,7 @@ function compileList(list, text, ctx) {
     stats.network++;
     const out = toDnrRule(parsed);
     if (out.cosmeticException) {
-      applyNetworkCosmeticException(out, parsed, ctx.networkCosmeticExceptions);
+      applyNetworkCosmeticException(out, parsed, ctx.networkCosmeticExceptions, list.id);
       continue;
     }
     if (out.badfilter) {
@@ -160,7 +160,7 @@ function compileList(list, text, ctx) {
   return { dnrRules, stats };
 }
 
-function applyNetworkCosmeticException(out, parsed, bag) {
+function applyNetworkCosmeticException(out, parsed, bag, listId) {
   if (!parsed.isException) return; // only @@…$generichide etc.
   const kind = out.cosmeticException;
   // Page hosts for cosmetic exceptions come from the URL pattern, $domain/$from,
@@ -170,9 +170,22 @@ function applyNetworkCosmeticException(out, parsed, bag) {
     ...(parsed.options?.initiatorDomains || []),
     ...(parsed.options?.requestDomains || []),
   ];
-  const set = bag[kind];
-  if (!set) return;
+  const byList = bag[kind];
+  if (!byList) return;
+  const set = (byList[listId] ||= new Set());
   for (const h of hosts) if (h) set.add(h);
+}
+
+function serializeExceptionBag(byList) {
+  const out = {};
+  for (const [id, set] of Object.entries(byList)) out[id] = [...set];
+  return out;
+}
+
+function exceptionHostCount(byList) {
+  let n = 0;
+  for (const set of Object.values(byList)) n += set.size;
+  return n;
 }
 
 function applyCosmetic(c, cos, stats, skips) {
@@ -426,9 +439,10 @@ function main() {
     /** @type {Set<string>} identities cancelled by $badfilter across all lists */
     badfilters: new Set(),
     networkCosmeticExceptions: {
-      generichide: new Set(),
-      elemhide: new Set(),
-      specifichide: new Set(),
+      // Per-list host sets. A disabled list must not keep its @@$generichide active.
+      generichide: {},
+      elemhide: {},
+      specifichide: {},
     },
   };
 
@@ -438,8 +452,14 @@ function main() {
   const emittedRulesets = {};
   let totalEnabledRules = 0;
 
-  // Collect $badfilter identities from every list before emit so later lists can
-  // cancel earlier ones (and vice versa).
+  // Collect $badfilter identities from every compiled list before emit so later
+  // lists can cancel earlier ones (and vice versa).
+  //
+  // Policy: $badfilter is compile-time global. Static DNR rulesets cannot drop a
+  // matching rule in another list when the user toggles the badfilter's list off,
+  // so a $badfilter in any shipped list cancels the matching identity everywhere.
+  // Cosmetic @@$generichide / $elemhide / $specifichide are the opposite: they are
+  // stored per list and merged only for enabled lists at runtime.
   for (const list of registry.lists) {
     const file = join(FILTERS_DIR, list.file);
     if (!existsSync(file)) continue;
@@ -521,9 +541,9 @@ function main() {
   const cosmeticOut = {
     byList: cosmeticByList,
     networkExceptions: {
-      generichide: [...ctx.networkCosmeticExceptions.generichide],
-      elemhide: [...ctx.networkCosmeticExceptions.elemhide],
-      specifichide: [...ctx.networkCosmeticExceptions.specifichide],
+      generichide: serializeExceptionBag(ctx.networkCosmeticExceptions.generichide),
+      elemhide: serializeExceptionBag(ctx.networkCosmeticExceptions.elemhide),
+      specifichide: serializeExceptionBag(ctx.networkCosmeticExceptions.specifichide),
     },
   };
   writeFileSync(join(OUT_DIR, 'cosmetic.json'), JSON.stringify(cosmeticOut));
@@ -564,7 +584,7 @@ function main() {
   console.log(`  DNR network rules:  ${totalNet}`);
   console.log(`  regex rules used:   ${ctx.regexCount}/${DNR.MAX_NUMBER_OF_REGEX_RULES}`);
   console.log(
-    `  generichide hosts:  ${ctx.networkCosmeticExceptions.generichide.size}, elemhide: ${ctx.networkCosmeticExceptions.elemhide.size}, specifichide: ${ctx.networkCosmeticExceptions.specifichide.size}`,
+    `  generichide hosts:  ${exceptionHostCount(ctx.networkCosmeticExceptions.generichide)}, elemhide: ${exceptionHostCount(ctx.networkCosmeticExceptions.elemhide)}, specifichide: ${exceptionHostCount(ctx.networkCosmeticExceptions.specifichide)}`,
   );
   const skipEntries = Object.entries(ctx.skips).sort((a, b) => b[1] - a[1]);
   if (skipEntries.length) {

@@ -45,6 +45,15 @@ test('should disable SponsorBlock when youtubeSponsorBlock is false', () => {
   assert.equal(opts.youtubeSponsorBlock, false);
 });
 
+test('should include resolved SponsorBlock categories in youtube options', () => {
+  const opts = youtubeOptsFromSettings(
+    { paused: false, allowlist: [], sponsorBlockCategories: { intro: true, sponsor: false } },
+    'www.youtube.com',
+  );
+  assert.ok(opts.sponsorBlockCategories.includes('intro'));
+  assert.ok(!opts.sponsorBlockCategories.includes('sponsor'));
+});
+
 test('should treat allowlisted host as allowlisted', () => {
   const opts = youtubeOptsFromSettings(
     { paused: false, youtubeBlockShorts: true, allowlist: ['youtube.com'] },

@@ -23,6 +23,7 @@ const CATEGORY_LABEL: Record<string, string> = {
 let active = false;
 let segments: SponsorSegment[] = [];
 let currentVideoId: string | null = null;
+let currentCategoryKey = '';
 let fetchGen = 0;
 let tickTimer: number | null = null;
 let spaHooked = false;
@@ -293,19 +294,29 @@ function tick(): void {
   }
 }
 
+function categoryCacheKey(): string {
+  return (getOpts?.()?.sponsorBlockCategories ?? []).join('\0');
+}
+
 function syncFromLocation(): void {
   if (!active || !enabled()) {
     segments = [];
     currentVideoId = null;
+    currentCategoryKey = '';
     return;
   }
   const videoId = extractYoutubeVideoId();
   if (!videoId) {
     currentVideoId = null;
     segments = [];
+    currentCategoryKey = '';
     return;
   }
-  if (videoId !== currentVideoId) void loadForVideo(videoId);
+  const cats = categoryCacheKey();
+  if (videoId !== currentVideoId || cats !== currentCategoryKey) {
+    currentCategoryKey = cats;
+    void loadForVideo(videoId);
+  }
 }
 
 function hookSpa(): void {
@@ -342,14 +353,17 @@ export function startSponsorBlock(options: {
   syncFromLocation();
 }
 
-/** Re-apply after settings change (pause / allowlist / toggle). */
+/** Re-apply after settings change (pause / allowlist / toggle / categories). */
 export function refreshSponsorBlock(): void {
   if (!active) return;
   if (!enabled()) {
     segments = [];
     currentVideoId = null;
+    currentCategoryKey = '';
     fetchGen++;
     return;
   }
+  // Category changes keep the same video id; force identity compare + refetch.
+  currentCategoryKey = '';
   syncFromLocation();
 }

@@ -32,6 +32,22 @@ import { parseCssColor, relativeLuminance } from '../shared/dark-mode-smart.js';
 const SHELL_STYLE = 'dark-dynamic';
 const BATCH_SIZE = 1200;
 
+/** Theme attributes that change computed colors without a class/style mutation. */
+export const THEME_ATTRIBUTE_FILTER = [
+  'class',
+  'style',
+  'data-theme',
+  'data-color-mode',
+  'data-bs-theme',
+  'data-mode',
+  'data-color-scheme',
+  'theme',
+] as const;
+
+const THEME_SUBTREE_ATTRS = new Set<string>(
+  THEME_ATTRIBUTE_FILTER.filter((a) => a !== 'style'),
+);
+
 // Elements we never recolor: media (rendered as the site intended) + non-visual/void tags.
 // Inline <svg> roots get a minimal grayscale-icon treatment; svg internals are never walked.
 const SKIP_TAGS = new Set([
@@ -437,7 +453,7 @@ function onMutations(records: MutationRecord[]): void {
       // this) — reprocess the subtree. Leaf style writes (transform animations etc.) only
       // affect the element itself unless they set variables.
       const subtree =
-        r.attributeName === 'class' ||
+        (r.attributeName != null && THEME_SUBTREE_ATTRS.has(r.attributeName)) ||
         el === document.documentElement ||
         el === document.body ||
         (r.attributeName === 'style' && el.getAttribute('style')?.includes('--') === true);
@@ -540,7 +556,7 @@ export function applyDynamicDark(shell: boolean): void {
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ['class', 'style'],
+      attributeFilter: [...THEME_ATTRIBUTE_FILTER],
     });
   }
   document.addEventListener('mouseover', onHover, true);

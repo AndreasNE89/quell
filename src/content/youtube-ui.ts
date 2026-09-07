@@ -2,6 +2,7 @@
 // Driven by settings toggles from the popup/options page.
 
 import type { Settings, YoutubeOptionsData } from '../shared/types.js';
+import { enabledSponsorCategories } from '../shared/sponsorblock.js';
 import { isAllowlistedHost } from '../shared/hostname.js';
 
 const STYLE_ID = 'quell-youtube-features';
@@ -107,6 +108,7 @@ export function youtubeOptsFromSettings(
     youtubeBlockSponsored: settings.youtubeBlockSponsored !== false,
     youtubeBlockShorts: !!settings.youtubeBlockShorts,
     youtubeSponsorBlock: settings.youtubeSponsorBlock !== false,
+    sponsorBlockCategories: enabledSponsorCategories(settings.sponsorBlockCategories),
   };
 }
 

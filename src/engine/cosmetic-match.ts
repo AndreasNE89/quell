@@ -93,6 +93,25 @@ function concreteExceptionHosts(hosts: string[]): string[] {
   return hosts.filter((h) => isValidMatchPatternHost(normalizeHostname(h)));
 }
 
+/** Union network cosmetic exceptions from enabled lists only. */
+export function mergeNetworkExceptions(
+  data: CosmeticData,
+  enabledListIds: string[],
+): { generichide: string[]; elemhide: string[]; specifichide: string[] } {
+  const generichide: string[] = [];
+  const elemhide: string[] = [];
+  const specifichide: string[] = [];
+  for (const id of enabledListIds) {
+    const g = data.networkExceptions.generichide[id];
+    const e = data.networkExceptions.elemhide[id];
+    const s = data.networkExceptions.specifichide[id];
+    if (g) generichide.push(...g);
+    if (e) elemhide.push(...e);
+    if (s) specifichide.push(...s);
+  }
+  return { generichide, elemhide, specifichide };
+}
+
 export function matchCosmetic(
   hostname: string,
   data: CosmeticData,
@@ -100,18 +119,19 @@ export function matchCosmetic(
 ): CosmeticMatch {
   const merged = mergeCosmeticLists(data, enabledListIds);
   const suffixes = domainSuffixes(hostname);
+  const netEx = mergeNetworkExceptions(data, enabledListIds);
 
-  const disableGeneric = matchesExceptionHost(hostname, data.networkExceptions.generichide);
-  const disableAll = matchesExceptionHost(hostname, data.networkExceptions.elemhide);
-  const disableSpecific = matchesExceptionHost(hostname, data.networkExceptions.specifichide);
+  const disableGeneric = matchesExceptionHost(hostname, netEx.generichide);
+  const disableAll = matchesExceptionHost(hostname, netEx.elemhide);
+  const disableSpecific = matchesExceptionHost(hostname, netEx.specifichide);
 
   // The registered generic stylesheet is excluded (syncRegisteredScripts) for hosts matching
   // a *concrete* (match-patternable) generichide/elemhide entry, so those need no per-page
   // revert. Only entity-domain (example.*) exceptions — which can't be a match pattern —
   // still receive the sheet and require the content-script revert below.
   const genericExcludedAtRegistration =
-    matchesExceptionHost(hostname, concreteExceptionHosts(data.networkExceptions.generichide)) ||
-    matchesExceptionHost(hostname, concreteExceptionHosts(data.networkExceptions.elemhide));
+    matchesExceptionHost(hostname, concreteExceptionHosts(netEx.generichide)) ||
+    matchesExceptionHost(hostname, concreteExceptionHosts(netEx.elemhide));
 
   if (disableAll) {
     return {

@@ -157,10 +157,14 @@ export interface CosmeticListData {
 /** Compiled cosmetic dataset held by the service worker (list-scoped). */
 export interface CosmeticData {
   byList: Record<string, CosmeticListData>;
+  /**
+   * Network cosmetic exceptions keyed by list id.
+   * Runtime merges only the enabled lists — a disabled list must not suppress hiding.
+   */
   networkExceptions: {
-    generichide: string[];
-    elemhide: string[];
-    specifichide: string[];
+    generichide: Record<string, string[]>;
+    elemhide: Record<string, string[]>;
+    specifichide: Record<string, string[]>;
   };
 }
 
@@ -283,6 +287,8 @@ export interface YoutubeOptionsData {
   youtubeBlockSponsored: boolean;
   youtubeBlockShorts: boolean;
   youtubeSponsorBlock: boolean;
+  /** Enabled skip categories — content uses this as a refetch cache key. */
+  sponsorBlockCategories: string[];
 }
 
 export interface SponsorBlockSegmentsData {

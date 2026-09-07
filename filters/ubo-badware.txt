@@ -1,7 +1,7 @@
 ! Title: uBlock filters – Badware risks
 ! Expires: 5 days
-! Last modified: Fri, 14 Aug 2026 16:01:23 +0000
-! Diff-Path: ../patches/2026.8.15.335.patch#ublock-badware
+! Last modified: Fri, 04 Sep 2026 08:14:37 +0000
+! Diff-Path: ../patches/2026.9.7.267.patch#ublock-badware
 ! Diff-Expires: 317 minutes
 ! License: https://github.com/uBlockOrigin/uAssets/blob/master/LICENSE
 ! *** uAssets:filters/badware.txt ***
@@ -781,6 +781,7 @@ cracksmid.com##div[style=""] > center > center
 ||luxoriahub.shop^$all
 ||claude-ai.cyou^$all
 ||aisyncad.com^$all
+||cdn.streameet.top^$all
 ! scam sites
 ||webuzz.me^$doc
 ||coup-ling.net^$all
@@ -2139,7 +2140,8 @@ cracksmid.com##div[style=""] > center > center
 ||web.core.windows.net/?111=$doc
 !://main.d*.amplifyapp.com/?$doc
 ||ondigitalocean.app/Win0codejInfouycinfcode/$doc
-azurefd.net,azurestaticapps.net,ondigitalocean.app##body#mycanvas.map[style="cursor:none"]
+azurefd.net,azurestaticapps.net,ondigitalocean.app,web.core.windows.net##body#mycanvas.map[style="cursor:none"]
+azurefd.net,azurestaticapps.net,ondigitalocean.app,web.core.windows.net###frame[title="encrypted shop"][allowfullscreen][src^="blob:https"][style="display: block;"]
 ||azurefd.net/Win20Errfb020/index.html$doc
 sgp1.cdn.digitaloceanspaces.com###frame[title="encrypted shop"][allowfullscreen][allow="fullscreen"][src^="blob"][style="display: block;"]
 ||pages.dev/*/Fm7-alert.wav
@@ -2247,6 +2249,8 @@ sgp1.cdn.digitaloceanspaces.com###frame[title="encrypted shop"][allowfullscreen]
 ||web.core.windows.net/vault/stack-vendor.mp3
 ||github.io/*/js/esc.js
 ||github.io/*/js/flscn.js
+||github.io/*/before.js
+||github.io/*/fullscreen.js
 ||github.io/*/media/beep.mp3
 ||azurefd.net/media/beep.mp3
 ||azurefd.net/fullscreen.js
@@ -2257,7 +2261,21 @@ sgp1.cdn.digitaloceanspaces.com###frame[title="encrypted shop"][allowfullscreen]
 ||azurefd.net/media/msc.mp3
 ||amazonaws.com/_Fm7-alert.mp3
 ||on-forge.com/win*/alert-en.wav
+||ondigitalocean.app/esc.js
+||ondigitalocean.app/jupiter.js
+||ondigitalocean.app/noir.js
+||ondigitalocean.app/nvidia.js
+||ondigitalocean.app/b00p.mp3
+||ondigitalocean.app/webs.mp4
+||web.core.windows.net/js/01d1fgshfddfg.js
+||web.core.windows.net/js/02dgdsg3d.js
+||web.core.windows.net/js/03fgsskryeivh.js
+||web.core.windows.net/js/04shesc1.js
+||web.core.windows.net/dgdh1.wav
+||web.core.windows.net/hel0sgfy.mp4
 z13.web.core.windows.net##+js(aeld, DOMContentLoaded, fullscreenEnabled)
+web.core.windows.net##+js(aeld, beforeunload, /[Ww]orker/)
+ondigitalocean.app##+js(aeld, mousemove, loadSecret)
 ||roykuashkimayo.$all
 ||toolsmastercracked.$all
 ||carrymedias.com^$all
@@ -2279,6 +2297,11 @@ $doc,ipaddress=185.100.85.248
 monster###bw-rc-host[style="position: fixed !important; inset: 0px !important; z-index: 2147483647 !important;"]
 .monster/index*.php?flow_id=$doc
 ||sites.google.com/view/codex-desktop-app$doc
+||gta-six-leaks.com^$all
+||whirlpoploaderfast.com^
+||analysis-id-lfg.info^
+||chief-ignite.pro^
+##body > .main-wrapper > .main-content > .intro > #checkbox-window
 ##div.card > div#cbRow.checkbox-row[onclick="startVerify()"]
 gemfellowship.org##+js(rmnt, script, TextDecoder)
 ##html > #bw-cf-root
@@ -2314,6 +2337,35 @@ longhall.consulting##+js(rmnt, script, /document\.currentScript\.remove|0x0/)
 casabasics.es##+js(rmnt, script, String.fromCharCode)
 /landing/windows.html?src=$frame,3p
 ##.wp-singular > div[data-sm][style*="2147483647"] > iframe[style*="100%"][allow*="clipboard-write"]
+||cleandev.cc^$all
+-Verify-Cloudflare-$doc
+abogadosrosarinos.com,aptisweb.com,avene-hebergement.com,caesarjaco.co.id,https-xhamster.com,skybap.shop##+js(acs, fetch, _0x, /^data:/)
+abogadosrosarinos.com,aptisweb.com,avene-hebergement.com,caesarjaco.co.id,https-xhamster.com,skybap.shop##+js(aopw, ai_front)
+##.cjs-container > #checkbox-window
+##.cjs-container > #verify-window
+strand-co.com##+js(acs, document.createElement, .onerror)
+##body > .cf-root
+/^https:\/\/[a-z]{7,}\.(com|icu)\/[Tt]raffic\/api$/$script,match-case,3p,to=com|icu
+||weibonews.com^$all
+||biscottirbh.lol^$all
+##body > div.mw[role="main"] > .mc
+||google-meet-call.com^$all
+||faceit-account.com^$all
+||kook.bar^$all
+igualdad.iaa.csic.es##+js(acs, String.prototype.toLowerCase, Contract)
+||igualdad.iaa.csic.es/nochain-sw.js
+##html > #nochain-demo-frame:not(body)
+##html > #nc-cover:not(body)
+||openai-backup.one^$all
+cizitensports.com##+js(rmnt, script, randomUUID)
+###cf-challenge-root
+||sites.google.com/view/brewapp$doc
+##.wp-singular > iframe[srcdoc][allowfullscreen][allow*="clipboard-write"][style*="2147483647"]
+/^https:\/\/[a-z]{7}\.sbs\/[a-z0-9]{8}\.js$/$script,3p,match-case,to=sbs
+||swewart.sbs^
+||guiglen.sbs^
+webrick.com##+js(acs, atob, Uint8Array)
+##html > #bw-rc-host
 ! !SECTION: ClickFix
 ||cracksway.com^$all
 ||gamingdebates.com^$all
@@ -2359,10 +2411,10 @@ casabasics.es##+js(rmnt, script, String.fromCharCode)
 ||magiskzip.*^$all,domain=~magiskzip.com,to=~magiskzip.com
 ||magiskmodule.com^$all
 ! LibreTube - Official site: libretube.dev
-||libretube.*^$all,domain=~libretube.dev,to=~libretube.dev
+||libretube.$doc,to=~libretube.dev
 ||libretubeapk.com^$all,domain=~libretube.dev
 ! ReVanced - Official site: revanced.app
-||revanced.$all,from=~revanced.app,to=~revanced.app
+||revanced.$doc,to=~revanced.app
 ||revancedapk.$all,domain=~revanced.app
 ||revancedapp.$all,domain=~revanced.app
 ||ytvancedpro.com^$all,domain=~revanced.app
@@ -3074,6 +3126,7 @@ www.cambe.pr.gov.br##+js(noeval-if, tigervip2)
 ||outloksupport*.glitch.me^$doc
 ||scanlonchiro.com^$all
 *$doc,ipaddress=178.16.53.131
+||openlive.chat^$all
 ! telegram
 ||telegramhcn.com^$all
 ||webtelegram.eu.org^$all
@@ -3083,7 +3136,7 @@ www.cambe.pr.gov.br##+js(noeval-if, tigervip2)
 ||telezelm-*.icu^$doc
 ||whatsapp*.icu^$doc
 /^https:\/\/telegram-[a-z]{2}\.[a-z]{2,3}\//$doc,to=~gov|~edu|~com|~net|~org|~telegram.org
-/^https:\/\/telegram-[a-z]{3,4}\.com\//$doc,to=com|~telegram.org
+/^https:\/\/telegram-[a-z]{3,4}\.com\//$doc,to=com|~telegram.org|~telegram-gif.com
 /^https?:\/\/web\.t(el)?gram[a-z][a-z][a-z]?\.top\//$doc,to=top
 /^https?:\/\/web\.tegr[a-z][a-z][a-z]\.top\//$doc,to=top
 ||web.*.top^$doc,to=top,ipaddress=206.119.188.100
@@ -3730,12 +3783,18 @@ webflow.io##html.w-mod-js:not(.wf-active) > body:not([class]):not([id]) > a[clas
 ||tobias-neller.link^$all
 rapidkil.com.au##+js(aost, XMLHttpRequest, /wp-content)
 ##html[data-scrapbook-source][data-scrapbook-create][data-scrapbook-title] > body.no-js > div.main-wrapper[role="main"] > div.main-content
+##html > #__cf_challenge_host__
 ||getfix.win^$all
 ||getalia.org^$all
 ||goveanrs.org^$all
 ||govearali.org^$all
+||claritydelivr.com^$all
+||dntds.shop^$all
+/^https:\/\/[a-z]+\.[a-z]+\/[a-z]+\?rnd=[a-z0-9]{8}&ts=\d+$/$script,xhr,3p,match-case
 /jsrepo?rnd=$script,xhr,3p
+/teamrepo?rnd=$script,xhr,3p
 *$xhr,3p,method=get,to=org|shop|win,ipaddress=178.16.53.137
+*$script,3p,ipaddress=158.94.211.92
 ||icu^$doc,frame,ipaddress=94.154.35.152
 ||icu/captcha.html$doc,frame
 /captcha.html$doc,frame,ipaddress=94.154.35.152
@@ -3785,6 +3844,8 @@ rapidkil.com.au##+js(aost, XMLHttpRequest, /wp-content)
 ||usadeepseek.com^$all
 ||gg.deepseek.$doc,to=~deepseek.com
 ||deepseek.app^$all
+||deepseekk.com.cn^$all
+||deepseek-en.com^$doc
 ||paytoll*.top/ezdrivema^$all
 -ez-pass.com^$doc
 ||thetollroads-$doc,to=top|xin|world
@@ -4495,3 +4556,27 @@ top##body > center + .A + .post
 ||losslesscut.$doc,to=~losslesscut.app
 ||bloomnnu.it.com^$all
 ||kai-search.com^$all
+||robtipsyt50kli.blogspot.com^$all
+##body > .wrapper > .card-box > #step-1
+||luhxepremiumbags.com^$all
+||camelote.cn^$all
+||securesweep.pro^$all
+||safebooru.com^$all
+||fluentcleaner.org^$all
+||ruthcottillionuchylf.github.io^$all
+||vencord.cc^$all
+||hoka-uk.com^$all
+||nextsave.trenched.cfd^$doc
+||ggle-analytics.$all
+||whale-alert.$all
+||cookie-whitelist.$all
+||vipsunglassesindia.in^$all
+||oakleysunglassesindia.com^$all
+||lieferanndo.de^$all
+||qemow.com^$all
+||bbcwebhosting.com^$all
+||ilyvo.com^$all
+||prof-noemie-sgzopjv.work^$all
+*$doc,ipaddress=64.190.63.136
+/go/*^ref=*&subid1=*&subid2=$doc
+^ofv_id=*&aff_pub_id=*&click_id=*&subid1=*&subid2=$doc

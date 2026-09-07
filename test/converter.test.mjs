@@ -1,7 +1,13 @@
 // Tests for the filter → DNR converter (parse-filter.mjs + to-dnr.mjs).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseLine } from '../scripts/lib/parse-filter.mjs';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { parseLine, splitArgs } from '../scripts/lib/parse-filter.mjs';
+import { PROCEDURAL_OP_NAMES, isProceduralCosmeticBody } from '../scripts/lib/procedural-ops.mjs';
+
+const FILTERS = join(dirname(fileURLToPath(import.meta.url)), '..', 'filters');
 import {
   toDnrRule,
   isPublicSuffixDomain,
@@ -741,6 +747,14 @@ test('procedural cosmetic detected', () => {
   assert.equal(p.kind, 'procedural');
 });
 
+test('should classify standalone supported procedural operators as procedural', () => {
+  assert.equal(parseLine('example.com##.ad:remove()').kind, 'procedural');
+  assert.equal(parseLine('example.com##.ad:matches-attr(data-ad)').kind, 'procedural');
+  assert.equal(parseLine('example.com##.ad:matches-path(/shop/)').kind, 'procedural');
+  assert.equal(parseLine('example.com##.ad:if(.child)').kind, 'procedural');
+  assert.equal(parseLine('example.com##.ad').kind, 'hide');
+});
+
 test('uBO scriptlet syntax parses name + args', () => {
   const p = parseLine('example.com##+js(set-constant, canRunAds, true)');
   assert.equal(p.kind, 'scriptlet');
@@ -753,6 +767,34 @@ test('AdGuard scriptlet syntax parses', () => {
   assert.equal(p.kind, 'scriptlet');
   assert.equal(p.scriptlet.name, 'abort-on-property-read');
   assert.deepEqual(p.scriptlet.args, ['ads']);
+});
+
+test('should keep regex backslashes in scriptlet arguments', () => {
+  assert.deepEqual(splitArgs('/[^\\n]+/, next'), ['/[^\\n]+/', ' next']);
+  assert.deepEqual(splitArgs('a\\,b, c'), ['a,b', ' c']);
+  assert.deepEqual(splitArgs('a\\\\,b'), ['a\\', 'b']);
+
+  const ubo = readFileSync(join(FILTERS, 'ubo-filters.txt'), 'utf8');
+  const searchAds = ubo.split('\n').find((l) => l.includes('SEARCH_ADS') && l.includes('+js('));
+  const market = ubo.split('\n').find((l) => l.includes('MarketplaceFeedAdStory') && l.includes('+js('));
+  assert.ok(searchAds && market, 'shipped Facebook scriptlets must exist');
+  const searchParsed = parseLine(searchAds);
+  const marketParsed = parseLine(market);
+  assert.ok(searchParsed.scriptlet.args[0].includes('[^\\n]'));
+  assert.ok(!searchParsed.scriptlet.args[0].includes('[^n]'));
+  assert.ok(marketParsed.scriptlet.args[0].includes('[^\\n]'));
+
+  const rx = /^\/(.*)\/([a-z]*)$/.exec(searchParsed.scriptlet.args[0]);
+  assert.ok(rx, 'SEARCH_ADS needle must be a /pattern/flags regex');
+  const re = new RegExp(rx[1], rx[2]);
+  // The letter n appears before cursor; [^\n] still matches, [^n] (the old parse) does not.
+  assert.equal(re.test('{"node":{"role":"SEARCH_ADS","name":1,"cursor":"x"}}'), true);
+});
+
+test('parser procedural vocabulary includes every runtime operator name', () => {
+  for (const name of PROCEDURAL_OP_NAMES) {
+    assert.equal(isProceduralCosmeticBody(`.ad:${name}(x)`), true, name);
+  }
 });
 
 // --- $all / $removeparam must reach main_frame -------------------------------

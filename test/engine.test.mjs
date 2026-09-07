@@ -19,8 +19,8 @@ before(async () => {
     stdin: {
       contents: `
         export { domainSuffixes, hostMatchesDomain, domainSpecMatches, normalizeHostname, isAllowlistedHost, isValidMatchPatternHost, isSafeAllowlistHost, isPublicSuffixHost, isMultiTenantPublicSuffix, allowlistMatchPatterns } from './src/shared/hostname.js';
-        export { matchCosmetic, matchScriptlets, mergeCosmeticLists } from './src/engine/cosmetic-match.js';
-        export { parseProcedural } from './src/engine/procedural.js';
+        export { matchCosmetic, matchScriptlets, mergeCosmeticLists, mergeNetworkExceptions } from './src/engine/cosmetic-match.js';
+        export { parseProcedural, trailingSelectorMode, proceduralMutationObserverInit, PROCEDURAL_OP_NAMES } from './src/engine/procedural.js';
       `,
       resolveDir: ROOT,
       loader: 'ts',
@@ -93,7 +93,7 @@ test('matchCosmetic gathers generic-free specific selectors and applies exceptio
         ],
       },
     },
-    networkExceptions: { generichide: [], elemhide: [], specifichide: [] },
+    networkExceptions: { generichide: {}, elemhide: {}, specifichide: {} },
   };
   const m = mod.matchCosmetic('www.example.com', data, ['seed']);
   assert.ok(m.hide.includes('.ad'));
@@ -113,7 +113,7 @@ test('should apply hideSpecific keys keyed as entity.*', () => {
         procedural: [],
       },
     },
-    networkExceptions: { generichide: [], elemhide: [], specifichide: [] },
+    networkExceptions: { generichide: {}, elemhide: {}, specifichide: {} },
   };
   const m = mod.matchCosmetic('www.example.co.uk', data, ['seed']);
   assert.ok(m.hide.includes('.entity-ad'));
@@ -132,7 +132,7 @@ test('matchCosmetic honors mixed include/exclude via unhideSpecific cancel', () 
         procedural: [],
       },
     },
-    networkExceptions: { generichide: [], elemhide: [], specifichide: [] },
+    networkExceptions: { generichide: {}, elemhide: {}, specifichide: {} },
   };
   const parent = mod.matchCosmetic('www.example.com', data, ['seed']);
   assert.ok(parent.hide.includes('.ad'));
@@ -153,7 +153,7 @@ test('matchCosmetic concrete generichide does NOT revert (excluded at registrati
     },
     // Concrete host: the generic stylesheet is excluded via syncRegisteredScripts, so the
     // content script must NOT ship the whole generic set as a per-page revert.
-    networkExceptions: { generichide: ['example.com'], elemhide: [], specifichide: [] },
+    networkExceptions: { generichide: { seed: ['example.com'] }, elemhide: {}, specifichide: {} },
   };
   const m = mod.matchCosmetic('www.example.com', data, ['seed']);
   assert.equal(m.disableGeneric, true);
@@ -173,7 +173,7 @@ test('matchCosmetic entity generichide (example.*) still reverts the generic set
     },
     // Entity domains can't be a match pattern, so the sheet is still injected and the
     // content-script revert is required to honor the generichide exception.
-    networkExceptions: { generichide: ['example.*'], elemhide: [], specifichide: [] },
+    networkExceptions: { generichide: { seed: ['example.*'] }, elemhide: {}, specifichide: {} },
   };
   const m = mod.matchCosmetic('www.example.com', data, ['seed']);
   assert.equal(m.disableGeneric, true);
@@ -191,7 +191,7 @@ test('should honor entity-domain generichide hosts (google.* / gmx.*)', () => {
         procedural: [],
       },
     },
-    networkExceptions: { generichide: ['google.*', 'gmx.*'], elemhide: [], specifichide: [] },
+    networkExceptions: { generichide: { seed: ['google.*', 'gmx.*'] }, elemhide: {}, specifichide: {} },
   };
   const serp = mod.matchCosmetic('www.google.com', data, ['seed']);
   assert.equal(serp.disableGeneric, true);
@@ -216,9 +216,9 @@ test('should apply trailing-dot generichide entity keys to matching sites only',
       },
     },
     networkExceptions: {
-      generichide: ['stream4free.*', 'asd.*', 'asd.homes'],
-      elemhide: [],
-      specifichide: [],
+      generichide: { seed: ['stream4free.*', 'asd.*', 'asd.homes'] },
+      elemhide: {},
+      specifichide: {},
     },
   };
   assert.equal(mod.matchCosmetic('stream4free.tv', data, ['seed']).disableGeneric, true);
@@ -330,7 +330,7 @@ test('disabled lists are excluded from mergeCosmeticLists', () => {
         procedural: [],
       },
     },
-    networkExceptions: { generichide: [], elemhide: [], specifichide: [] },
+    networkExceptions: { generichide: {}, elemhide: {}, specifichide: {} },
   };
   const m = mod.matchCosmetic('example.com', data, ['on']);
   assert.ok(m.hide.includes('.a'));
@@ -403,7 +403,7 @@ test('mergeCosmeticLists is memoized per (dataset, enabled lists)', () => {
         procedural: [],
       },
     },
-    networkExceptions: { generichide: [], elemhide: [], specifichide: [] },
+    networkExceptions: { generichide: {}, elemhide: {}, specifichide: {} },
   };
 
   // Same inputs -> same object, so matchCosmetic stops rebuilding ~29k selectors per frame.
@@ -435,7 +435,7 @@ test('memoized merge is not mutated by matchCosmetic', () => {
         ],
       },
     },
-    networkExceptions: { generichide: ['example.com'], elemhide: [], specifichide: [] },
+    networkExceptions: { generichide: { a: ['example.com'] }, elemhide: {}, specifichide: {} },
   };
   const merged = mod.mergeCosmeticLists(data, ['a']);
   const snapshot = JSON.stringify(merged);
@@ -446,4 +446,62 @@ test('memoized merge is not mutated by matchCosmetic', () => {
   mod.matchCosmetic('other.example', data, ['a']);
 
   assert.equal(JSON.stringify(mod.mergeCosmeticLists(data, ['a'])), snapshot);
+});
+
+test('should ignore cosmetic exceptions from a disabled list', () => {
+  const data = {
+    byList: {
+      seed: {
+        hideGeneric: ['.g'],
+        unhideGeneric: [],
+        hideSpecific: {},
+        unhideSpecific: {},
+        procedural: [],
+      },
+    },
+    networkExceptions: {
+      generichide: { 'easylist-cookie': ['login.csdisco.com', 'my101.me'] },
+      elemhide: {},
+      specifichide: {},
+    },
+  };
+  const off = mod.matchCosmetic('login.csdisco.com', data, ['seed']);
+  assert.equal(off.disableGeneric, false);
+  const on = mod.matchCosmetic('login.csdisco.com', data, ['seed', 'easylist-cookie']);
+  assert.equal(on.disableGeneric, true);
+  const mergedOff = mod.mergeNetworkExceptions(data, ['seed']);
+  assert.deepEqual(mergedOff.generichide, []);
+});
+
+test('should treat a trailing :first-child as a compound continuation', () => {
+  const r = mod.parseProcedural('.ad:has-text(hello):first-child');
+  assert.equal(r.prefix, '.ad');
+  assert.deepEqual(
+    r.ops.map((o) => o.name),
+    ['has-text', 'selector'],
+  );
+  assert.equal(r.ops[1].arg, ':first-child');
+  assert.equal(mod.trailingSelectorMode(r.ops[1].arg), 'self');
+});
+
+test('should keep a descendant combinator distinct from a compound continuation', () => {
+  const r = mod.parseProcedural('.ad:has-text(hello) .inner');
+  assert.equal(r.ops[1].arg, ' .inner');
+  assert.equal(mod.trailingSelectorMode(r.ops[1].arg), 'descendant');
+  assert.equal(mod.trailingSelectorMode('> .inner'), 'child');
+  assert.equal(mod.trailingSelectorMode(':first-child'), 'self');
+});
+
+test('runtime procedural operators match the compiler vocabulary', async () => {
+  const { PROCEDURAL_OP_NAMES: compilerOps } = await import('../scripts/lib/procedural-ops.mjs');
+  assert.deepEqual([...mod.PROCEDURAL_OP_NAMES].sort(), [...compilerOps].sort());
+});
+
+test('should observe characterData for text procedural filters', () => {
+  const text = mod.proceduralMutationObserverInit(['.ad:has-text(Sponsored)']);
+  assert.equal(text.characterData, true);
+  assert.equal(text.childList, true);
+  const cssOnly = mod.proceduralMutationObserverInit(['.ad:matches-attr(data-ad)']);
+  assert.equal(cssOnly.characterData, false);
+  assert.equal(cssOnly.attributes, true);
 });

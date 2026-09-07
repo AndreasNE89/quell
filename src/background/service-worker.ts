@@ -54,7 +54,13 @@ import {
   DARK_MODE_FORCE_ON_SCRIPT_ID,
   DARK_MODE_CSS_PATH,
 } from '../shared/constants.js';
-import { loadSettings, saveSettings, isListEnabled, mergeSettings } from './settings.js';
+import {
+  loadSettings,
+  saveSettings,
+  isListEnabled,
+  buildSettingsExportDocument,
+  applyImportedSettings,
+} from './settings.js';
 import { syncOneRegisteredScript } from './registered-scripts.js';
 import {
   defaultLicense,
@@ -98,7 +104,7 @@ import {
   isDarkModeInjectibleUrl,
   isHttpOrHttpsUrl,
 } from '../shared/dark-mode.js';
-import { matchCosmetic, matchScriptlets } from '../engine/cosmetic-match.js';
+import { matchCosmetic, matchScriptlets, mergeNetworkExceptions } from '../engine/cosmetic-match.js';
 import {
   normalizeHostname,
   isAllowlistedHost,
@@ -112,7 +118,7 @@ import scriptletJson from '../generated/scriptlets.json';
 import metaJson from '../generated/meta.json';
 import trackerJson from '../generated/trackers.json';
 
-const COSMETIC = cosmeticJson as CosmeticData;
+const COSMETIC = cosmeticJson as unknown as CosmeticData;
 const SCRIPTLETS = scriptletJson as ScriptletData;
 const META = metaJson as GeneratedMeta;
 const TRACKERS = trackerJson as TrackerIndex;
@@ -265,6 +271,11 @@ async function syncRegisteredScripts(settings: Settings): Promise<void> {
     ),
   ];
 
+  const ids = enabledListIds(settings);
+  // Only exceptions from *enabled* lists exclude the generic sheet. A disabled cookie
+  // list must not keep its @@$generichide hosts unhidden.
+  const netEx = mergeNetworkExceptions(COSMETIC, ids);
+
   // Generic cosmetic CSS is additionally excluded on hosts with a $generichide/$elemhide
   // network exception, so those hosts never receive the sheet (and need no per-page revert
   // of the whole generic set). matchCosmetic mirrors this: it only emits the revert for
@@ -277,14 +288,12 @@ async function syncRegisteredScripts(settings: Settings): Promise<void> {
         // chrome.scripting, so suppressing the per-page payload in handleCosmetic is not
         // enough to stop generic hiding on that host.
         ...hostsWithCosmeticsOff(settings.siteFixes),
-        ...COSMETIC.networkExceptions.generichide,
-        ...COSMETIC.networkExceptions.elemhide,
+        ...netEx.generichide,
+        ...netEx.elemhide,
       ].flatMap(allowlistMatchPatterns),
     ),
   ];
   const cosmeticExclude = cosmeticMatches;
-
-  const ids = enabledListIds(settings);
   const cssFiles = ids
     .map((id) => META.lists.find((l) => l.id === id)?.genericCssFile)
     .filter((p): p is string => !!p)
@@ -966,6 +975,7 @@ async function handleYoutubeGetOptions(hostname: string): Promise<YoutubeOptions
     youtubeBlockSponsored: settings.youtubeBlockSponsored !== false,
     youtubeBlockShorts: !!settings.youtubeBlockShorts,
     youtubeSponsorBlock: settings.youtubeSponsorBlock !== false,
+    sponsorBlockCategories: enabledSponsorCategories(settings.sponsorBlockCategories),
   };
 }
 
@@ -1083,7 +1093,9 @@ async function handleReportGet(): Promise<PageReport> {
 
   let page: { hosts?: unknown; hiddenCount?: unknown; truncated?: unknown } | undefined;
   try {
-    page = await chrome.tabs.sendMessage(tab.id, { type: 'page:collect' });
+    // Top document only. all_frames content scripts each reply; without frameId the
+    // first response wins and can be an iframe's hosts labeled as the tab hostname.
+    page = await chrome.tabs.sendMessage(tab.id, { type: 'page:collect' }, { frameId: 0 });
   } catch {
     // No content script in this tab: a restricted page, or the tab predates the install.
     return empty('no-content-script');
@@ -1163,7 +1175,23 @@ async function handleCustomFiltersSet(text: string): Promise<CustomFiltersData> 
   await mutateSettings((s) => {
     s.customFilters = text.slice(0, 100_000);
   });
+  await notifyCosmeticRefresh();
   return handleCustomFiltersGet();
+}
+
+/** Re-apply hostname cosmetics on open pages after the user edits their own filters. */
+async function notifyCosmeticRefresh(): Promise<void> {
+  const tabs = await chrome.tabs.query({ url: ['http://*/*', 'https://*/*'] });
+  await Promise.all(
+    tabs.map(async (tab) => {
+      if (tab.id == null) return;
+      try {
+        await chrome.tabs.sendMessage(tab.id, { type: 'cosmetic:refresh' } satisfies Message);
+      } catch {
+        /* tab has no content script */
+      }
+    }),
+  );
 }
 
 async function handleSiteFixSet(
@@ -1198,27 +1226,7 @@ async function handleSiteFixList(): Promise<SiteRulesData> {
 /** Settings as a portable JSON document (no license state — that is tied to the purchase). */
 async function handleSettingsExport(): Promise<{ json: string }> {
   const s = await loadSettings();
-  return {
-    json: JSON.stringify(
-      {
-        format: 'stampstack-settings',
-        version: 1,
-        settings: {
-          paused: s.paused,
-          enabledLists: s.enabledLists,
-          allowlist: s.allowlist,
-          siteFixes: s.siteFixes ?? {},
-          youtubeBlockSponsored: s.youtubeBlockSponsored,
-          youtubeBlockShorts: s.youtubeBlockShorts,
-          youtubeSponsorBlock: s.youtubeSponsorBlock,
-          darkModeEnabled: s.darkModeEnabled,
-          darkModeSiteOverrides: s.darkModeSiteOverrides,
-        },
-      },
-      null,
-      2,
-    ),
-  };
+  return { json: JSON.stringify(buildSettingsExportDocument(s), null, 2) };
 }
 
 async function handleSettingsImport(json: string): Promise<{ ok: boolean; error?: string }> {
@@ -1232,13 +1240,10 @@ async function handleSettingsImport(json: string): Promise<{ ok: boolean; error?
   if (doc?.format !== 'stampstack-settings' || !doc.settings || typeof doc.settings !== 'object') {
     return { ok: false, error: 'That is not a StampStack settings export.' };
   }
-  // mergeSettings validates every field and drops anything unrecognized, so a hand-edited or
-  // hostile file cannot inject state the rest of the worker would trip over.
+  // applyImportedSettings validates via mergeSettings and keeps fields the file never
+  // contained (older backups omit customFilters / sponsorBlockCategories).
   await mutateSettings((s) => {
-    const next = mergeSettings(doc.settings as Partial<Settings>);
-    // Never import a paid flag or counters — the license lives outside settings, and adopting
-    // someone else's blockedTotal would just be wrong.
-    next.blockedTotal = s.blockedTotal;
+    const next = applyImportedSettings(s, doc.settings as Partial<Settings>);
     Object.assign(s, next);
   });
   await withSettings((s) => applyAll(s));

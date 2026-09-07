@@ -2,6 +2,30 @@
 
 Written for users, not for the commit log. Internal refactors and test-only work are omitted.
 
+## 2.2.2
+
+- **Fixed: a backup and restore wiped your own filters.** Exporting settings and importing
+  them again deleted every filter you had written in the picker or the Settings editor, and
+  reset which SponsorBlock categories were on. Those choices now travel with the backup.
+  An older backup that never contained them leaves your current filters and categories alone.
+- **Facebook feed ads hide again.** A parser bug stripped the backslashes out of regex
+  scriptlets, so several Facebook rules (and others like them) no longer matched. The
+  intended patterns are restored.
+- Turning a filter list off now also drops that list's "don't hide on this site" exceptions.
+  A disabled cookie list can no longer keep generic hiding off on sites it used to except.
+- More hide rules actually run — ones that only used `:remove()`, `:matches-attr()`,
+  `:matches-path()` or `:if()`, which were being shipped as broken CSS.
+- Changing SponsorBlock categories in Settings now applies to the video already playing,
+  not only the next one.
+- Editing your own filters updates open pages immediately. Removing the last rule unhides
+  the element without a reload.
+- The page report describes the tab you are on, not a random iframe inside it.
+- Dark mode follows theme switches that sites make with `data-theme` / `data-color-mode`
+  instead of a class.
+- Text-based hide rules (`:has-text`) update when a page rewrites existing text, and
+  `:first-child` after a text match hides the element itself rather than a descendant.
+- Filter lists refreshed from upstream (129,482 network rules).
+
 ## 2.2.1
 
 - **Fixed: sponsor skipping was far too aggressive.** It skipped much more than sponsor
