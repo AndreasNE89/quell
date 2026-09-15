@@ -1,6 +1,6 @@
 {
   "comment": "Integrity record for the lists compiled into a release. Written by `npm run update-lists`; verify with `npm run check-lists`. The .txt files themselves are the source of truth.",
-  "updated": "2026-08-15T06:37:54.739Z",
+  "updated": "2026-09-15T11:13:46.711Z",
   "lists": {
     "quell-seed": {
       "file": "quell-seed.txt",
@@ -9,38 +9,38 @@
     },
     "easylist": {
       "file": "easylist.txt",
-      "bytes": 2073066,
-      "sha256": "0b2eb91ba189b336de90223cbbfeb0b77d8205a2d8ea45fff87dec164334f54c"
+      "bytes": 2131975,
+      "sha256": "2fa96ca5f226ea2b1cb372151f1be62b78983f3a81af5642a47b48a89a285f1a"
     },
     "easyprivacy": {
       "file": "easyprivacy.txt",
-      "bytes": 1494146,
-      "sha256": "0ea1091a5599ecbc94b580f2a32fe424162645a875ccaf5c57e364396cdadd31"
+      "bytes": 1502626,
+      "sha256": "3251816ce42f743d74a0f118891395e189140dbc3b0a4b7c78cd637584463165"
     },
     "ubo-filters": {
       "file": "ubo-filters.txt",
-      "bytes": 1864356,
-      "sha256": "16f275e1bcdebfa8acee335271990da59622f1f2de0f16a69d9c6d64833514bf"
+      "bytes": 1891387,
+      "sha256": "88ded7733369e997905a1e138a548acc86a6ec0847351ba49f1c4adfb8dd0922"
     },
     "ubo-badware": {
       "file": "ubo-badware.txt",
-      "bytes": 146510,
-      "sha256": "6ffe326d33a62ac2b6af0a57fe195d5b0209cf5a3f45175ac0deeea4e1cef481"
+      "bytes": 147224,
+      "sha256": "a3d368e87d5cd16cc305e4d1f5444c0ade96d1ccd3a70c41a0dda4a8679dc024"
     },
     "easylist-cookie": {
       "file": "easylist-cookie.txt",
-      "bytes": 883099,
-      "sha256": "a2ba5a8c6d1b09f589805616c54f2399368b172fd9a06c9eeb5b96a6f4083185"
+      "bytes": 892403,
+      "sha256": "16ff9f09cf68b8be6fac0e19bcc0d6386092b34e5b6640a140808301bab65b07"
     },
     "easylist-china": {
       "file": "easylist-china.txt",
-      "bytes": 554585,
-      "sha256": "cd97c4deee0a3ee030a0721f5e59c8eed2654d18ceeaab05727f7e13d653f4fb"
+      "bytes": 554608,
+      "sha256": "e1f1e59b3637a2f75ca7249ce9166e10724e10011458c5506e5c790b612a2020"
     },
     "cjx-annoyance": {
       "file": "cjx-annoyance.txt",
-      "bytes": 57183,
-      "sha256": "fad81cab3aa74edc3be44b90060b1d18cc0ce3916f4ee0e30549431d6eba20f1"
+      "bytes": 57196,
+      "sha256": "e07fa5f05a8078dec3491c94a4a78156e3cbb9de10c27c7f112efbfa1c984efc"
     }
   }
 }
