@@ -8,9 +8,22 @@
   </head>
   <body>
     <header class="head">
+      <!-- The toolbar mark stands in for the old status dot and carries its signal: popup.ts
+           greys it whenever this tab is not being filtered. The image holds the name for
+           assistive tech, so the word beside it is hidden from AT rather than read twice.
+           1x gets the pixel-hinted 16px master, not a blurred downscale of the 32. -->
       <div class="brand">
-        <span class="dot" id="statusDot"></span>
-        <span class="name" data-i18n="popup_stampstack">StampStack</span>
+        <img
+          class="brand-icon"
+          id="statusIcon"
+          src="icons/icon-16.png"
+          srcset="icons/icon-16.png 1x, icons/icon-32.png 2x"
+          width="16"
+          height="16"
+          alt="StampStack"
+          data-i18n-attr="alt:popup_stampstack"
+        />
+        <span class="name" aria-hidden="true" data-i18n="popup_stampstack">StampStack</span>
       </div>
       <button class="icon-btn" id="optionsBtn" title="Settings" data-i18n-attr="title:popup_settings" aria-label="Settings">⚙</button>
     </header>

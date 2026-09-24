@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Ferry line returns to the old harbor — Example Daily</title>
+    <!-- Store-screenshot fixture for http://news.example/ (fictional). The capture script maps
+         the host to its local server; every other host resolves to nothing, so none of the
+         third-party references below ever leave the machine.
+
+         They are here because a real news page carries them: the popup's page report counts
+         the known trackers a page references, and only a page that references some can show
+         that sentence honestly. parse.ly is deliberately one StampStack has no rule for. -->
+    <script async src="https://securepubads.g.doubleclick.net/tag/js/gpt.js"></script>
+    <script async src="https://www.google-analytics.com/analytics.js"></script>
+    <script async src="https://c.amazon-adsystem.com/aax2/apstag.js"></script>
+    <script async src="https://static.criteo.net/js/ld/publishertag.js"></script>
+    <script async src="https://cdn.taboola.com/libtrc/example-daily/loader.js"></script>
+    <script async src="https://cdn.parse.ly/keys/news.example/p.js"></script>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; background: #fff; color: #1d1f21; font: 16px/1.6 Georgia, 'Times New Roman', serif; }
+      .top { border-bottom: 1px solid #e3e3e3; }
+      .top-inner { max-width: 1040px; margin: 0 auto; padding: 14px 24px 0; }
+      .masthead { display: flex; align-items: baseline; justify-content: space-between; }
+      .masthead h1 { margin: 0; font: 700 34px/1.1 Georgia, serif; letter-spacing: -0.01em; }
+      .masthead .date { font: 13px/1 system-ui, sans-serif; color: #6b6f73; }
+      nav { display: flex; gap: 22px; padding: 12px 0; font: 600 13px/1 system-ui, sans-serif; color: #3b3f43; }
+      nav span:first-child { color: #9b2c2c; }
+      .page { max-width: 1040px; margin: 0 auto; padding: 22px 24px 40px; display: grid; grid-template-columns: 1fr 300px; gap: 40px; }
+      .kicker { font: 700 12px/1 system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase; color: #9b2c2c; }
+      /* Narrow enough that the popup in shot 1 lands on the body text, not across the headline. */
+      article h2 { max-width: 460px; font: 700 38px/1.15 Georgia, serif; margin: 10px 0 12px; letter-spacing: -0.01em; }
+      .dek { max-width: 460px; font-size: 19px; line-height: 1.45; color: #45494d; margin: 0 0 14px; }
+      .byline { font: 13px/1.4 system-ui, sans-serif; color: #6b6f73; margin-bottom: 18px; }
+      .byline b { color: #1d1f21; }
+      figure { margin: 0 0 18px; }
+      figure svg { display: block; width: 100%; height: auto; border-radius: 4px; }
+      figcaption { font: 12px/1.4 system-ui, sans-serif; color: #6b6f73; margin-top: 6px; }
+      article p { margin: 0 0 16px; }
+      aside h3 { font: 700 13px/1 system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase; margin: 0 0 12px; padding-bottom: 8px; border-bottom: 2px solid #1d1f21; }
+      .most { list-style: none; margin: 0 0 26px; padding: 0; counter-reset: n; }
+      .most li { counter-increment: n; display: grid; grid-template-columns: 30px 1fr; padding: 10px 0; border-bottom: 1px solid #ececec; font: 600 15px/1.35 Georgia, serif; }
+      .most li::before { content: counter(n); font: 700 22px/1 Georgia, serif; color: #c9c9c9; }
+      .brief { font: 14px/1.5 system-ui, sans-serif; color: #45494d; }
+
+      /* The ad slots. Each class/id below is a generic EasyList hide rule (checked against
+         filters/easylist.txt), so with StampStack on they are gone before first paint. The
+         capture script asserts that every [data-shot-ad] element ends up display:none.
+         They are only ever seen in shot 1's small "without StampStack" picture, at under a
+         quarter size, so the label is big enough to still read as "Ad" there. */
+      .ad-box { font: 700 56px/1 system-ui, sans-serif; letter-spacing: 0.02em; color: rgba(255, 255, 255, 0.92); display: grid; place-items: center; }
+      .ad-leaderboard { max-width: 1040px; margin: 14px auto 0; height: 110px; background: #c8553d; }
+      .mpu-ad { height: 250px; margin-bottom: 26px; background: #d98a3d; }
+      .in-article-ad { height: 180px; margin: 0 0 16px; background: #7a5cc2; }
+      #div-gpt-ad-sidebar-2 { height: 600px; background: #3d7fc8; }
+      #taboola-below-article-thumbnails { height: 320px; margin-top: 12px; background: #e0e0e0; color: #333; }
+    </style>
+  </head>
+  <body>
+    <header class="top">
+      <div class="top-inner">
+        <div class="masthead">
+          <h1>Example Daily</h1>
+          <span class="date">Thursday, 24 September</span>
+        </div>
+        <nav><span>Local</span><span>World</span><span>Business</span><span>Science</span><span>Culture</span><span>Sport</span><span>Opinion</span></nav>
+      </div>
+    </header>
+    <div class="ad-leaderboard ad-box" data-shot-ad>Ad</div>
+
+    <main class="page">
+      <article>
+        <div class="kicker">Transport</div>
+        <h2>Ferry line returns to the old harbor after forty years</h2>
+        <p class="dek">Two electric boats will cross the bay every twenty minutes from spring, and the first tickets cost less than the bus.</p>
+        <div class="byline">By <b>Maren Holt</b> · 6 min read</div>
+        <figure>
+          <svg viewBox="0 0 640 300" role="img" aria-label="A ferry crossing a calm bay at dawn">
+            <defs>
+              <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f3d9b8" /><stop offset="1" stop-color="#e9b98f" /></linearGradient>
+              <linearGradient id="sea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6f93a3" /><stop offset="1" stop-color="#3f6576" /></linearGradient>
+            </defs>
+            <rect width="640" height="300" fill="url(#sky)" />
+            <circle cx="470" cy="150" r="46" fill="#f7e7c9" opacity=".9" />
+            <path d="M0 170 L90 120 L160 150 L250 96 L340 150 L420 128 L520 168 L640 138 L640 190 L0 190Z" fill="#9c8a7a" opacity=".55" />
+            <rect y="180" width="640" height="120" fill="url(#sea)" />
+            <g fill="#f4efe6" opacity=".35"><rect x="40" y="214" width="120" height="2" /><rect x="300" y="240" width="160" height="2" /><rect x="480" y="206" width="110" height="2" /><rect x="120" y="268" width="140" height="2" /></g>
+            <g transform="translate(210 172)">
+              <path d="M0 26 L160 26 L146 44 L14 44Z" fill="#2c3b44" />
+              <rect x="30" y="8" width="96" height="18" rx="3" fill="#f4efe6" />
+              <g fill="#2c3b44"><rect x="40" y="13" width="12" height="7" /><rect x="58" y="13" width="12" height="7" /><rect x="76" y="13" width="12" height="7" /><rect x="94" y="13" width="12" height="7" /></g>
+              <rect x="62" y="0" width="30" height="8" rx="2" fill="#c8553d" />
+            </g>
+          </svg>
+          <figcaption>A test run crosses the bay at first light. The route last ran in the 1980s.</figcaption>
+        </figure>
+        <p>For the first time in four decades, commuters on the north shore will be able to reach the old harbor without crossing the bridge. The council approved the new line on Tuesday night by nine votes to two.</p>
+        <div class="in-article-ad ad-box" data-shot-ad>Ad</div>
+        <p>The two boats are battery powered and charge at the harbor quay between crossings. Each carries up to 120 passengers and forty bicycles, and the crossing takes eleven minutes.</p>
+        <p>“People kept asking why the water was the one route we never used,” said the transport chair, who rode the test crossing with a group of students from the harbor school.</p>
+        <div id="taboola-below-article-thumbnails" class="ad-box" data-shot-ad>Sponsored</div>
+      </article>
+
+      <aside>
+        <div class="mpu-ad ad-box" data-shot-ad>Ad</div>
+        <h3>Most read</h3>
+        <ol class="most">
+          <li>The library that lends tools, not books</li>
+          <li>Night market moves to the old rail yard</li>
+          <li>Why the tide tables were wrong all summer</li>
+          <li>A school garden feeds the whole street</li>
+        </ol>
+        <h3>In brief</h3>
+        <p class="brief">The swimming pool on Quay Road reopens on Saturday after a two-month repair of its roof and changing rooms.</p>
+        <div id="div-gpt-ad-sidebar-2" class="ad-box" data-shot-ad>Ad</div>
+      </aside>
+    </main>
+    <img src="https://sb.scorecardresearch.com/p?c1=2&amp;c2=0000000&amp;cv=2.0&amp;cj=1" width="1" height="1" alt="" />
+  </body>
+</html>

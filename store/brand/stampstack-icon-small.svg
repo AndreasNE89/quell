@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
+  <!-- StampStack toolbar icon (src/icons/icon-16.png and icon-32.png), drawn on the 16px grid.
+       Full-bleed stamp so the toolbar gets every pixel: 3 bites per side on whole pixels (x 3-5,
+       7-9, 11-13), a 2px green edge, a 12x12 ink panel, and the postmark with a 2px ring (9px
+       across, 5px hole) plus three 1px cancel bars running into the edge. Ring and bars sit half a
+       pixel above centre on purpose (optical centre). At 32 the same geometry lands on a 2px grid. -->
+  <path fill="#43906b" d="M0 0H3A1 1 0 0 0 5 0H7A1 1 0 0 0 9 0H11A1 1 0 0 0 13 0H16V3A1 1 0 0 0 16 5V7A1 1 0 0 0 16 9V11A1 1 0 0 0 16 13V16H13A1 1 0 0 0 11 16H9A1 1 0 0 0 7 16H5A1 1 0 0 0 3 16H0V13A1 1 0 0 0 0 11V9A1 1 0 0 0 0 7V5A1 1 0 0 0 0 3Z"/>
+  <rect fill="#1f4d37" x="2" y="2" width="12" height="12"/>
+  <path fill="#fbf6ea" d="M9 5H14V6H9ZM9 7H14V8H9ZM9 9H14V10H9Z"/>
+  <path fill="#fbf6ea" fill-rule="evenodd" d="M2 7.5A4.5 4.5 0 1 0 11 7.5A4.5 4.5 0 1 0 2 7.5ZM4 7.5A2.5 2.5 0 1 0 9 7.5A2.5 2.5 0 1 0 4 7.5Z"/>
+</svg>

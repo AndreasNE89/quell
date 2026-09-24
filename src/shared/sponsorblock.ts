@@ -19,7 +19,7 @@ export const SPONSORBLOCK_CATEGORY_INFO: Record<
   { label: string; hint: string }
 > = {
   sponsor: { label: 'Sponsor', hint: 'Paid promotion, paid referrals, direct advertising.' },
-  selfpromo: { label: 'Self-promotion', hint: 'Unpaid plugs for the creator’s own merch or Patreon.' },
+  selfpromo: { label: 'Self-promotion', hint: 'Unpaid plugs for the creator’s own merch or fan-funding page.' },
   interaction: { label: 'Interaction reminder', hint: '“Like, comment and subscribe” asides.' },
   intro: { label: 'Intro / intermission', hint: 'Title cards and animated intros with no content.' },
   outro: { label: 'Outro / endcards', hint: 'Credits and endcards after the content ends.' },

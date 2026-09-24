@@ -75,6 +75,6 @@ export function hostsWithScriptletsOff(fixes: Record<string, SiteFixLevel> | und
 /** Short label for the popup / options rows. */
 export function siteFixLabel(level: SiteFixLevel | null): string {
   if (level === 'cosmetics') return 'Element hiding off';
-  if (level === 'injection') return 'Element hiding + scriptlets off';
+  if (level === 'injection') return 'Element hiding + script patches off';
   return 'Full blocking';
 }

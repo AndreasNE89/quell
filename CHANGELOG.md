@@ -2,6 +2,27 @@
 
 Written for users, not for the commit log. Internal refactors and test-only work are omitted.
 
+## Unreleased
+
+- **A new icon.** A postage stamp with a postmark, in the same green as the rest of StampStack.
+  The old one was a small scene of "AD" cards under a "BLOCK" stamp, and at toolbar size it
+  turned into a smudge. The new one still reads as a stamp at 16 pixels, on light and dark
+  toolbars alike.
+- The popup and Settings show that icon where the green dot used to be. In the popup it goes
+  grey whenever the current site is not being filtered, because StampStack is paused or turned
+  off for that site, just as the dot did. In Settings it goes grey while StampStack is paused.
+- **Plainer words.** "Scriptlets" are now called script patches in the popup, in Settings and
+  in the breakage report email. The Settings subtitle says what StampStack is rather than how
+  it is built, and the filter-list notes say "element hiding" instead of "cosmetics". After the
+  first repair step, the panel used to say "Ads and scriptlets are still active". It meant ad
+  blocking, and now says so. Settings now calls the sponsor toggle "Skip sponsor segments", as
+  the popup already did, instead of "SponsorBlock skip".
+- The element picker highlights in StampStack's green instead of teal. Its outline now sits
+  exactly on the element under the pointer. It used to spill 4 pixels past the right and bottom
+  edges, so on a full-width bar the right-hand side of the outline was off-screen.
+- StampStack's description on the extensions page now appears in Simplified or Traditional
+  Chinese when your browser is set to either.
+
 ## 2.2.2
 
 - **Fixed: a backup and restore wiped your own filters.** Exporting settings and importing

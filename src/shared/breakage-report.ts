@@ -43,7 +43,7 @@ export interface BreakageReport {
 /** The line the reader of the report needs first: how much filtering was still on. */
 function repairState(facts: BreakageFacts): string {
   if (facts.allowlisted) return 'blocking off for this site (allowlisted)';
-  if (facts.siteFix === 'injection') return 'element hiding and scriptlets off';
+  if (facts.siteFix === 'injection') return 'element hiding and script patches off';
   if (facts.siteFix === 'cosmetics') return 'element hiding off';
   return 'everything on (no repair applied)';
 }

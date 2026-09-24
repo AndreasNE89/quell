@@ -47,11 +47,15 @@ body {
   font-size: 26px;
   margin: 0;
 }
-.dot {
-  width: 13px;
-  height: 13px;
-  border-radius: 50%;
-  background: var(--accent);
+.brand-icon {
+  display: block;
+  flex: none;
+  width: 24px;
+  height: 24px;
+}
+.brand-icon.off {
+  filter: grayscale(1);
+  opacity: 0.5;
 }
 .tagline {
   color: var(--muted);

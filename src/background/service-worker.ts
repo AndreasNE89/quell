@@ -562,7 +562,8 @@ async function init(mode: 'full' | 'wake' = 'full'): Promise<void> {
 
   await withSettings(async (settings) => {
     await applyAll(settings, license, { touchTabs });
-    await chrome.action.setBadgeBackgroundColor({ color: '#2f6f4f' });
+    // Neutral grey, not brand green: a green badge melts into the green icon. White text 6:1.
+    await chrome.action.setBadgeBackgroundColor({ color: '#5f6368' });
   });
 }
 

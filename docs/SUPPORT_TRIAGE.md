@@ -27,7 +27,7 @@ narrows the cause before you open the site:
 |---|---|
 | everything on | Nothing yet — reproduce with all layers on |
 | element hiding off *(and it fixed it)* | A cosmetic rule is hiding something the site needs |
-| element hiding and scriptlets off *(and it fixed it)* | A scriptlet is patching a page global the site depends on |
+| element hiding and script patches off *(and it fixed it)* | A scriptlet is patching a page global the site depends on. Reports from before the rebrand say "scriptlets off" |
 | blocking off (allowlisted) | Network-layer overblock — the expensive kind |
 
 Nothing about the page is included, by design, so a report never tells you *what* on the page

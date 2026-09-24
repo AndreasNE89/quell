@@ -1,6 +1,10 @@
 # StampStack
 
-Manifest V3 ad & tracker blocker for Chromium browsers. Compiles EasyList-style filter lists into `declarativeNetRequest` rulesets, plus cosmetic hiding and scriptlets, aiming for strong uBlock Origin–class coverage within Chrome’s MV3 rules.
+An ad and tracker blocker for Chrome and other Chromium browsers. It shows which known trackers a page contacts, hides anything you point at, and lets you fix a broken site without turning blocking off. No account, no telemetry.
+
+Under the hood it compiles EasyList-style filter lists offline into Manifest V3 `declarativeNetRequest` rulesets, and adds element hiding and MAIN-world script patches (scriptlets) for what network rules cannot reach. The goal is as much EasyList and uBlock Origin list coverage as Chrome’s MV3 limits allow.
+
+User-facing copy (store listing, UI strings) stays plain: no "Manifest V3", "DNR", "scriptlets" or "cosmetic filters". See [`store/LISTING.md`](./store/LISTING.md).
 
 ## Requirements
 

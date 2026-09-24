@@ -9,6 +9,7 @@ src/generated/
 # Store screenshots (capture locally; keep LISTING.md)
 store/screenshots/*
 !store/screenshots/.gitkeep
+!store/screenshots/README.md
 # Local ad-audit / feature-audit captures (regenerate with npm run ad-audit)
 docs/ad-audit-shots/
 docs/ad-audit-results.json

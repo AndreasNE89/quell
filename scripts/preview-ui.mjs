@@ -35,32 +35,32 @@ const arg = (name, fallback) => {
 const STATES = {
   unpaid: {
     label: 'ordinary site, dark mode not purchased (the default a new user sees)',
-    popup: { hostname: 'www.theguardian.com', paused: false, allowlisted: false, siteFix: null },
+    popup: { hostname: 'news.example', paused: false, allowlisted: false, siteFix: null },
     dark: { paid: false, enabled: false, apply: false, restricted: false },
   },
   paid: {
     label: 'dark mode unlocked and on for this site',
-    popup: { hostname: 'www.theguardian.com', paused: false, allowlisted: false, siteFix: null },
+    popup: { hostname: 'news.example', paused: false, allowlisted: false, siteFix: null },
     dark: { paid: true, enabled: true, apply: true, restricted: false, override: 'on' },
   },
   allowlisted: {
     label: 'blocking turned off for this site',
-    popup: { hostname: 'www.theguardian.com', paused: false, allowlisted: true, siteFix: null },
+    popup: { hostname: 'news.example', paused: false, allowlisted: true, siteFix: null },
     dark: { paid: true, enabled: true, apply: true, restricted: false },
   },
   repaired: {
     label: 'a breakage fix is active on this site',
-    popup: { hostname: 'shop.example.com', paused: false, allowlisted: false, siteFix: 'injection' },
+    popup: { hostname: 'shop.example', paused: false, allowlisted: false, siteFix: 'injection' },
     dark: { paid: true, enabled: false, apply: false, restricted: false },
   },
   paused: {
     label: 'paused everywhere',
-    popup: { hostname: 'www.theguardian.com', paused: true, allowlisted: false, siteFix: null },
+    popup: { hostname: 'news.example', paused: true, allowlisted: false, siteFix: null },
     dark: { paid: false, enabled: false, apply: false, restricted: false },
   },
   degraded: {
     label: 'Chrome refused to load a list (shared rule pool exhausted)',
-    popup: { hostname: 'www.theguardian.com', paused: false, allowlisted: false, siteFix: null, degraded: true },
+    popup: { hostname: 'news.example', paused: false, allowlisted: false, siteFix: null, degraded: true },
     dark: { paid: false, enabled: false, apply: false, restricted: false },
   },
   restricted: {
@@ -75,7 +75,7 @@ const STATES = {
   },
   'stale-lists': {
     label: 'filter lists well past a refresh — see Options (--page=options)',
-    popup: { hostname: 'www.theguardian.com', paused: false, allowlisted: false, siteFix: null },
+    popup: { hostname: 'news.example', paused: false, allowlisted: false, siteFix: null },
     dark: { paid: false, enabled: false, apply: false, restricted: false },
     listAgeDays: 47,
   },
@@ -129,7 +129,7 @@ function chromeStub() {
   const dark = {
     hostname: state.popup.hostname,
     override: null,
-    siteOverrides: state.dark.paid ? { 'news.example.com': 'off' } : {},
+    siteOverrides: state.dark.paid ? { 'forum.example': 'off' } : {},
     license: {
       paid: state.dark.paid,
       grace: false,
@@ -189,14 +189,14 @@ function chromeStub() {
       statsReliable: false,
       listsGeneratedAt: new Date(Date.now() - (state.listAgeDays ?? 3) * 86_400_000).toISOString(),
     },
-    'sitefix:list': { allowlist: ['ads.example.com'], siteFixes: { 'shop.example.com': 'injection' } },
+    'sitefix:list': { allowlist: ['video.example'], siteFixes: { 'shop.example': 'injection' } },
     'report:breakage': {
       to: 'support@example.com',
       subject: 'StampStack breakage: preview',
       body: '(preview)',
       mailto: 'mailto:support@example.com?subject=preview',
     },
-    'customfilters:get': { text: '! my rules\nexample.com##.sponsored-widget\n', count: 1, errors: [] },
+    'customfilters:get': { text: '! my rules\nnews.example##.sponsored-widget\n', count: 1, errors: [] },
     'sponsorblock:getCategories': sponsor,
   };
 
@@ -224,6 +224,8 @@ window.chrome = Object.assign(window.chrome || {}, {
 rmSync(OUT, { recursive: true, force: true });
 mkdirSync(OUT, { recursive: true });
 for (const f of [`${page}.html`, `${page}.css`, `${page}.js`]) cpSync(join(DIST, f), join(OUT, f));
+// Both headers show the toolbar icon from icons/, which would otherwise render as a broken image.
+cpSync(join(DIST, 'icons'), join(OUT, 'icons'), { recursive: true });
 
 // The i18n stub lives in its own file rather than inside the chromeStub template literal.
 // Inlined, its `${` and backslash sequences were consumed by the enclosing template and it

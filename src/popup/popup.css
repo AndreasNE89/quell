@@ -59,16 +59,16 @@ body {
   font-weight: 700;
   font-size: 15px;
 }
-.dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+.brand-icon {
+  display: block;
+  flex: none;
+  width: 16px;
+  height: 16px;
 }
-.dot.off {
-  background: var(--muted);
-  box-shadow: none;
+/* Not filtering this tab (paused, allowlisted, or a page we do not run on). */
+.brand-icon.off {
+  filter: grayscale(1);
+  opacity: 0.5;
 }
 .icon-btn {
   border: none;

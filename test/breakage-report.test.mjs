@@ -59,7 +59,7 @@ test('the repair rung reached is stated in words, not a code', () => {
   const at = (over) => buildBreakageReport(facts(over)).body;
   assert.match(at({ siteFix: null }), /repair step: *everything on \(no repair applied\)/);
   assert.match(at({ siteFix: 'cosmetics' }), /repair step: *element hiding off/);
-  assert.match(at({ siteFix: 'injection' }), /repair step: *element hiding and scriptlets off/);
+  assert.match(at({ siteFix: 'injection' }), /repair step: *element hiding and script patches off/);
   assert.match(at({ allowlisted: true }), /repair step: *blocking off for this site \(allowlisted\)/);
 });
 

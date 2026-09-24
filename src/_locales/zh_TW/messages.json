@@ -1,4 +1,7 @@
 {
+  "extDescription": {
+    "message": "攔截廣告與追蹤器。查看網頁連線到哪些已知追蹤器，一鍵隱藏任何礙眼的內容，網站出問題時也不必關閉攔截。"
+  },
   "options_add": {
     "message": "新增"
   },
@@ -99,7 +102,7 @@
     "message": "元素隱藏已關閉"
   },
   "options_element_hiding_scriptlets_off": {
-    "message": "元素隱藏與腳本片段已關閉"
+    "message": "元素隱藏與腳本修補已關閉"
   },
   "options_enable_dark_mode": {
     "message": "啟用深色模式"
@@ -306,9 +309,6 @@
   "options_loading": {
     "message": "載入中…"
   },
-  "options_manifest_v3_ad_amp_tracker_blocker_ubo": {
-    "message": "Manifest V3 廣告與追蹤器攔截器 · 在規則允許範圍內對齊 uBO"
-  },
   "options_my_filters": {
     "message": "我的過濾規則"
   },
@@ -376,7 +376,7 @@
     }
   },
   "options_sponsor_all_categories_off": {
-    "message": "所有類別都已關閉 — StampStack 不會連線 SponsorBlock API。"
+    "message": "所有類別都已關閉 — StampStack 不會連線 SponsorBlock。"
   },
   "options_sponsor_cat_interaction_hint": {
     "message": "「按讚、留言、訂閱」之類的插話。"
@@ -409,7 +409,7 @@
     "message": "預告 / 回顧"
   },
   "options_sponsor_cat_selfpromo_hint": {
-    "message": "創作者對自家周邊或 Patreon 的無償宣傳。"
+    "message": "創作者對自家周邊或粉絲贊助頁面的無償宣傳。"
   },
   "options_sponsor_cat_selfpromo_label": {
     "message": "自我宣傳"
@@ -421,7 +421,7 @@
     "message": "贊助"
   },
   "options_sponsorblock_skip": {
-    "message": "SponsorBlock 略過"
+    "message": "略過贊助片段"
   },
   "options_stampstack_settings": {
     "message": "StampStack — 設定"
@@ -429,8 +429,14 @@
   "options_stat_unavailable": {
     "message": "無資料"
   },
+  "options_subtitle": {
+    "message": "廣告與追蹤器攔截器 · 免帳號，無遙測"
+  },
   "options_toggle_lists_on_or_off_this_enables": {
-    "message": "開啟或關閉清單。這會一併啟用或停用該清單的網路規則、元素隱藏與腳本片段。清單內容隨擴充功能一起提供；更新會隨新版 StampStack 送達。"
+    "message": "開啟或關閉清單。這會一併啟用或停用該清單的網路規則、元素隱藏與腳本修補。清單內容隨擴充功能一起提供；更新會隨新版 StampStack 送達。"
+  },
+  "options_which_segments_hint": {
+    "message": "僅在「略過贊助片段」開啟時生效。StampStack 只會向 SponsorBlock 資料庫查詢你在這裡選擇的類別；全部關閉後，就不會連線 SponsorBlock。"
   },
   "options_which_segments_to_skip": {
     "message": "要略過哪些片段"
@@ -638,7 +644,7 @@
     "message": "可修復版面塌陷、空白區塊與卡住的選單。"
   },
   "popup_repair_hint_injection": {
-    "message": "可修復因反廣告攔截修補而失效的播放器與登入。"
+    "message": "可修復被腳本修補弄壞的播放器與登入。"
   },
   "popup_repair_next_allowlist": {
     "message": "關閉此網站的攔截"
@@ -647,16 +653,16 @@
     "message": "停止在此隱藏元素"
   },
   "popup_repair_next_injection": {
-    "message": "同時停止在此執行腳本片段"
+    "message": "同時停止在此執行腳本修補"
   },
   "popup_repair_state_allowlisted": {
     "message": "此網站已關閉攔截 — 這裡不會過濾任何東西。"
   },
   "popup_repair_state_cosmetics": {
-    "message": "此處已關閉元素隱藏。廣告攔截與腳本片段仍在運作。"
+    "message": "此處已關閉元素隱藏。廣告攔截與腳本修補仍在運作。"
   },
   "popup_repair_state_injection": {
-    "message": "此處已關閉元素隱藏與腳本片段。廣告仍會被攔截。"
+    "message": "此處已關閉元素隱藏與腳本修補。廣告仍會被攔截。"
   },
   "popup_report_ad_slot_one": {
     "message": "已隱藏 $COUNT$ 個廣告版位。",

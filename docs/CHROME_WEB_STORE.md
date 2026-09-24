@@ -16,8 +16,23 @@ Use this when uploading StampStack to the [Chrome Web Store Developer Dashboard]
 | Permission justifications | [store/PERMISSIONS.md](../store/PERMISSIONS.md) |
 | Privacy policy source | [docs/privacy-policy.html](./privacy-policy.html) (+ `.md`) |
 | In-extension privacy page | Bundled as `privacy.html` in the zip |
-| Small promo tile 440×280 | `npm run store-assets` → `store/promo-small.png` |
+| Icons 16/32/48/128 | `npm run icons` → `src/icons/icon-{16,32,48,128}.png` |
+| Small promo tile 440×280 + marquee 1400×560 | `npm run store-assets` → `store/promo-small.png`, `store/promo-marquee.png` |
 | Reviewer notes template | Below |
+
+### Brand assets
+
+- Masters are hand-written SVGs in `store/brand/`: `stampstack-icon.svg` (128 and the store icon,
+  96×96 art in a 16px transparent margin), `stampstack-icon-48.svg` (hinted for 48),
+  `stampstack-icon-small.svg` (16 and 32, drawn on the pixel grid), `promo-440x280.svg` and
+  `marquee-1400x560.svg`. Edit these, never the PNGs.
+- `scripts/render-brand-assets.mjs` rasterizes them with the Playwright Chromium the repo already
+  installs. No Python or Pillow needed. Reruns are byte-identical.
+- The store PNGs are written as 24-bit RGB with no alpha channel (flattened onto the paper colour
+  `#f4ecd8`), which the dashboard requires for promo images.
+- Store-art text is outlined from Lato (SIL OFL 1.1), so renders don't depend on installed fonts.
+  Each outlined path carries its text in an `aria-label` and a comment. To change a line, re-outline
+  it in the same font and size.
 
 ## Before you package (local)
 
@@ -71,7 +86,8 @@ These steps require your Google account, developer registration, and (usually) p
 
 - [ ] **Icon** 128×128 — from the zip (`icons/icon-128.png`) or `src/icons/icon-128.png`
 - [ ] **Small promo** 440×280 — `store/promo-small.png`
-- [ ] **Screenshots** (≥1 required; 2–3 recommended) — capture popup + Options yourself; sizes **1280×800** or **640×400**; save under `store/screenshots/` locally if you want. Guidance in LISTING.md
+- [ ] **Marquee** 1400×560 — `store/promo-marquee.png`
+- [ ] **Screenshots** (≥1 required) — upload the five **1280×800** shots in `store/screenshots/`. Regenerate them with `npm run build:store && npm run store-screenshots`, then `npm run bundle` for a dev `dist/` again. Plan in LISTING.md, how they are made in `store/screenshots/README.md`
 
 ### Privacy practices form
 

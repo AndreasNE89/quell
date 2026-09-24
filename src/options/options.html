@@ -9,8 +9,17 @@
   <body>
     <main class="wrap">
       <header class="page-head">
-        <h1><span class="dot"></span> StampStack</h1>
-        <p class="tagline" data-i18n="options_manifest_v3_ad_amp_tracker_blocker_ubo">Manifest V3 ad &amp; tracker blocker · uBO-parity within the rules</p>
+        <!-- Same mark as the toolbar, greyed by options.ts while paused everywhere. The image
+             carries the heading's accessible name (and the paused state); the visible word is
+             hidden from AT so the heading is not read as "StampStack StampStack". The 32px file,
+             not the 48: the 48 keeps the store icon's transparent padding, so at 24px its stamp
+             shrank to ~18px and the three cancel bars blurred into one grey block. The 32 is the
+             full-bleed small master and keeps the bars apart at 1x and 2x. -->
+        <h1>
+          <img class="brand-icon" id="brandIcon" src="icons/icon-32.png" width="24" height="24" alt="StampStack" />
+          <span aria-hidden="true">StampStack</span>
+        </h1>
+        <p class="tagline" data-i18n="options_subtitle">Ad and tracker blocker · no account, no telemetry</p>
       </header>
 
       <section class="cards">
@@ -54,23 +63,23 @@
           </div>
           <div class="list-item">
             <div class="list-info">
-              <div class="list-title" data-i18n="options_sponsorblock_skip">SponsorBlock skip</div>
+              <div class="list-title" data-i18n="options_sponsorblock_skip">Skip sponsor segments</div>
               <div class="list-meta" data-i18n="options_auto_skip_sponsors_intros_outros_self_promo">
                 Auto-skip sponsors, intros, outros, self-promo, and interaction reminders
               </div>
             </div>
             <label class="switch">
-              <input type="checkbox" id="ytSponsorBlock" aria-label="SponsorBlock skip" data-i18n-attr="aria-label:options_sponsorblock_skip" />
+              <input type="checkbox" id="ytSponsorBlock" aria-label="Skip sponsor segments" data-i18n-attr="aria-label:options_sponsorblock_skip" />
               <span class="slider"></span>
             </label>
           </div>
         </div>
 
         <h3 class="subhead" data-i18n="options_which_segments_to_skip">Which segments to skip</h3>
-        <p class="hint">
-          Applies only while <strong data-i18n="options_sponsorblock_skip">SponsorBlock skip</strong> is on above. StampStack asks the
-          API for the categories you pick here and nothing else — turn them all off and it never
-          contacts the API at all.
+        <p class="hint" data-i18n="options_which_segments_hint">
+          Applies only while “Skip sponsor segments” is on. StampStack asks the SponsorBlock
+          database only about the kinds you pick here; turn them all off and it never contacts
+          SponsorBlock.
         </p>
         <div id="sponsorCategories" class="lists" data-i18n="options_loading">Loading…</div>
         <p class="hint" id="sponsorCategoriesNote"></p>
@@ -128,7 +137,7 @@
         <h2 data-i18n="options_filter_lists">Filter lists</h2>
         <p class="hint" data-i18n="options_toggle_lists_on_or_off_this_enables">
           Toggle lists on or off. This enables or disables each list’s network rules,
-          cosmetics, and scriptlets together. List contents ship with the extension;
+          element hiding, and script patches together. List contents ship with the extension;
           updates arrive with new StampStack versions.
         </p>
         <p class="hint list-age" id="listAge"></p>
@@ -155,7 +164,7 @@
           />
           <select id="siteRuleLevel" aria-label="Rule" data-i18n-attr="aria-label:options_rule">
             <option value="cosmetics" data-i18n="options_element_hiding_off">Element hiding off</option>
-            <option value="injection" data-i18n="options_element_hiding_scriptlets_off">Element hiding + scriptlets off</option>
+            <option value="injection" data-i18n="options_element_hiding_scriptlets_off">Element hiding + script patches off</option>
             <option value="allowlist" data-i18n="options_no_blocking_at_all">No blocking at all</option>
           </select>
           <button type="submit" data-i18n="options_add">Add</button>

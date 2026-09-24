@@ -12,6 +12,11 @@ Use your **normal Chrome** at: https://chrome.google.com/webstore/devconsole
 | Version | matches `package.json` / `src/manifest.json` |
 | Icon 128 | `C:\Users\hakka\WebstormProjects\Extensions\quell\src\icons\icon-128.png` |
 | Promo 440×280 | `C:\Users\hakka\WebstormProjects\Extensions\quell\store\promo-small.png` |
+| Marquee 1400×560 | `C:\Users\hakka\WebstormProjects\Extensions\quell\store\promo-marquee.png` |
+
+Regenerate the icons with `npm run icons` and both promo images with `npm run store-assets`. Both
+render from the SVG masters in `store/brand/`. The promo PNGs are 24-bit with no alpha, as the
+dashboard requires.
 
 ## Listing (paste)
 
@@ -21,11 +26,8 @@ Use your **normal Chrome** at: https://chrome.google.com/webstore/devconsole
 StampStack
 ```
 
-**Summary**
-
-```
-Block ads and trackers with EasyList-style filters, cosmetics, and scriptlets — built for Manifest V3.
-```
+**Summary** — nothing to paste. The dashboard shows "Summary from package": `extDescription` in
+`src/_locales/*/messages.json` (see `store/LISTING.md`). Change it there and rebuild the zip.
 
 **Detailed description** — copy from `store/LISTING.md` (Detailed description section).
 
@@ -64,7 +66,8 @@ Homepage / Official URL: leave blank until a public site exists. Do not paste th
 1. Register as developer (eligible adult Google account; $5 fee if prompted).
 2. **New item** → upload the zip above.
 3. **Privacy policy HTTPS URL** — already hosted at the URL above; confirm it still loads.
-4. **Screenshots** (≥1) — 1280×800 preferred; popup + Options. Save under `store/screenshots/`.
+4. **Screenshots** — the five 1280×800 shots from `npm run build:store && npm run store-screenshots`
+   (then `npm run bundle` to get a dev `dist/` back). They land in `store/screenshots/`; see its README.
 5. Privacy practices — no account, no remote telemetry, settings local-only (match privacy policy).
 6. **Settings:** provide + verify publisher contact email (blocks Submit until done).
 7. Submit for review only when the dashboard shows no required-field errors.

@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Video</title>
+    <!-- Store-screenshot fixture: a plain grey 16:9 player, nothing else. The capture script
+         serves it on a YouTube hostname only because StampStack's sponsor skipping runs on
+         YouTube pages and nowhere else — so the "Skipped sponsor · Undo" notice in the shot is
+         drawn by the shipped content script, not re-created. No YouTube markup, logo or name
+         appears; the only thing shared with the real site is the #movie_player id the skipper
+         looks for.
+
+         The video is a canvas stream: it plays, its clock advances, and the skipper's seek on
+         it is a no-op, so the segment keeps matching and the notice stays up for the capture. -->
+    <style>
+      html, body { margin: 0; height: 100%; background: #6f7471; overflow: hidden; }
+      #movie_player, video { display: block; width: 100vw; height: 100vh; }
+      video { object-fit: cover; }
+    </style>
+  </head>
+  <body>
+    <div id="movie_player"><video muted playsinline></video></div>
+    <script>
+      const canvas = Object.assign(document.createElement('canvas'), { width: 320, height: 180 });
+      const ctx = canvas.getContext('2d');
+      // Redraw every frame so the stream keeps producing frames and currentTime advances.
+      (function paint() {
+        ctx.fillStyle = '#6f7471';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        requestAnimationFrame(paint);
+      })();
+      const video = document.querySelector('video');
+      video.srcObject = canvas.captureStream(30);
+      video.play();
+    </script>
+  </body>
+</html>

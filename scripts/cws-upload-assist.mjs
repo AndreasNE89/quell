@@ -20,6 +20,7 @@ import {
   writeFileSync,
   cpSync,
   readFileSync,
+  readdirSync,
 } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -31,6 +32,8 @@ const ROOT = join(__dirname, '..');
 
 const ZIP_DEFAULT = join(ROOT, 'release', 'stampstack-1.1.1.zip');
 const PROMO = join(ROOT, 'store', 'promo-small.png');
+const MARQUEE = join(ROOT, 'store', 'promo-marquee.png');
+const SCREENSHOTS_DIR = join(ROOT, 'store', 'screenshots');
 const ICON = join(ROOT, 'src', 'icons', 'icon-128.png');
 const CHROME_EXE = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const DEVCONSOLE = 'https://chrome.google.com/webstore/devconsole';
@@ -41,30 +44,22 @@ const CDP_PORT = 9333;
 const CDP_URL = `http://127.0.0.1:${CDP_PORT}`;
 
 const NAME = 'StampStack';
-const SUMMARY =
-  'Block ads and trackers with EasyList-style filters, cosmetics, and scriptlets — built for Manifest V3.';
-const DESCRIPTION = `StampStack blocks ads and trackers in Chromium browsers using Manifest V3 Declarative Net Request, plus cosmetic filters and scriptlets for leftover page junk.
+// The listing copy lives in one place each, so this script can never paste an older wording
+// over it: the summary is the manifest description (en `extDescription`, which the dashboard
+// shows as "Summary from package"), and the description is the fenced block under
+// "## Detailed description" in store/LISTING.md.
+function listingBlock(heading) {
+  const md = readFileSync(join(ROOT, 'store', 'LISTING.md'), 'utf8').replace(/\r\n/g, '\n');
+  const at = md.indexOf(`\n## ${heading}\n`);
+  const block = at < 0 ? null : md.slice(at).match(/\n```[^\n]*\n([\s\S]*?)\n```/);
+  if (!block) throw new Error(`store/LISTING.md has no fenced block under "## ${heading}"`);
+  return block[1].trim();
+}
 
-What it does
-• Network blocking with packaged filter lists (EasyList-style rules compiled for DNR)
-• Cosmetic hiding for ad placeholders and overlays
-• Scriptlets for common anti-block and tracking patterns where supported
-• Per-site allowlist from the toolbar popup
-• Options to enable or disable filter lists and tune behavior
-
-Privacy
-• No accounts
-• No analytics or telemetry to StampStack servers
-• Settings stay in your browser’s local storage
-• See the privacy policy linked on the store listing
-
-Open source
-https://github.com/AndreasNE89/quell
-
-Tips
-• After install, browse normally — blocking starts with the packaged lists
-• Use the popup to pause StampStack on a site that breaks
-• Open Options to manage which lists are enabled`;
+const SUMMARY = JSON.parse(
+  readFileSync(join(ROOT, 'src', '_locales', 'en', 'messages.json'), 'utf8'),
+).extDescription.message;
+const DESCRIPTION = listingBlock('Detailed description');
 
 const HOMEPAGE = 'https://github.com/AndreasNE89/quell';
 const SUPPORT = 'https://github.com/AndreasNE89/quell/issues';
@@ -280,8 +275,10 @@ async function fillFirst(page, selectors, value, label) {
 }
 
 async function setFileIfPresent(page, filePath, hints) {
-  if (!existsSync(filePath)) {
-    log(`Missing file: ${filePath}`);
+  const paths = [filePath].flat();
+  const missing = paths.filter((p) => !existsSync(p));
+  if (!paths.length || missing.length) {
+    log(`Missing file: ${missing.join(', ') || '(none given)'}`);
     return false;
   }
   const inputs = page.locator('input[type=file]');
@@ -302,7 +299,7 @@ async function setFileIfPresent(page, filePath, hints) {
       const hit = hints.some((h) => blob.includes(h.toLowerCase()));
       if (hit || (hints.includes('zip') && (accept.includes('zip') || accept.includes('.zip') || accept === ''))) {
         await input.setInputFiles(filePath);
-        log(`Uploaded via input #${i}: ${filePath}`);
+        log(`Uploaded via input #${i}: ${paths.join(', ')}`);
         return true;
       }
     } catch (e) {
@@ -631,6 +628,12 @@ async function main() {
       report.skipped.push('Promo tile (no matching input)');
     }
 
+    if (await setFileIfPresent(page, MARQUEE, ['marquee', '1400'])) {
+      report.succeeded.push('Uploaded promo-marquee.png');
+    } else {
+      report.skipped.push('Marquee promo tile (no matching input)');
+    }
+
     if (await setFileIfPresent(page, ICON, ['icon', '128', 'store icon'])) {
       report.succeeded.push('Uploaded icon-128.png');
     } else {
@@ -641,7 +644,21 @@ async function main() {
     if (perms.length) report.succeeded.push(`Permission justifications: ${perms.join(', ')}`);
     else report.skipped.push('Permission justifications (may be on another tab)');
 
-    report.skipped.push('Screenshots — none under store/screenshots/; required before submit');
+    const shots = existsSync(SCREENSHOTS_DIR)
+      ? readdirSync(SCREENSHOTS_DIR)
+          .filter((f) => f.toLowerCase().endsWith('.png'))
+          .sort()
+          .map((f) => join(SCREENSHOTS_DIR, f))
+      : [];
+    if (!shots.length) {
+      report.skipped.push(
+        'Screenshots — none under store/screenshots/ (npm run build:store && npm run store-screenshots); required before submit',
+      );
+    } else if (await setFileIfPresent(page, shots, ['screenshot', '1280'])) {
+      report.succeeded.push(`Uploaded ${shots.length} screenshot(s) from store/screenshots/`);
+    } else {
+      report.skipped.push(`Screenshots — ${shots.length} in store/screenshots/, upload them by hand (no matching input)`);
+    }
     report.notes.push('Did NOT submit for review');
     report.draftUrl = page.url();
     report.finishedAt = new Date().toISOString();

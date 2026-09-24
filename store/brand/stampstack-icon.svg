@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!-- StampStack icon master (128 → src/icons/icon-128.png; also the store icon).
+       A perforated postage stamp, 96x96 inside a 16px transparent margin (CWS icon guideline),
+       cancelled by a postmark: a ring with three cancel bars running out of it to the edge of the
+       printed panel. Deliberately not a circle-slash, so it never reads as "blocked/disabled".
+       Colours: stamp green #43906b (>=3:1 on light and dark toolbars, so it carries the silhouette),
+       deep ink #1f4d37, paper cream #fbf6ea. 5 bites per side, r=4, on a 16px pitch. -->
+  <path fill="#43906b" d="M16 16H28A4 4 0 0 0 36 16H44A4 4 0 0 0 52 16H60A4 4 0 0 0 68 16H76A4 4 0 0 0 84 16H92A4 4 0 0 0 100 16H112V28A4 4 0 0 0 112 36V44A4 4 0 0 0 112 52V60A4 4 0 0 0 112 68V76A4 4 0 0 0 112 84V92A4 4 0 0 0 112 100V112H100A4 4 0 0 0 92 112H84A4 4 0 0 0 76 112H68A4 4 0 0 0 60 112H52A4 4 0 0 0 44 112H36A4 4 0 0 0 28 112H16V100A4 4 0 0 0 16 92V84A4 4 0 0 0 16 76V68A4 4 0 0 0 16 60V52A4 4 0 0 0 16 44V36A4 4 0 0 0 16 28Z"/>
+  <rect fill="#1f4d37" x="28" y="28" width="72" height="72"/>
+  <!-- engraved frame line; the cancel bars run over it. Too fine for 48, which has its own master. -->
+  <rect fill="none" stroke="#43906b" stroke-width="2" x="33" y="33" width="62" height="62"/>
+  <!-- cancel bars start inside the ring's stroke (outside its hole), so no knockout is needed -->
+  <path fill="#fbf6ea" d="M67 49H100V55H67ZM70 61H100V67H70ZM67 73H100V79H67Z"/>
+  <path fill="#fbf6ea" fill-rule="evenodd" d="M36 64A20 20 0 1 0 76 64A20 20 0 1 0 36 64ZM43 64A13 13 0 1 0 69 64A13 13 0 1 0 43 64Z"/>
+</svg>

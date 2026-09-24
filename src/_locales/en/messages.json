@@ -1,4 +1,7 @@
 {
+  "extDescription": {
+    "message": "Blocks ads and trackers. See which known trackers a page contacts, hide anything with a click, and keep blocking on if sites break."
+  },
   "options_add": {
     "message": "Add"
   },
@@ -99,7 +102,7 @@
     "message": "Element hiding off"
   },
   "options_element_hiding_scriptlets_off": {
-    "message": "Element hiding + scriptlets off"
+    "message": "Element hiding + script patches off"
   },
   "options_enable_dark_mode": {
     "message": "Enable dark mode"
@@ -295,7 +298,7 @@
     }
   },
   "options_list_rule_count": {
-    "message": "$COUNT$ network rules · cosmetics follow this toggle",
+    "message": "$COUNT$ network rules · element hiding follows this toggle",
     "placeholders": {
       "count": {
         "content": "$1",
@@ -305,9 +308,6 @@
   },
   "options_loading": {
     "message": "Loading…"
-  },
-  "options_manifest_v3_ad_amp_tracker_blocker_ubo": {
-    "message": "Manifest V3 ad & tracker blocker · uBO-parity within the rules"
   },
   "options_my_filters": {
     "message": "My filters"
@@ -376,7 +376,7 @@
     }
   },
   "options_sponsor_all_categories_off": {
-    "message": "Every category is off — StampStack will not contact the SponsorBlock API."
+    "message": "Every category is off — StampStack will not contact SponsorBlock."
   },
   "options_sponsor_cat_interaction_hint": {
     "message": "“Like, comment and subscribe” asides."
@@ -409,7 +409,7 @@
     "message": "Preview / recap"
   },
   "options_sponsor_cat_selfpromo_hint": {
-    "message": "Unpaid plugs for the creator’s own merch or Patreon."
+    "message": "Unpaid plugs for the creator’s own merch or fan-funding page."
   },
   "options_sponsor_cat_selfpromo_label": {
     "message": "Self-promotion"
@@ -421,7 +421,7 @@
     "message": "Sponsor"
   },
   "options_sponsorblock_skip": {
-    "message": "SponsorBlock skip"
+    "message": "Skip sponsor segments"
   },
   "options_stampstack_settings": {
     "message": "StampStack — Settings"
@@ -429,8 +429,14 @@
   "options_stat_unavailable": {
     "message": "n/a"
   },
+  "options_subtitle": {
+    "message": "Ad and tracker blocker · no account, no telemetry"
+  },
   "options_toggle_lists_on_or_off_this_enables": {
-    "message": "Toggle lists on or off. This enables or disables each list’s network rules, cosmetics, and scriptlets together. List contents ship with the extension; updates arrive with new StampStack versions."
+    "message": "Toggle lists on or off. This enables or disables each list’s network rules, element hiding, and script patches together. List contents ship with the extension; updates arrive with new StampStack versions."
+  },
+  "options_which_segments_hint": {
+    "message": "Applies only while “Skip sponsor segments” is on. StampStack asks the SponsorBlock database only about the kinds you pick here; turn them all off and it never contacts SponsorBlock."
   },
   "options_which_segments_to_skip": {
     "message": "Which segments to skip"
@@ -638,7 +644,7 @@
     "message": "Fixes collapsed layouts, blank gaps and stuck menus."
   },
   "popup_repair_hint_injection": {
-    "message": "Fixes players and logins that break on anti-adblock patches."
+    "message": "Fixes players and logins that a script patch broke."
   },
   "popup_repair_next_allowlist": {
     "message": "Turn blocking off for this site"
@@ -647,16 +653,16 @@
     "message": "Stop hiding elements here"
   },
   "popup_repair_next_injection": {
-    "message": "Also stop running scriptlets here"
+    "message": "Also stop running script patches here"
   },
   "popup_repair_state_allowlisted": {
     "message": "Blocking is off for this site — nothing here is filtered."
   },
   "popup_repair_state_cosmetics": {
-    "message": "Element hiding is off here. Ads and scriptlets are still active."
+    "message": "Element hiding is off here. Ad blocking and script patches are still on."
   },
   "popup_repair_state_injection": {
-    "message": "Element hiding and scriptlets are off here. Ads are still blocked."
+    "message": "Element hiding and script patches are off here. Ads are still blocked."
   },
   "popup_report_ad_slot_one": {
     "message": "$COUNT$ ad slot hidden.",

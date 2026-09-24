@@ -65,15 +65,24 @@ function widenFrom(el: Element, n: number): Element {
   return node;
 }
 
+// Brand colours on an arbitrary page. The forest border alone drops to ~2.7:1 on a dark site,
+// so a 1px stamp-green ring outside it (~4.2:1 on #202124) keeps the box findable there, while
+// the forest carries it on light pages (~6:1 on white). Label and hint are deep ink with cream
+// text (~9:1).
 function styles(): string {
   return `
     :host { all: initial; }
     .box {
       position: fixed;
+      /* The box is sized from the target's rect, so the border must sit inside it. With the
+         default content-box it overshot by 4px right and bottom, and on a full-width element
+         the right edge landed off-screen. */
+      box-sizing: border-box;
       pointer-events: none;
       z-index: 2147483647;
-      border: 2px solid #0d9488;
-      background: rgba(13, 148, 136, 0.18);
+      border: 2px solid #2f6f4f;
+      box-shadow: 0 0 0 1px #43906b;
+      background: rgba(67, 144, 107, 0.2);
       border-radius: 2px;
       transition: all 60ms linear;
     }
@@ -83,8 +92,8 @@ function styles(): string {
       pointer-events: none;
       max-width: min(70vw, 520px);
       padding: 4px 8px;
-      background: #0f172a;
-      color: #f8fafc;
+      background: #1f4d37;
+      color: #fbf6ea;
       font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
       border-radius: 4px;
       overflow: hidden;
@@ -100,15 +109,15 @@ function styles(): string {
       z-index: 2147483647;
       pointer-events: none;
       padding: 8px 14px;
-      background: #0f172a;
-      color: #f8fafc;
+      background: #1f4d37;
+      color: #fbf6ea;
       font: 13px/1.4 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
       border-radius: 999px;
       box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
     }
     kbd {
       padding: 1px 5px;
-      border: 1px solid #475569;
+      border: 1px solid #43906b;
       border-bottom-width: 2px;
       border-radius: 4px;
       font: inherit;

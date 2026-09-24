@@ -46,6 +46,10 @@ function keysUsed() {
     // prefix, and every catalog key under it is reachable.
     for (const m of ts.matchAll(/`((?:popup|options)_[a-z0-9_]*)\$\{/g)) prefixes.push(m[1]);
   }
+  // The manifest pulls its store-facing strings from the catalog as __MSG_key__ (the
+  // description doubles as the Web Store summary). No UI file names those keys, so without
+  // this they would be reported as orphans.
+  for (const m of readFileSync('src/manifest.json', 'utf8').matchAll(/__MSG_(\w+)__/g)) used.add(m[1]);
   return { used, prefixes };
 }
 
@@ -82,6 +86,20 @@ test('no orphaned messages in the default locale', () => {
     .filter((k) => !isUsed(k, index))
     .sort();
   assert.deepEqual(orphans, [], 'unused entries drift out of date and mislead translators');
+});
+
+test('every __MSG_ key in the manifest exists in every locale', () => {
+  // Unlike a UI string, a missing manifest message does not degrade to blank text. Missing
+  // from the default locale, Chrome refuses to load the extension ("Variable __MSG_key__ used
+  // but not defined"); missing from another locale, users of that language quietly get the
+  // English description instead.
+  const keys = [...readFileSync('src/manifest.json', 'utf8').matchAll(/__MSG_(\w+)__/g)].map((m) => m[1]);
+  assert.ok(keys.length > 0, 'expected the manifest to use the catalog');
+  for (const locale of locales) {
+    const cat = catalog(locale);
+    const missing = keys.filter((k) => !(k in cat));
+    assert.deepEqual(missing, [], `${locale} is missing manifest messages`);
+  }
 });
 
 for (const locale of locales.filter((l) => l !== DEFAULT_LOCALE)) {

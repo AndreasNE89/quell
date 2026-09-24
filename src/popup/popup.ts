@@ -16,7 +16,7 @@ import { applyI18n, msg } from '../shared/i18n.js';
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
 const el = {
-  statusDot: $('statusDot'),
+  statusIcon: $<HTMLImageElement>('statusIcon'),
   host: $('host'),
   siteSub: $('siteSub'),
   siteToggle: $<HTMLInputElement>('siteToggle'),
@@ -156,7 +156,7 @@ function render(data: PopupData): void {
   el.pickBtn.disabled = !data.hostname || !isValidMatchPatternHost(normalizeHostname(data.hostname));
   renderRepair(data);
 
-  el.statusDot.classList.toggle('off', !blockingHere);
+  el.statusIcon.classList.toggle('off', !blockingHere);
   document.body.classList.toggle('paused', data.paused);
   document.body.classList.toggle('allowlisted', data.allowlisted);
 }

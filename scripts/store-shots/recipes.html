@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Lemon barley soup — Weeknight Kitchen</title>
+    <!-- Store-screenshot fixture for http://recipes.example/ (fictional). The capture script
+         injects the real picker (dist/picker.js) and points it at #newsletter-bar, the kind of
+         sticky sign-up strip no filter list will ever hide for you. -->
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; background: #fbfaf7; color: #26221e; font: 17px/1.6 'Segoe UI', system-ui, sans-serif; }
+      header { background: #fff; border-bottom: 1px solid #ece7df; }
+      /* Room under the logo for the picker label, which sits just above whatever it outlines. */
+      .bar { max-width: 1040px; margin: 0 auto; padding: 16px 24px 30px; display: flex; align-items: center; justify-content: space-between; }
+      .logo { font: 700 24px/1 Georgia, serif; color: #8a3b1f; }
+      .logo small { font: 600 12px/1 system-ui, sans-serif; color: #8c8378; margin-left: 10px; letter-spacing: .06em; text-transform: uppercase; }
+      .links { display: flex; gap: 22px; font-size: 14px; font-weight: 600; color: #5b534b; }
+      #newsletter-bar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 16px; padding: 16px max(24px, calc(50% - 496px)); background: #f3e3c3; border-bottom: 1px solid #e3cc9f; }
+      #newsletter-bar strong { font-size: 16px; }
+            #newsletter-bar .field { margin-left: auto; width: 210px; height: 38px; border: 1px solid #d7bf8e; border-radius: 6px; background: #fff; color: #a39784; font-size: 14px; display: flex; align-items: center; padding: 0 12px; }
+      #newsletter-bar .go { height: 38px; padding: 0 18px; border-radius: 6px; background: #8a3b1f; color: #fff; font-size: 14px; font-weight: 700; display: flex; align-items: center; }
+      #newsletter-bar .x { font-size: 22px; color: #8c7a5a; padding: 0 4px; }
+      main { max-width: 1040px; margin: 0 auto; padding: 28px 24px 60px; display: grid; grid-template-columns: 1fr 300px; gap: 40px; }
+      .crumbs { font-size: 13px; color: #8c8378; }
+      h1 { font: 700 40px/1.15 Georgia, serif; margin: 6px 0 10px; }
+      .meta { display: flex; gap: 18px; font-size: 14px; color: #6b635a; margin-bottom: 18px; }
+      .meta b { color: #26221e; }
+      figure { margin: 0 0 18px; }
+      figure svg { display: block; width: 100%; height: auto; border-radius: 8px; }
+      p { margin: 0 0 14px; }
+      aside .card { background: #fff; border: 1px solid #ece7df; border-radius: 10px; padding: 18px 20px; }
+      aside h2 { font: 700 18px/1.2 Georgia, serif; margin: 0 0 10px; }
+      aside ul { margin: 0; padding-left: 18px; font-size: 15px; line-height: 1.9; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="bar">
+        <div class="logo">Weeknight Kitchen<small>Recipes</small></div>
+        <div class="links"><span>Soups</span><span>Bakes</span><span>Quick</span><span>Seasonal</span></div>
+      </div>
+    </header>
+    <!-- No inner wrapper: the empty stretch before the field is the bar itself, which is where
+         the capture parks the pointer so the picker outlines the whole strip. -->
+    <div id="newsletter-bar">
+      <strong>One new recipe every Friday.</strong>
+      <div class="field">you@example</div>
+      <div class="go">Subscribe</div>
+      <div class="x">×</div>
+    </div>
+    <main>
+      <article>
+        <div class="crumbs">Soups · Vegetarian</div>
+        <h1>Lemon barley soup with greens</h1>
+        <div class="meta"><span><b>35</b> min</span><span>Serves <b>4</b></span><span>One pot</span></div>
+        <figure>
+          <svg viewBox="0 0 640 300" role="img" aria-label="A bowl of soup on a linen cloth">
+            <rect width="640" height="300" fill="#e9dfcf" />
+            <rect x="0" y="210" width="640" height="90" fill="#dccfb9" />
+            <ellipse cx="320" cy="176" rx="176" ry="70" fill="#f7f3ea" />
+            <ellipse cx="320" cy="168" rx="150" ry="54" fill="#e2b04a" />
+            <g fill="#6d8f3e"><ellipse cx="270" cy="160" rx="26" ry="9" transform="rotate(-18 270 160)" /><ellipse cx="350" cy="150" rx="30" ry="9" transform="rotate(14 350 150)" /><ellipse cx="318" cy="182" rx="22" ry="8" transform="rotate(-6 318 182)" /></g>
+            <g fill="#f4e7c6"><circle cx="300" cy="170" r="4" /><circle cx="336" cy="176" r="4" /><circle cx="370" cy="166" r="4" /><circle cx="254" cy="178" r="4" /><circle cx="392" cy="182" r="4" /></g>
+            <circle cx="410" cy="150" r="14" fill="#f2dc6b" stroke="#e3c24a" stroke-width="3" />
+          </svg>
+        </figure>
+        <p>A bright, filling soup for the middle of the week. The barley cooks straight in the broth, so there is one pot to wash, and the lemon goes in at the very end so it stays fresh.</p>
+        <p>Use any sturdy greens you have: chard, kale or the tops of a bunch of beetroot all work.</p>
+      </article>
+      <aside>
+        <div class="card">
+          <h2>Ingredients</h2>
+          <ul>
+            <li>1 onion, finely chopped</li>
+            <li>2 carrots, diced</li>
+            <li>150 g pearl barley</li>
+            <li>1.5 l vegetable stock</li>
+            <li>A large handful of greens</li>
+            <li>1 lemon, zest and juice</li>
+          </ul>
+        </div>
+      </aside>
+    </main>
+  </body>
+</html>

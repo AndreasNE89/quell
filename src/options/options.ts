@@ -45,6 +45,10 @@ async function loadStats(): Promise<void> {
   const activeRules = s.paused
     ? 0
     : s.lists.filter((l) => l.active).reduce((n, l) => n + l.ruleCount, 0);
+  // Nothing else on this page says "paused", so the heading mark does, visually and in its alt.
+  const brandIcon = $<HTMLImageElement>('brandIcon');
+  brandIcon.classList.toggle('off', s.paused);
+  brandIcon.alt = (s.paused && msg('popup_stampstack_is_paused')) || 'StampStack';
   $('statTotal').textContent = s.statsReliable
     ? s.blockedTotal.toLocaleString()
     : msg('options_stat_unavailable');

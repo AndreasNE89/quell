@@ -1,0 +1,233 @@
+/* The 1280×800 store-screenshot frame: paper, headline and subline on the left, real UI on the
+   right. Colours are the store-art palette (store/brand/): paper #f4ecd8, deep ink #1f4d37,
+   forest #2f6f4f, stamp green #43906b, cream #fbf6ea. Ad red #c8553d is marketing-only. */
+
+@font-face {
+  font-family: 'Frame Lato';
+  font-weight: 700;
+  src: url('/fonts/lato-700.ttf');
+}
+@font-face {
+  font-family: 'Frame Lato';
+  font-weight: 400;
+  src: url('/fonts/lato-400.ttf');
+}
+
+:root {
+  --paper: #f4ecd8;
+  --paper-deep: #e6d8b4;
+  --ink: #1f4d37;
+  --forest: #2f6f4f;
+  --stamp: #43906b;
+  --cream: #fbf6ea;
+  --ad-red: #c8553d;
+}
+
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  width: 1280px;
+  height: 800px;
+  overflow: hidden;
+  background: var(--paper);
+}
+body {
+  position: relative;
+  color: var(--ink);
+  font-family: 'Frame Lato', 'Segoe UI', system-ui, sans-serif;
+}
+
+/* ---- left column -------------------------------------------------------------------- */
+
+.lockup {
+  position: absolute;
+  left: 72px;
+  top: 60px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 23px;
+  letter-spacing: -0.005em;
+}
+.lockup img {
+  width: 48px;
+  height: 48px;
+  /* The master keeps the CWS 16px margin; pull the art to the text's left edge. */
+  margin: -6px -2px -6px -6px;
+}
+.copy {
+  position: absolute;
+  left: 72px;
+  top: 0;
+  bottom: 0;
+  width: 372px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.copy h1 {
+  margin: 0;
+  font-weight: 700;
+  font-size: 52px;
+  line-height: 1.07;
+  letter-spacing: -0.012em;
+}
+/* A row of perforation dots, the same rule as the promo tile. */
+.perf {
+  height: 7px;
+  width: 143px;
+  margin: 28px 0 26px;
+  background: radial-gradient(circle, var(--stamp) 3px, transparent 3.5px) 0 0 / 13px 7px repeat-x;
+}
+.copy p {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.45;
+}
+
+/* ---- right stage -------------------------------------------------------------------- */
+
+.stage {
+  position: absolute;
+  left: 470px;
+  top: 0;
+  right: 0;
+  bottom: 0;
+}
+.abs {
+  position: absolute;
+}
+
+/* A plain browser window: tab strip, address pill, toolbar. No real browser's chrome. */
+.window {
+  position: absolute;
+  background: #fff;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 14px 14px 0 var(--paper-deep), 0 1px 3px rgba(31, 77, 55, 0.12);
+}
+.window .bar {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px 0 16px;
+  background: #e9ebe8;
+  border-bottom: 1px solid #dcdfdb;
+}
+.window .dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #cdd1cd;
+}
+.window .url {
+  flex: 1;
+  height: 28px;
+  margin-left: 12px;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  border-radius: 14px;
+  background: #fff;
+  color: #4f5552;
+  font: 14px/1 'Segoe UI', system-ui, sans-serif;
+}
+.window .ext {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+}
+.window .ext.on {
+  background: #d6dbd6;
+}
+.window .ext img {
+  width: 16px;
+  height: 16px;
+}
+.window .page {
+  display: block;
+}
+
+/* Real UI captured at 2x and shown at (or below) 2x, so it stays sharp. The outer box carries
+   the shadow and the inner face the shape: a drop-shadow on the masked element itself would be
+   masked away with it. */
+.ui {
+  position: absolute;
+  filter: drop-shadow(0 16px 24px rgba(31, 77, 55, 0.2)) drop-shadow(0 2px 3px rgba(31, 77, 55, 0.14));
+}
+.ui .face {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #fff;
+  border-radius: 12px;
+}
+.ui img {
+  display: block;
+}
+/* Where a capture stops short of the panel's real edge, that edge is perforated like a stamp
+   torn from its sheet, instead of pretending the panel ends there. */
+.cut-bottom .face {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  -webkit-mask: linear-gradient(#000 0 0) top / 100% calc(100% - 6px) no-repeat,
+    radial-gradient(circle at 50% 100%, transparent 5.5px, #000 6px) bottom / 17px 12px repeat-x;
+}
+.cut-both .face {
+  border-radius: 0;
+  -webkit-mask: linear-gradient(#000 0 0) center / 100% calc(100% - 12px) no-repeat,
+    radial-gradient(circle at 50% 0, transparent 5.5px, #000 6px) top / 17px 12px repeat-x,
+    radial-gradient(circle at 50% 100%, transparent 5.5px, #000 6px) bottom / 17px 12px repeat-x;
+}
+
+/* Small tag over the art, e.g. naming which panel a capture came from. */
+.tag {
+  position: absolute;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--forest);
+}
+
+.cursor {
+  position: absolute;
+  width: 26px;
+  height: 36px;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.35));
+}
+
+/* Shot 1's before picture: a small stamp stuck on over the art, tilted and labelled. */
+.inset {
+  position: absolute;
+  transform: rotate(-3deg);
+  filter: drop-shadow(0 10px 16px rgba(31, 77, 55, 0.28)) drop-shadow(0 1px 2px rgba(31, 77, 55, 0.2));
+}
+.inset svg {
+  display: block;
+}
+.inset img {
+  position: absolute;
+  display: block;
+}
+.inset-label {
+  position: absolute;
+  left: 50%;
+  top: -14px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--cream);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
