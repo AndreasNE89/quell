@@ -81,9 +81,11 @@ test('a never-verified license always refreshes', () => {
 });
 
 test('a future timestamp does not grant unbounded freshness', () => {
-  // Clock skew or a hand-edited storage blob must not be able to suppress refreshes forever;
-  // it is bounded by the same window rather than trusted.
+  // Clock skew or a hand-edited storage blob must not be able to suppress refreshes forever.
   const now = 1_000_000_000_000;
-  const skewed = { paid: true, provider: 'extensionpay', verifiedAt: now + 10 * mod.LICENSE_FRESH_MS };
-  assert.equal(mod.licenseIsFresh(skewed, now), true, 'documents current behavior: still bounded by grace at use time');
+  const forged = { paid: true, provider: 'extensionpay', verifiedAt: now + 10 * mod.LICENSE_FRESH_MS };
+  assert.equal(mod.licenseIsFresh(forged, now), false, 'a stamp days ahead must be refreshed');
+  // A clock that ran an hour fast and was corrected is not a forgery.
+  const skewed = { paid: true, provider: 'extensionpay', verifiedAt: now + 60 * 60 * 1000 };
+  assert.equal(mod.licenseIsFresh(skewed, now), true);
 });

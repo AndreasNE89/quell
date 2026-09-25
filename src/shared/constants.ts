@@ -49,6 +49,14 @@ export const LICENSE_STORAGE_KEY = 'stampstack.license';
 /** Offline grace: honor cached `paid: true` for this long after last verify. */
 export const LICENSE_GRACE_MS = 14 * 24 * 60 * 60 * 1000;
 
+/**
+ * How far in the future a license `verifiedAt` may lie before it is distrusted. A verify stamped
+ * by a clock that was fast and has since been corrected stays usable; a forged stamp years
+ * ahead does not keep the grace window open for good, since grace is measured from it and a
+ * negative age always passes.
+ */
+export const LICENSE_FUTURE_SKEW_MS = 24 * 60 * 60 * 1000;
+
 /** User-facing price for dark mode (matches ExtensionPay plan). */
 export const DARK_MODE_PRICE_LABEL = '$2';
 

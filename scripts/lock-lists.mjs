@@ -11,13 +11,37 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { buildLock, diffLock, formatLockDiff, readLock, stampFor, writeLock } from './lib/list-lock.mjs';
+import {
+  buildLock,
+  diffLock,
+  formatLockDiff,
+  readLock,
+  registryProblems,
+  stampFor,
+  writeLock,
+} from './lib/list-lock.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const FILTERS = join(ROOT, 'filters');
-const check = process.argv.includes('--check');
+const args = process.argv.slice(2);
+const check = args.includes('--check');
+
+// `npm run update-lists -- <id>` used to append the id here, to the lock-lists half of a chained
+// script, so update-lists refreshed every list and this ignored the id. Say so instead.
+const stray = args.filter((a) => a !== '--check');
+if (stray.length) {
+  console.error(`lock-lists takes no list ids or other arguments (got: ${stray.join(' ')}).`);
+  console.error(`To refresh only some lists: node scripts/update-lists.mjs ${stray.join(' ')}`);
+  process.exit(1);
+}
 
 const registry = JSON.parse(readFileSync(join(FILTERS, 'lists.json'), 'utf8'));
+const invalid = registryProblems(registry);
+if (invalid.length) {
+  console.error(['filters/lists.json is invalid:', ...invalid].join('\n  '));
+  process.exit(1);
+}
+
 // A corrupt lock is fatal when verifying and recoverable when rewriting.
 //
 // `--check` must fail: it exists to prove disk matches the record, and a record nobody can

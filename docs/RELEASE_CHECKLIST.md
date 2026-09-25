@@ -21,7 +21,8 @@ Tiny cross-fixes are OK when they unblock a release.
 2. **Lists current** (or intentional skip on dark-only even releases):
    - Normally there is nothing to do here: the **Refresh filter lists** workflow runs on the 1st and 15th and opens a PR with the rule-count delta. Merge it and the lists are current.
    - That PR is opened with `GITHUB_TOKEN`, so GitHub will **not** attach the named `CI / build` check (the refresh job’s own Gate already ran the same commands, including byte-for-byte). If branch protection requires `CI / build`, either allow a bypass for that branch or open refresh PRs with a PAT/GitHub App that can trigger workflows.
-   - By hand: `npm run update-lists` then `npm run compile-filters`
+   - By hand: `npm run update-lists` then `npm run compile-filters`. `npm run update-lists -- <id> …` refreshes only the named lists
+   - `update-lists` checks every download (a filter list, not an HTML error page; at least half the size the lock pinned unless `-- --allow-shrink`) and writes all of them or none, so a failed run leaves `filters/` and the lock untouched and names the lists that could be refreshed alone
    - Watch compile stats for `scriptlet-obfuscated`, regex/memory skips
    - The lists are committed and pinned by `filters/lists.lock.json`. `npm run check-lists` verifies disk against the lock; `npm run lock-lists` re-stamps it after an intentional hand-edit
    - If list download fails with TLS/`unable to verify the first certificate` (corp proxy/AV): build with existing `filters/*.txt` via `npm run package -- --skip-lists` and retry lists off that network
@@ -35,9 +36,11 @@ Tiny cross-fixes are OK when they unblock a release.
    - Put the sha256 that `npm run package` prints, and the tagged commit (`git rev-parse v<version>^{commit}`), in `store/SUBMIT-<version>.md`, then commit the doc. It is not in the zip, so committing it after the tag changes nothing in the package.
    - **Check the SUBMIT hash before uploading:** `npm run package` must print the sha256 the SUBMIT doc quotes, with the Node version the doc names. It warns when they differ. A mismatch means the zip is not the tagged tree: rebuild from the tag, or find what changed, before uploading.
    - Why: 2.2.3 was uploaded from an uncommitted tree (see [Release history gaps](#release-history-gaps)).
+   - In releases after 2.3.0 the build writes every text file with LF endings, locales included, so a Windows checkout and the Linux CI runner print the same sha256 for the same commit. `SUBMIT-2.3.0.md` and older were hashed with CRLF locales: compare those only with a build from their own tag.
 5. **Package**
    - `npm run package` (or `npm run package -- --skip-lists` if lists already fresh)
    - Confirm `release/stampstack-<version>.zip`
+   - `package` also runs `lock-lists --check`, refuses a list below its `minRules` floor in `filters/lists.json`, a missing default list and a manifest over Chrome's ruleset limits, requires `attributions.html` and `licenses/`, and warns when `filters/` has uncommitted changes
 6. **Obfuscation** — `npm run package` runs `scan-package` automatically. Manually: `npm run scan-package`.
 
 **Local QA note:** `smoke-extpay` / `build:store` / `package` leave or briefly use a store build. After smoke, `dist/` is restored to `[dev]`. After `package`, run `npm run build` before expecting **Dev unlock**.

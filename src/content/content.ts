@@ -23,7 +23,6 @@ import {
   stopYoutubeFeatures,
 } from './youtube-ui.js';
 import { refreshSponsorBlock, startSponsorBlock, stopSponsorBlock } from './sponsorblock.js';
-import type { SponsorSegment } from '../shared/sponsorblock.js';
 import { startDarkModeSmart, stopDarkModeSmart } from './dark-mode-smart.js';
 import { frameScope } from '../shared/frame-scope.js';
 
@@ -104,16 +103,6 @@ async function refreshYoutubeOpts(host: string): Promise<void> {
   }
 }
 
-async function fetchSponsorSegments(videoId: string): Promise<SponsorSegment[]> {
-  try {
-    const raw = await send({ type: 'sponsorblock:getSegments', videoId });
-    const data = raw as { segments?: SponsorSegment[] } | null;
-    return Array.isArray(data?.segments) ? data.segments : [];
-  } catch {
-    return [];
-  }
-}
-
 /**
  * Host of the page this frame belongs to, for the storage fast path below. The service worker
  * decides the same way from the tab: a YouTube embed follows the site it is embedded in.
@@ -134,10 +123,8 @@ function pageHost(): string {
 function bootstrapYoutube(host: string): void {
   if (!isYoutubeHost(host)) return;
   watchYoutubeSpa(() => youtubeOpts);
-  startSponsorBlock({
-    getOpts: () => youtubeOpts,
-    fetchSegments: fetchSponsorSegments,
-  });
+  // Segments come from the worker (requestSegmentsFromWorker), which tells no answer from none.
+  startSponsorBlock({ getOpts: () => youtubeOpts });
   teardowns.push(stopYoutubeFeatures, stopSponsorBlock);
   onYoutubeStorageChanged(host);
   try {
@@ -423,8 +410,8 @@ const webPage = location.protocol === 'http:' || location.protocol === 'https:';
 if ((webPage || location.protocol === 'about:') && claimFrame()) {
   void start();
   // Paid dark mode: already-dark detect + smart CSS (independent of pause/allowlist).
-  if (webPage) {
-    startDarkModeSmart();
-    teardowns.push(stopDarkModeSmart);
-  }
+  // about:blank, srcdoc and document.write frames too: they carry their creator's host
+  // (frameScope), and left alone they stay a white box on a dark page (B25).
+  startDarkModeSmart();
+  teardowns.push(stopDarkModeSmart);
 }

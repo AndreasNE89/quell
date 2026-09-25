@@ -3,16 +3,27 @@
 # would rewrite line endings on checkout and make every hash in the lock fail verification on
 # a Linux CI runner. `-text` disables that conversion so the bytes on disk are the bytes that
 # were downloaded, on every platform.
-filters/*.txt -text
+#
+# `merge=binary` makes two refreshes of the same list conflict as whole files. A line merge
+# interleaves hunks from two upstream snapshots into a list that matches neither (a pending
+# refresh branch against a manual refresh hit 1,138 of them). Resolve by taking one side's
+# filters/ wholesale, then `npm run check-lists` or `npm run lock-lists`.
+filters/*.txt -text merge=binary
+# The seed is ours, edited by hand: line merges are what we want there.
+filters/quell-seed.txt merge
 
 # Upstream lists, not our source. Collapses their diffs on GitHub by default (still
 # expandable) and keeps them out of the repo's language statistics, so a refresh PR shows the
-# lock summary rather than 40,000 lines of EasyList.
+# lock summary rather than 40,000 lines of EasyList. Every list in filters/lists.json with a
+# `url` belongs here; quell-seed.txt is ours.
 filters/easylist.txt        linguist-generated=true
 filters/easyprivacy.txt     linguist-generated=true
 filters/easylist-cookie.txt linguist-generated=true
+filters/easylist-china.txt  linguist-generated=true
+filters/cjx-annoyance.txt   linguist-generated=true
 filters/ubo-filters.txt     linguist-generated=true
 filters/ubo-badware.txt     linguist-generated=true
+filters/ubo-unbreak.txt     linguist-generated=true
 
 # Redirect stand-ins that DNR serves byte for byte (regenerate with scripts/gen-redirect-media.mjs).
 # Git already detects these as binary; this keeps autocrlf and diff away from them regardless.

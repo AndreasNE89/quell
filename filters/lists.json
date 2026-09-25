@@ -1,5 +1,5 @@
 {
-  "comment": "Registry of filter lists compiled into DNR rulesets. `file` is relative to filters/. Run `npm run update-lists` to populate the downloadable ones; quell-seed.txt ships in-repo so the extension blocks ads offline.",
+  "comment": "Registry of filter lists compiled into DNR rulesets. `file` is relative to filters/. Run `npm run update-lists` to populate the downloadable ones; quell-seed.txt ships in-repo so the extension blocks ads offline. `minRules` is the fewest DNR rules a store package may carry for that list (about half of a normal build): `npm run package` refuses a build under it, which is what a truncated or error-page download looks like.",
   "lists": [
     {
       "id": "quell-seed",
@@ -15,7 +15,8 @@
       "group": "ads",
       "enabledByDefault": true,
       "file": "easylist.txt",
-      "url": "https://easylist.to/easylist/easylist.txt"
+      "url": "https://easylist.to/easylist/easylist.txt",
+      "minRules": 25000
     },
     {
       "id": "easyprivacy",
@@ -23,15 +24,17 @@
       "group": "privacy",
       "enabledByDefault": true,
       "file": "easyprivacy.txt",
-      "url": "https://easylist.to/easylist/easyprivacy.txt"
+      "url": "https://easylist.to/easylist/easyprivacy.txt",
+      "minRules": 28000
     },
     {
       "id": "ubo-filters",
-      "title": "uBlock Origin — Ads/Privacy",
+      "title": "uBlock Origin — Ads",
       "group": "ads",
       "enabledByDefault": true,
       "file": "ubo-filters.txt",
-      "url": "https://ublockorigin.github.io/uAssetsCDN/filters/filters.min.txt"
+      "url": "https://ublockorigin.github.io/uAssetsCDN/filters/filters.min.txt",
+      "minRules": 2000
     },
     {
       "id": "ubo-badware",
@@ -39,7 +42,17 @@
       "group": "security",
       "enabledByDefault": true,
       "file": "ubo-badware.txt",
-      "url": "https://ublockorigin.github.io/uAssetsCDN/filters/badware.min.txt"
+      "url": "https://ublockorigin.github.io/uAssetsCDN/filters/badware.min.txt",
+      "minRules": 2000
+    },
+    {
+      "id": "ubo-unbreak",
+      "title": "uBlock Origin — Unbreak",
+      "group": "ads",
+      "enabledByDefault": true,
+      "file": "ubo-unbreak.txt",
+      "url": "https://ublockorigin.github.io/uAssetsCDN/filters/unbreak.min.txt",
+      "minRules": 700
     },
     {
       "id": "easylist-cookie",
@@ -47,7 +60,8 @@
       "group": "annoyances",
       "enabledByDefault": false,
       "file": "easylist-cookie.txt",
-      "url": "https://secure.fanboy.co.nz/fanboy-cookiemonster.txt"
+      "url": "https://secure.fanboy.co.nz/fanboy-cookiemonster.txt",
+      "minRules": 1000
     },
     {
       "id": "easylist-china",
@@ -55,7 +69,8 @@
       "group": "ads",
       "enabledByDefault": false,
       "file": "easylist-china.txt",
-      "url": "https://easylist-downloads.adblockplus.org/easylistchina.txt"
+      "url": "https://easylist-downloads.adblockplus.org/easylistchina.txt",
+      "minRules": 6000
     },
     {
       "id": "cjx-annoyance",
@@ -63,7 +78,8 @@
       "group": "annoyances",
       "enabledByDefault": false,
       "file": "cjx-annoyance.txt",
-      "url": "https://raw.githubusercontent.com/cjx82630/cjxlist/master/cjx-annoyance.txt"
+      "url": "https://raw.githubusercontent.com/cjx82630/cjxlist/master/cjx-annoyance.txt",
+      "minRules": 300
     }
   ]
 }

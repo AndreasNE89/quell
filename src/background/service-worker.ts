@@ -38,11 +38,12 @@ import type {
   SponsorCategoriesData,
   ListRow,
 } from '../shared/types.js';
-import { fetchSponsorSegments } from './sponsorblock-api.js';
+import { lookupSponsorSegments } from './sponsorblock-api.js';
 import {
   SPONSORBLOCK_SKIP_CATEGORIES,
   SPONSORBLOCK_CATEGORY_INFO,
   enabledSponsorCategories,
+  migrateLegacySponsorCategories,
   SPONSORBLOCK_DEFAULT_ON,
 } from '../shared/sponsorblock.js';
 import {
@@ -1158,12 +1159,27 @@ chrome.runtime.onInstalled.addListener((details) => {
   // Fresh installs only. On an update the user's toggles are already their own answer, and
   // re-applying a regional default would silently switch back on a list they turned off.
   if (details.reason === 'install') void applyLocaleDefaults();
+  if (details.reason === 'update') void migrateSponsorCategories(details.previousVersion);
   void init('full');
   if (details.reason === 'install' || details.reason === 'update') void reinjectContentScripts();
 });
 chrome.runtime.onStartup.addListener(() => void init('full'));
 // Module scope: this is the every-wake path, not a start. Keep it cheap.
 void init('wake');
+
+/**
+ * 2.2.0 and older read an absent SponsorBlock category as on; 2.2.1 as its default (sponsor
+ * only). On the update that leaves such a version, the user's choices are written out so they
+ * keep meaning what they meant (migrateLegacySponsorCategories).
+ */
+async function migrateSponsorCategories(previousVersion: string | undefined): Promise<void> {
+  const settings = await loadSettings();
+  if (!migrateLegacySponsorCategories(settings.sponsorBlockCategories, previousVersion)) return;
+  await mutateSettings((s) => {
+    const next = migrateLegacySponsorCategories(s.sponsorBlockCategories, previousVersion);
+    if (next) s.sponsorBlockCategories = next;
+  });
+}
 
 /**
  * Tabs open across an install or update have no live content script (REVIEW_2026-09-24 M2).
@@ -1869,10 +1885,11 @@ async function handleSetYoutubeOptions(
 async function handleSponsorBlockGetSegments(videoId: string): Promise<SponsorBlockSegmentsData> {
   const settings = await loadSettings();
   // Only ask for what the user wants skipped: a narrower request downloads less and discloses
-  // less. All categories off short-circuits inside fetchSponsorSegments — no request at all.
+  // less. All categories off short-circuits inside lookupSponsorSegments — no request at all.
   const categories = enabledSponsorCategories(settings.sponsorBlockCategories);
-  const segments = await fetchSponsorSegments(videoId, categories);
-  return { videoId, segments };
+  const result = await lookupSponsorSegments(videoId, categories);
+  // No answer is not "no segments": the page retries it (REVIEW_2026-09-24 B61).
+  return result.ok ? { videoId, segments: result.segments } : { videoId, segments: [], failed: true };
 }
 
 async function handleSponsorCategoriesGet(): Promise<SponsorCategoriesData> {

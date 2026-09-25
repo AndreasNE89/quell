@@ -39,10 +39,11 @@ function keysUsed() {
   // the direct-literal form reported 25 live keys as orphans. The `popup_`/`options_` prefix
   // makes these unambiguous — nothing else in the source is shaped like that.
   const prefixes = [];
-  // The element picker is a content script; it reads its own `picker_` keys.
-  for (const f of ['src/popup/popup.ts', 'src/options/options.ts', 'src/content/picker.ts']) {
+  // The element picker and the SponsorBlock toast are content scripts; they read their own
+  // `picker_` and `sponsorblock_` keys.
+  for (const f of ['src/popup/popup.ts', 'src/options/options.ts', 'src/content/picker.ts', 'src/content/sponsorblock.ts']) {
     const ts = readFileSync(f, 'utf8');
-    for (const m of ts.matchAll(/['"`]((?:popup|options|picker)_[a-z0-9_]+)['"`]/g)) used.add(m[1]);
+    for (const m of ts.matchAll(/['"`]((?:popup|options|picker|sponsorblock)_[a-z0-9_]+)['"`]/g)) used.add(m[1]);
     // Keys assembled at runtime: msg(`options_list_age_${level}`). The literal part is a
     // prefix, and every catalog key under it is reachable.
     for (const m of ts.matchAll(/`((?:popup|options)_[a-z0-9_]*)\$\{/g)) prefixes.push(m[1]);

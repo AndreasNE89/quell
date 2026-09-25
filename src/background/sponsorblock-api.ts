@@ -1,18 +1,20 @@
 // SponsorBlock API client (service worker). Uses the privacy-preserving hash prefix
 // endpoint so the full video id is not sent in the clear.
 
-import { SPONSORBLOCK_SKIP_CATEGORIES, type SponsorSegment } from '../shared/sponsorblock.js';
+import {
+  SPONSORBLOCK_SKIP_CATEGORIES,
+  MAX_SEGMENT_SHARE,
+  type SponsorSegment,
+} from '../shared/sponsorblock.js';
 
 const API_BASE = 'https://sponsor.ajay.app/api/skipSegments';
 const CACHE_TTL_MS = 60 * 60 * 1000;
 /** A community API is allowed to be slow; it is not allowed to hang the feature. */
 const REQUEST_TIMEOUT_MS = 6000;
 /**
- * Longest segment we will act on, as a fraction of the video.
- *
- * A segment covering most of the video is either bad data or abuse; skipping it would jump the
- * viewer to the end. The player-side clamp catches the extreme case, but rejecting it here
- * keeps it out of the cache and out of the payload sent to the page.
+ * Longest segment we will act on, in seconds, whatever the video. The share rule
+ * (MAX_SEGMENT_SHARE) needs the segment's videoDuration, which older submissions report as 0;
+ * this bounds those. Rejecting here keeps bad data out of the cache and the page payload.
  */
 const MAX_SEGMENT_SECONDS = 3600;
 const CACHE_MAX = 200;
@@ -23,6 +25,20 @@ interface CacheEntry {
 }
 
 const cache = new Map<string, CacheEntry>();
+
+/**
+ * The answer to a segment lookup. `ok: false` is "no answer" (timeout, network error, 429/5xx,
+ * unreadable body): never cached, so the page retries it. An `ok` empty list is a real answer (a
+ * 404, or a bucket without this video) and is cached like any other.
+ */
+export type SegmentLookup = { ok: true; segments: SponsorSegment[] } | { ok: false };
+
+/**
+ * Requests on the wire, by cache key. Tabs and embeds showing the same video ask at once, and
+ * until the first answer was cached each of them was a request of its own (three per page load
+ * in 2.2.2) to a volunteer-run API that rate-limits.
+ */
+const inFlight = new Map<string, Promise<SegmentLookup>>();
 
 /** SHA-256 hex of videoId, first 4 chars (SponsorBlock privacy prefix). */
 export async function videoIdHashPrefix(videoId: string): Promise<string> {
@@ -53,6 +69,9 @@ export function normalizeSegments(raw: unknown): SponsorSegment[] {
     const end = Number(seg[1]);
     if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
     if (start < 0 || end - start > MAX_SEGMENT_SECONDS) continue;
+    // The duration the submitter saw; 0 when the submission predates the field.
+    const videoDuration = Number(o.videoDuration);
+    if (videoDuration > 0 && end - start > MAX_SEGMENT_SHARE * videoDuration) continue;
     const category = typeof o.category === 'string' ? o.category : 'sponsor';
     const actionType = typeof o.actionType === 'string' ? o.actionType : 'skip';
     if (actionType !== 'skip') continue;
@@ -83,27 +102,17 @@ interface HashBucket {
   segments?: unknown;
 }
 
-/**
- * Fetch skippable segments for a video id (cached).
- *
- * `categories` narrows the request to what the user actually wants skipped, so a user who only
- * wants sponsors does not download intro/outro data — less to send, less to parse, and the
- * request itself discloses less about what we do with the answer.
- */
-export async function fetchSponsorSegments(
+function remember(cacheKey: string, segments: SponsorSegment[]): SegmentLookup {
+  cache.set(cacheKey, { at: Date.now(), segments });
+  pruneCache();
+  return { ok: true, segments };
+}
+
+async function requestSegments(
   videoId: string,
-  categories: readonly string[] = SPONSORBLOCK_SKIP_CATEGORIES,
-): Promise<SponsorSegment[]> {
-  if (!/^[a-zA-Z0-9_-]{11}$/.test(videoId)) return [];
-  // Nothing enabled: never contact the API at all. An empty category list would also be a 400.
-  if (!categories.length) return [];
-
-  // Cache is keyed by video AND category set — a narrower earlier request must not be served
-  // back to a later, wider one.
-  const cacheKey = `${videoId}|${[...categories].sort().join(',')}`;
-  const hit = cache.get(cacheKey);
-  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.segments;
-
+  categories: readonly string[],
+  cacheKey: string,
+): Promise<SegmentLookup> {
   const prefix = await videoIdHashPrefix(videoId);
   const url = buildSkipSegmentsUrl(prefix, categories);
 
@@ -121,32 +130,57 @@ export async function fetchSponsorSegments(
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
   } catch {
-    return hit?.segments ?? [];
+    return { ok: false };
   }
 
   // 404 = no segments known for this hash bucket / video.
-  if (res.status === 404) {
-    cache.set(cacheKey, { at: Date.now(), segments: [] });
-    pruneCache();
-    return [];
-  }
-  if (!res.ok) return hit?.segments ?? [];
+  if (res.status === 404) return remember(cacheKey, []);
+  // 429 and 5xx above all: an answer that says nothing about the video.
+  if (!res.ok) return { ok: false };
 
   let body: unknown;
   try {
     body = await res.json();
   } catch {
-    return hit?.segments ?? [];
+    return { ok: false };
   }
-
   // Hash endpoint returns [{ videoID, segments: [...] }, ...]
-  let segments: SponsorSegment[] = [];
-  if (Array.isArray(body)) {
-    const bucket = (body as HashBucket[]).find((b) => b && b.videoID === videoId);
-    if (bucket) segments = normalizeSegments(bucket.segments);
-  }
+  if (!Array.isArray(body)) return { ok: false };
+  const bucket = (body as HashBucket[]).find((b) => b && b.videoID === videoId);
+  return remember(cacheKey, bucket ? normalizeSegments(bucket.segments) : []);
+}
 
-  cache.set(cacheKey, { at: Date.now(), segments });
-  pruneCache();
-  return segments;
+/**
+ * Look up skippable segments for a video id (cached, one request in flight per video and
+ * category set).
+ *
+ * `categories` narrows the request to what the user actually wants skipped, so a user who only
+ * wants sponsors does not download intro/outro data — less to send, less to parse, and the
+ * request itself discloses less about what we do with the answer.
+ */
+export async function lookupSponsorSegments(
+  videoId: string,
+  categories: readonly string[] = SPONSORBLOCK_SKIP_CATEGORIES,
+): Promise<SegmentLookup> {
+  if (!/^[a-zA-Z0-9_-]{11}$/.test(videoId)) return { ok: true, segments: [] };
+  // Nothing enabled: never contact the API at all. An empty category list would also be a 400.
+  if (!categories.length) return { ok: true, segments: [] };
+
+  // Cache is keyed by video AND category set — a narrower earlier request must not be served
+  // back to a later, wider one.
+  const cacheKey = `${videoId}|${[...categories].sort().join(',')}`;
+  const hit = cache.get(cacheKey);
+  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return { ok: true, segments: hit.segments };
+
+  let pending = inFlight.get(cacheKey);
+  if (!pending) {
+    pending = requestSegments(videoId, categories, cacheKey).finally(() => {
+      inFlight.delete(cacheKey);
+    });
+    inFlight.set(cacheKey, pending);
+  }
+  const result = await pending;
+  // An expired entry is still a real answer, and better than none while the API is down.
+  if (!result.ok && hit) return { ok: true, segments: hit.segments };
+  return result;
 }

@@ -98,6 +98,76 @@ Written for users, not for the commit log. Internal refactors and test-only work
 - Pages a filter list switches off entirely, such as the ad-industry opt-out page, now also keep
   their elements visible. A few filters that also let a site's own scripts or images through
   (uptoplay.net, im9.eu) now do both.
+- **SponsorBlock stops when you switch its last category off.** Unticking the last category in
+  Settings used to leave the video you were watching still skipping until you moved on to
+  another one.
+- **SponsorBlock no longer gives up on a video after one failed lookup.** A slow or busy
+  SponsorBlock server, or StampStack waking up just then, used to make the whole video play its
+  sponsors. The lookup is now retried a few times, and every video gets its own retries.
+- **One SponsorBlock request per video, and settings changes keep your skips.** 2.2.2 asked
+  SponsorBlock three times for every video you opened. Any settings change, even on another
+  site, threw away the skip data of every open YouTube tab until it was fetched again.
+- **The skip notice gets out of the way.** After it faded, the "Skipped sponsor" notice still
+  caught clicks along the bottom of the page, and a click there could jump the video back, even
+  the next video. It now really goes away, and its Undo only ever affects the video it was shown
+  for. In fullscreen, clicking Undo no longer pauses the video. The notice is also shown in
+  Chinese and read out by screen readers.
+- Undoing one skipped segment no longer lets other segments that overlap it play.
+- **SponsorBlock keeps skipping in the miniplayer and on Shorts, and now also works in YouTube
+  videos embedded on other sites, youtube-nocookie.com included.** An embedded video only asks
+  SponsorBlock once you start it.
+- SponsorBlock ignores a segment that covers most of a video, which is bad or vandalized data,
+  instead of jumping to the end.
+- If you picked SponsorBlock categories in 2.2.0 or earlier and update straight from that
+  version, your choices keep the meaning they had then.
+- **Ads in the Shorts feed are removed.** Up to one Short in three was an ad. They are now
+  dropped from the feed, as uBlock Origin does.
+- **Block Shorts no longer throws away the video you are watching.** Ctrl-, Cmd- or
+  Shift-clicking a Shorts link replaced the current tab with the YouTube home page and removed
+  it from history. Those clicks now open a new tab as usual, and a plain click on a Shorts link
+  simply does nothing.
+- **Dark mode: formulas and dark logos no longer disappear.** Math on Wikipedia and other images
+  drawn in black on a transparent background are now shown in light ink. Photos are still never
+  changed.
+- **Dark mode: no more white boxes around embedded widgets.** Chat buttons, payment fields and
+  comment boxes from other sites used to show as a white box with faint text on dark pages. They
+  now stay transparent, and frames a page writes itself are darkened too.
+- **Dark mode keeps up with the page.** Theme switches (your system going light or dark, or a
+  site's own theme button), stylesheets that load late, menus and cards that change color on
+  hover or focus, and content that appears later inside web components are now recolored too.
+- **Dark mode leaves sites that are already dark alone.** Their own background and their colored
+  buttons and badges are kept. Only large white panels are darkened.
+- **Turning dark mode off restores pages exactly.** Some inline backgrounds and borders used to be
+  lost until the page was reloaded.
+- Dark mode now also recolors dividers, the text of search boxes that have an icon, list bullets,
+  decorative fades, tooltip arrows and icons drawn with dark fills.
+- Dark mode no longer slows down pages that animate while you scroll, and a page opened in a
+  background tab is fully dark when you switch to it.
+- **Dark mode no longer changes what you write.** In editors such as Gmail's compose window,
+  blog and forum editors, or Wikipedia's editor, dark mode's colors could be saved with your
+  text, so a post or email could go out with near-white text. Editors now keep the site's own
+  colors and show as a light box on the dark page. Some editors copy their starting text from
+  the page as they open, and that text can still carry dark mode's colors: switch dark mode off
+  for such a site.
+- **Pages that wait for Google Analytics or Tag Manager show up at once.** StampStack replaces
+  these scripts with a stand-in that sends nothing. The stand-in now also runs what the page
+  queued for the real scripts. Pages with an "anti-flicker" snippet no longer stay blank for
+  several seconds, and links and forms that continue from an analytics callback work again.
+- **Sites using Google's ad tag no longer break half way.** Its stand-in now covers Google's whole
+  documented interface and reports every ad slot as empty. Page scripts run to the end, and
+  content that waits for an ad slot appears.
+- **Browser games that use Google's H5 ad placements start and resume again.** No ad is shown and
+  no reward is granted.
+- **AdSense placeholders look like unfilled ads, not blocked ones.** This is how uBlock Origin gets
+  past some "please disable your ad blocker" walls.
+- **uBlock Origin's Unbreak list is now on by default.** It carries uBlock Origin's own repairs
+  for sites that other lists break. As in uBlock Origin, it also narrows a few blocks that were
+  too broad: sites such as fullstory.com, chartbeat.com and smartadserver.com work again,
+  while their trackers stay blocked on every other site.
+- The uBlock Origin list is now called "uBlock Origin — Ads" in Options. It never contained
+  uBlock Origin's privacy list.
+- The attributions page now lists the libraries StampStack bundles and links their license
+  texts, which now ship inside the extension. EasyList Cookie's license is shown correctly.
 
 ## 2.3.0
 

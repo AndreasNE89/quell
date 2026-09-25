@@ -7,7 +7,7 @@
   "scripts": {
     "clean": "node scripts/clean.mjs",
     "compile-filters": "node scripts/compile-filters.mjs",
-    "update-lists": "node scripts/update-lists.mjs && node scripts/lock-lists.mjs",
+    "update-lists": "node scripts/update-lists.mjs",
     "lock-lists": "node scripts/lock-lists.mjs",
     "check-lists": "node scripts/lock-lists.mjs --check",
     "bundle": "node scripts/build.mjs",

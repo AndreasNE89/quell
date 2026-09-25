@@ -85,7 +85,7 @@
   - Global on + paid: register `quell-dark-mode` with `excludeMatches` for force-off hosts
   - Global off + force-on hosts: register `quell-dark-mode-force` with positive `matches`
 - [x] Active-tab `insertCSS` / reload after enable / override / unlock
-- [x] `darkmode:autoSkip` persists force-off for confidently dark hosts
+- [x] ~~`darkmode:autoSkip` persists force-off for confidently dark hosts~~ (removed: the engine recognizes an already-dark page at runtime, `siteCanvasIsDark`, and stores nothing)
 - [x] Wire messages; call sync on init, settings/license changes
 - [x] Exhaustive switch includes all new cases
 
@@ -97,7 +97,7 @@
 - [x] Dark mode section: global toggle; locked → upsell + Buy ($2)
 - [x] Dev unlock discoverable when unpacked + ExtPay not configured
 - [x] Per-site select: Follow global | Force on | Force off
-- [x] Auto-disabled note when host was auto-skipped
+- [x] ~~Auto-disabled note when host was auto-skipped~~ (removed with auto-off)
 - [x] Note: dark mode separate from blocking
 
 ### Task 7: Options UI
@@ -106,7 +106,7 @@
 - Modify: `src/options/options.html`, `options.ts`, `options.css`
 
 - [x] Dark mode section: global toggle, Buy / Restore, license status, overrides list, unpacked Dev unlock
-- [x] Override list labels auto-disabled hosts; Clear removes override
+- [x] Override list; Clear removes override (the auto-disabled label went with auto-off)
 
 ### Task 8: Privacy + listing
 
@@ -130,5 +130,5 @@
 2. Dev unlock (unpacked): enable dark mode; **active tab darkens without manual navigation**
 3. Pause + allowlist: dark mode still applies
 4. Force off on a host; Force on while global off
-5. Visit a site that ships its own dark theme → auto-disabled (override off + UI note); Force on re-applies
+5. Visit a site that ships its own dark theme → its own background and colored buttons stay (no override is stored)
 6. Clear storage → locked again (unless ExtPay restore)

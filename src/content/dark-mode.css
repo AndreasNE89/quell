@@ -9,7 +9,11 @@
  * cannot be removed from an already-loaded document, and countering it with another !important
  * value (e.g. transparent) would stomp the site's OWN html background — turning natively-dark
  * sites white on toggle-off. Setting the attribute makes this rule simply stop matching, so
- * the site's true styles return untouched. :where() keeps specificity at plain `html`. */
+ * the site's true styles return untouched. :where() keeps specificity at plain `html`.
+ *
+ * The engine sets the same attribute while dark mode is ON when the page turns out to be
+ * natively dark: this canvas would otherwise replace e.g. GitHub's #0d1117 with #1c1c1e for as
+ * long as the page is open. The engine's own shell then carries color-scheme: dark. */
 
 @media screen {
   html:where(:not([data-stampstack-off])) {

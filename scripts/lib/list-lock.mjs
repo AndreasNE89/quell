@@ -21,11 +21,51 @@ export function hashFile(path) {
 }
 
 /**
+ * What is wrong with filters/lists.json, as one line per problem (empty when nothing is).
+ *
+ * A duplicated id collapses into one lock entry, one ruleset file and one manifest
+ * `rule_resources` id, which Chrome rejects outright; a second list under an existing file name
+ * silently pins the same bytes twice. Neither shows up until something much later fails.
+ */
+export function registryProblems(registry) {
+  const problems = [];
+  const ids = new Set();
+  const files = new Set();
+  for (const [i, list] of (registry?.lists ?? []).entries()) {
+    const where = `lists[${i}]`;
+    if (typeof list.id !== 'string' || !/^[a-z0-9][a-z0-9-]*$/.test(list.id)) {
+      problems.push(`${where}: id ${JSON.stringify(list.id)} must be lowercase letters, digits and dashes`);
+    } else if (ids.has(list.id)) {
+      problems.push(`${where}: duplicate id "${list.id}"`);
+    }
+    ids.add(list.id);
+    // A plain name under filters/: compile-filters and update-lists join it onto that directory.
+    if (typeof list.file !== 'string' || !/^[\w.-]+\.txt$/.test(list.file) || list.file.startsWith('.')) {
+      problems.push(`${where}: file ${JSON.stringify(list.file)} must be a plain .txt name in filters/`);
+    } else if (files.has(list.file.toLowerCase())) {
+      problems.push(`${where}: duplicate file "${list.file}"`);
+    }
+    if (typeof list.file === 'string') files.add(list.file.toLowerCase());
+  }
+  return problems;
+}
+
+/** Throw a REGISTRY_INVALID error naming every problem registryProblems finds. */
+export function assertRegistry(registry) {
+  const problems = registryProblems(registry);
+  if (!problems.length) return;
+  const err = new Error(`filters/lists.json is invalid:\n  ${problems.join('\n  ')}`);
+  err.code = 'REGISTRY_INVALID';
+  throw err;
+}
+
+/**
  * Describe every list in the registry that is present on disk.
  * Missing files are reported rather than skipped: a lock that silently omits a list would
  * make an incomplete build look fully pinned.
  */
 export function buildLock(registry, filtersDir, now) {
+  assertRegistry(registry);
   const lists = {};
   const missing = [];
   for (const list of registry.lists) {

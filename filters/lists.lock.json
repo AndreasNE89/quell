@@ -1,6 +1,6 @@
 {
   "comment": "Integrity record for the lists compiled into a release. Written by `npm run update-lists`; verify with `npm run check-lists`. The .txt files themselves are the source of truth.",
-  "updated": "2026-09-07T09:46:17.755Z",
+  "updated": "2026-09-25T14:24:37.706Z",
   "lists": {
     "quell-seed": {
       "file": "quell-seed.txt",
@@ -26,6 +26,11 @@
       "file": "ubo-badware.txt",
       "bytes": 149632,
       "sha256": "3cd0cb335b075b848099d283614660d72241a18c6f0b4c96c63362b5627a7a5c"
+    },
+    "ubo-unbreak": {
+      "file": "ubo-unbreak.txt",
+      "bytes": 177536,
+      "sha256": "1edefb77acaac506b9d698f411b7fa37c0d1c605fcb3fd85518f35bcd5834ea2"
     },
     "easylist-cookie": {
       "file": "easylist-cookie.txt",

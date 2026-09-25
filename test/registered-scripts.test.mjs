@@ -48,13 +48,23 @@ function installFakeChrome({
   registerThrows = false,
   rejectPattern = null,
   rejectAll = false,
+  // Registrations Chrome holds but does not report for the first `ghostReads` reads, as when
+  // persisted ones are still being restored.
+  ghosts = [],
+  ghostReads = 0,
 } = {}) {
   store = new Map();
   calls = [];
+  const hidden = new Map(ghosts.map((g) => [g.id, structuredClone(g)]));
+  let reads = 0;
   globalThis.chrome = {
     scripting: {
       async getRegisteredContentScripts({ ids } = {}) {
         calls.push(['get', ids]);
+        if (++reads > ghostReads) {
+          for (const [id, g] of hidden) store.set(id, g);
+          hidden.clear();
+        }
         const all = [...store.values()];
         return ids ? all.filter((s) => ids.includes(s.id)) : all;
       },
@@ -73,6 +83,7 @@ function installFakeChrome({
           throw new Error('duplicate id');
         }
         for (const s of scripts) {
+          if (hidden.has(s.id)) throw new Error(`Duplicate script ID '${s.id}'`);
           if (store.has(s.id)) throw new Error(`duplicate id ${s.id}`);
           store.set(s.id, structuredClone(overIpc(s)));
         }
@@ -203,6 +214,25 @@ test('a lost register race falls back to update instead of throwing', async () =
     ['*://fresh.example/*'],
     'the update fallback must still land our shape, not the racer\'s',
   );
+});
+
+test('a duplicate-id refusal for an id no read shows yet is retried, and our shape lands', async () => {
+  // A persisted registration with a stale exclude that Chrome is still restoring.
+  const stale = overIpc(script({ excludeMatches: ['*://stale.example/*'] }));
+  installFakeChrome({ ghosts: [stale], ghostReads: 2 });
+  const warned = [];
+  const origWarn = console.warn;
+  console.warn = (...args) => warned.push(args);
+  try {
+    await mod.syncOneRegisteredScript(script(), true);
+  } finally {
+    console.warn = origWarn;
+  }
+  const live = store.get('quell-scriptlets-youtube');
+  assert.ok(live, 'nothing registered');
+  assert.equal('excludeMatches' in live, false, 'the stale exclude survived: replaced, not patched');
+  assert.deepEqual(calls.map((c) => c[0]), ['get', 'register', 'get', 'get', 'unregister', 'register']);
+  assert.equal(warned.length, 1, 'logged as a warning');
 });
 
 test('a rejected payload puts the previous registration back and reports the error Chrome gave', async () => {

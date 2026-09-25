@@ -424,8 +424,8 @@ export interface YoutubeOptionsData {
   paused: boolean;
   /**
    * The page's repair step switches element hiding off (either rung): YouTube's own hide CSS
-   * and the Shorts shelf hiding must stand down too. Optional: the storage fast path in
-   * youtube-ui.ts does not compute it.
+   * and the Shorts shelf hiding must stand down too. Optional in the message; the storage
+   * fast path (youtubeOptsFromSettings) fills it and scriptletsOff alike.
    */
   cosmeticsOff?: boolean;
   /**
@@ -443,6 +443,11 @@ export interface YoutubeOptionsData {
 export interface SponsorBlockSegmentsData {
   videoId: string;
   segments: SponsorSegment[];
+  /**
+   * SponsorBlock gave no answer (timeout, network error, 429/5xx): the page retries with
+   * backoff. Not the same as an empty `segments`, which is a real "nothing to skip".
+   */
+  failed?: boolean;
 }
 
 /**

@@ -1,26 +1,20 @@
 // Zip dist/ into release/stampstack-<version>.zip for Chrome Web Store upload.
 //
 // Usage:
-//   npm run package              # update-lists + store build + zip
+//   npm run package              # update-lists + lock check + store build + zip
 //   npm run package -- --skip-lists
 //
 // The zip root must be the extension files themselves (manifest.json at zip root),
 // not a nested dist/ folder.
 
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  writeFileSync,
-  readdirSync,
-  rmSync,
-  statSync,
-} from 'node:fs';
-import { join, dirname, relative, sep } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, statSync } from 'node:fs';
+import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { deflateRawSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
+
+import { listFloorProblems, rulesetProblems } from './lib/package-checks.mjs';
+import { readZipEntries, zipDirectory } from './lib/zip.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -28,146 +22,40 @@ const DIST = join(ROOT, 'dist');
 const OUT_DIR = join(ROOT, 'release');
 const skipLists = process.argv.includes('--skip-lists');
 // A healthy build compiles ~120k rules; the built-in seed alone is ~100. Anything in between
-// means the downloadable lists did not make it into this build.
+// means the downloadable lists did not make it into this build. Per-list floors (`minRules` in
+// filters/lists.json) catch the case this total cannot: one large list missing or truncated.
 const MIN_PACKAGED_RULES = 50_000;
 
 function run(cmd, args) {
-  const r = spawnSync(cmd, args, { cwd: ROOT, stdio: 'inherit', shell: true });
+  const r = spawnSync(cmd, args, { cwd: ROOT, stdio: 'inherit', shell: cmd === 'npm' });
   if (r.status !== 0) process.exit(r.status ?? 1);
 }
 
-function walk(dir, base = dir, out = []) {
-  for (const name of readdirSync(dir)) {
-    const p = join(dir, name);
-    if (statSync(p).isDirectory()) walk(p, base, out);
-    else out.push(p);
-  }
-  return out;
-}
-
-const CRC_TABLE = (() => {
-  const t = new Int32Array(256);
-  for (let n = 0; n < 256; n++) {
-    let c = n;
-    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-    t[n] = c;
-  }
-  return t;
-})();
-
-function crc32(buf) {
-  let c = -1;
-  for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
-  return (c ^ -1) >>> 0;
-}
-
-/**
- * Write the store zip directly instead of shelling out to an archiver.
- *
- * Two archivers have already produced something Chrome would reject: PowerShell's
- * Compress-Archive writes nested entry names with BACKSLASHES (the ZIP spec, APPNOTE
- * 4.4.17.1, requires forward slashes), and GNU tar - which is what `tar` resolves to under
- * Git Bash - silently writes a plain TAR when handed a `.zip` name, because it has no zip
- * writer at all. Emitting the container ourselves removes the dependency, guarantees POSIX
- * separators, and pins timestamps so the same dist/ always yields the same bytes.
- */
-async function zipDist(zipPath) {
-  const files = walk(DIST)
-    .map((f) => relative(DIST, f).split(sep).join('/'))
-    .sort();
+/** Write the zip, then read it back the way an unzipper would and prove it holds what we wrote. */
+function zipDist(zipPath) {
   mkdirSync(OUT_DIR, { recursive: true });
   if (existsSync(zipPath)) rmSync(zipPath);
-
-  // Fixed 1980-01-01 DOS timestamp: build output should not differ run to run.
-  const DOS_TIME = 0;
-  const DOS_DATE = 0x0021;
-
-  const chunks = [];
-  const central = [];
-  let offset = 0;
-
-  for (const name of files) {
-    const raw = readFileSync(join(DIST, name));
-    const deflated = deflateRawSync(raw, { level: 9 });
-    const useDeflate = deflated.length < raw.length;
-    const body = useDeflate ? deflated : raw;
-    const method = useDeflate ? 8 : 0;
-    const crc = crc32(raw);
-    const nameBuf = Buffer.from(name, 'utf8');
-
-    const local = Buffer.alloc(30);
-    local.writeUInt32LE(0x04034b50, 0);
-    local.writeUInt16LE(20, 4);
-    local.writeUInt16LE(0, 6);
-    local.writeUInt16LE(method, 8);
-    local.writeUInt16LE(DOS_TIME, 10);
-    local.writeUInt16LE(DOS_DATE, 12);
-    local.writeUInt32LE(crc, 14);
-    local.writeUInt32LE(body.length, 18);
-    local.writeUInt32LE(raw.length, 22);
-    local.writeUInt16LE(nameBuf.length, 26);
-    local.writeUInt16LE(0, 28);
-    chunks.push(local, nameBuf, body);
-
-    const cd = Buffer.alloc(46);
-    cd.writeUInt32LE(0x02014b50, 0);
-    cd.writeUInt16LE(20, 4);
-    cd.writeUInt16LE(20, 6);
-    cd.writeUInt16LE(0, 8);
-    cd.writeUInt16LE(method, 10);
-    cd.writeUInt16LE(DOS_TIME, 12);
-    cd.writeUInt16LE(DOS_DATE, 14);
-    cd.writeUInt32LE(crc, 16);
-    cd.writeUInt32LE(body.length, 20);
-    cd.writeUInt32LE(raw.length, 24);
-    cd.writeUInt16LE(nameBuf.length, 28);
-    cd.writeUInt16LE(0, 30);
-    cd.writeUInt16LE(0, 32);
-    cd.writeUInt16LE(0, 34);
-    cd.writeUInt16LE(0, 36);
-    cd.writeUInt32LE(0, 38);
-    cd.writeUInt32LE(offset, 42);
-    central.push(cd, nameBuf);
-
-    offset += local.length + nameBuf.length + body.length;
-  }
-
-  const cdBuf = Buffer.concat(central);
-  const eocd = Buffer.alloc(22);
-  eocd.writeUInt32LE(0x06054b50, 0);
-  eocd.writeUInt16LE(0, 4);
-  eocd.writeUInt16LE(0, 6);
-  eocd.writeUInt16LE(files.length, 8);
-  eocd.writeUInt16LE(files.length, 10);
-  eocd.writeUInt32LE(cdBuf.length, 12);
-  eocd.writeUInt32LE(offset, 16);
-  eocd.writeUInt16LE(0, 20);
-
-  writeFileSync(zipPath, Buffer.concat([...chunks, cdBuf, eocd]));
-  assertReadableZip(zipPath, files.length);
-  return files.length;
+  const { bytes, names } = zipDirectory(DIST);
+  writeFileSync(zipPath, bytes);
+  assertReadableZip(zipPath, names);
+  return names.length;
 }
 
 /**
- * Read the archive back and prove it is a ZIP containing exactly what we wrote.
- *
  * Checking only for "no backslash entry names" is not enough: a non-ZIP file has no central
- * directory records at all, so it passes that test trivially. Assert the count as well.
+ * directory records at all, so it passes that test trivially. Assert the entries as well.
  */
 function assertReadableZip(zipPath, expected) {
-  const buf = readFileSync(zipPath);
-  if (buf.length < 22 || buf.readUInt32LE(0) !== 0x04034b50) {
-    console.error(`${zipPath} is not a ZIP archive (bad local file header signature).`);
+  let entries;
+  try {
+    entries = readZipEntries(readFileSync(zipPath));
+  } catch (e) {
+    console.error(`${zipPath} is not a readable ZIP archive: ${e.message}`);
     process.exit(1);
   }
-  const names = [];
-  for (let i = 0; i + 46 <= buf.length; i++) {
-    if (buf.readUInt32LE(i) !== 0x02014b50) continue;
-    const nameLen = buf.readUInt16LE(i + 28);
-    names.push(buf.toString('utf8', i + 46, i + 46 + nameLen));
-  }
-  if (names.length !== expected) {
-    console.error(`Zip central directory has ${names.length} entries, expected ${expected}.`);
+  const names = entries.map((e) => e.name);
+  if (names.length !== expected.length || names.some((n, i) => n !== expected[i])) {
+    console.error(`Zip central directory has ${names.length} entries, expected ${expected.length}.`);
     process.exit(1);
   }
   const bad = names.filter((n) => n.includes(String.fromCharCode(92)));
@@ -204,6 +92,12 @@ function validateDist() {
     'privacy.html',
     // The worker fetches cosmetic data at run time; without it nothing is hidden (B35).
     'generated/cosmetic/core.json',
+    // Attribution and the licence texts the bundled lists and packages require (M17).
+    'attributions.html',
+    'licenses/THIRD_PARTY_NOTICES.txt',
+    'licenses/GPL-3.0.txt',
+    'licenses/LGPL-3.0.txt',
+    'licenses/MPL-2.0.txt',
   ]) {
     if (!existsSync(join(DIST, req))) {
       console.error(`Missing required package file: ${req}`);
@@ -232,17 +126,25 @@ function validateDist() {
     process.exit(1);
   }
 
+  const countRules = (path) => {
+    try {
+      return JSON.parse(readFileSync(join(DIST, path), 'utf8')).length;
+    } catch {
+      return null;
+    }
+  };
+  // Every registry list must be in the package at its floor, and Chrome's ruleset limits hold.
+  const registry = JSON.parse(readFileSync(join(ROOT, 'filters', 'lists.json'), 'utf8'));
+  const problems = [...rulesetProblems(rules), ...listFloorProblems(registry, rules, countRules)];
+  if (problems.length) {
+    console.error(`The package's rulesets are incomplete:\n  ${problems.join('\n  ')}`);
+    console.error('Run npm run update-lists (or fix filters/) and rebuild.');
+    process.exit(1);
+  }
+
   // Guard against shipping a seed-only package: `--skip-lists` on a machine whose filters/
   // downloads are missing compiles cleanly, just with almost nothing in it.
-  const ruleTotal = rules.reduce((n, r) => {
-    const p = join(DIST, r.path);
-    if (!existsSync(p)) return n;
-    try {
-      return n + JSON.parse(readFileSync(p, 'utf8')).length;
-    } catch {
-      return n;
-    }
-  }, 0);
+  const ruleTotal = rules.reduce((n, r) => n + (countRules(r.path) ?? 0), 0);
   if (ruleTotal < MIN_PACKAGED_RULES) {
     console.error(
       `Only ${ruleTotal} DNR rules in dist/ (expected at least ${MIN_PACKAGED_RULES}). ` +
@@ -256,28 +158,42 @@ function validateDist() {
 
 console.log('== StampStack store package ==');
 if (!skipLists) {
-  console.log('\n[1/4] Updating filter lists…');
-  run('npm', ['run', 'update-lists']);
+  console.log('\n[1/5] Updating filter lists…');
+  // Directly, not through `npm run update-lists`: it checks every download, writes all or
+  // nothing, and stamps the lock itself.
+  run(process.execPath, [join('scripts', 'update-lists.mjs')]);
 } else {
-  console.log('\n[1/4] Skipping list update (--skip-lists)');
+  console.log('\n[1/5] Skipping list update (--skip-lists)');
 }
 
-console.log('\n[2/4] Store build…');
+// The lists compiled next must be the ones the lock records. A refresh that failed part way,
+// or a list edited by hand, is caught here instead of shipping unrecorded bytes.
+console.log('\n[2/5] Checking filters/ against lists.lock.json…');
+run(process.execPath, [join('scripts', 'lock-lists.mjs'), '--check']);
+{
+  const git = spawnSync('git', ['status', '--porcelain', '--', 'filters'], { cwd: ROOT, encoding: 'utf8' });
+  if (git.status === 0 && git.stdout.trim()) {
+    console.log('  ⚠ filters/ has uncommitted changes, so this zip matches no commit:');
+    console.log(git.stdout.replace(/^/gm, '      ').trimEnd());
+    console.log('    Commit them (and tag) before submitting, then package again from the tag.');
+  }
+}
+
+console.log('\n[3/5] Store build…');
 run('npm', ['run', 'compile-filters']);
-run('node', ['scripts/build.mjs', '--store']);
+run(process.execPath, [join('scripts', 'build.mjs'), '--store']);
 
 const { man, rules } = validateDist();
 
-console.log('\n[3/4] Obfuscation scan…');
-run('node', ['scripts/scan-package-obfuscation.mjs']);
+console.log('\n[4/5] Obfuscation scan…');
+run(process.execPath, [join('scripts', 'scan-package-obfuscation.mjs')]);
 
 const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
 const version = man.version || pkg.version || '0.0.0';
-mkdirSync(OUT_DIR, { recursive: true });
 const zipPath = join(OUT_DIR, `stampstack-${version}.zip`);
 
-console.log('\n[4/4] Zipping…');
-const n = await zipDist(zipPath);
+console.log('\n[5/5] Zipping…');
+const n = zipDist(zipPath);
 const size = statSync(zipPath).size;
 console.log(`\n✓ ${zipPath}`);
 console.log(`  files≈${n}  size=${(size / 1024 / 1024).toFixed(2)} MiB  version=${version}`);
@@ -290,10 +206,11 @@ console.log(`  rulesets=${rules.length}: ${rules.map((r) => r.id).join(', ')}`);
 // while a release is still being assembled.
 {
   const digest = createHash('sha256').update(readFileSync(zipPath)).digest('hex');
-  // The node version matters: the zip is deflate-compressed, and a zlib patch in a Node
-  // update changes the compressed bytes while the content stays identical. Two "different"
-  // hashes from identical trees cost half a day before that was understood — print the
-  // toolchain next to the hash so the next drift explains itself.
+  // Every text file is normalized to LF on the way into dist/, so the same commit gives the same
+  // zip on Windows and Linux. Through 2.3.0 the locales were copied raw and carried the
+  // checkout's CRLF: that, not a Node or zlib update, is why CI printed a different hash for the
+  // same commit. The Node version stays in the log because deflate output is only pinned for a
+  // given zlib.
   console.log(`  sha256=${digest} (node ${process.version})`);
   const docPath = join(ROOT, 'store', `SUBMIT-${version}.md`);
   if (existsSync(docPath)) {
@@ -306,8 +223,8 @@ console.log(`  rulesets=${rules.length}: ${rules.map((r) => r.id).join(', ')}`);
       console.log(`      doc: ${quoted}`);
       console.log(`      zip: ${digest}`);
       console.log('    Update it before submitting, or a reviewer is given a hash that does not verify.');
-      console.log('    (Identical source can hash differently across Node updates — the zip is');
-      console.log('    deflate-compressed, and zlib patches change the bytes, not the content.)');
+      console.log('    The tree differs from the one the doc describes. (A doc for 2.3.0 or earlier');
+      console.log('    was hashed with CRLF locales from a Windows checkout; rebuild from its tag to compare.)');
     }
   }
 }

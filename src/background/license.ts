@@ -3,7 +3,7 @@
 
 import ExtPay from 'extpay';
 import type { LicenseData, LicenseState } from '../shared/types.js';
-import { DARK_MODE_PRICE_LABEL, LICENSE_STORAGE_KEY } from '../shared/constants.js';
+import { DARK_MODE_PRICE_LABEL, LICENSE_FUTURE_SKEW_MS, LICENSE_STORAGE_KEY } from '../shared/constants.js';
 import { EXTPAY_EXTENSION_ID, isExtPayConfigured } from '../shared/extpay-config.js';
 import { isLicenseEffectivelyPaid, isDevUnlockLicense } from '../shared/dark-mode.js';
 import { DEV_BUILD } from '../shared/build-flags.js';
@@ -40,14 +40,6 @@ export function defaultLicense(): LicenseState {
     verifiedAt: null,
   };
 }
-
-/**
- * How far in the future a stored `verifiedAt` may lie before it is distrusted. A verify stamped
- * by a clock that was fast and has since been corrected stays usable; a forged stamp years
- * ahead does not keep the grace window open for good, since isLicenseEffectivelyPaid measures
- * grace from it and a negative age always passes.
- */
-export const LICENSE_FUTURE_SKEW_MS = 24 * 60 * 60 * 1000;
 
 /** How long a service worker waits on ExtensionPay before it falls back to the cache. */
 export const LICENSE_FETCH_TIMEOUT_MS = 10_000;

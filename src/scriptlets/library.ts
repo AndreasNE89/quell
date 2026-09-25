@@ -2007,8 +2007,38 @@ export function runScriptlet(name: string, args: string[], host: string = curren
 
 export const SUPPORTED_SCRIPTLETS = Object.keys(SCRIPTLETS);
 
+/**
+ * YouTube endpoints whose answers carry ads. reel_watch_sequence is the Shorts feed: every third
+ * entry was an ad (youtube.com, 2026-09), which uBO's filters prune but the list rewrites never
+ * reach YouTube here (runScriptlet above), so these hooks have to.
+ */
 const YT_PLAYER_API_RE =
-  /youtubei\/v1\/(?:player|get_watch|next|player_streaming|reel\/reel_item_watch)|\/player\?|get_watch\?|playlist\?list=/i;
+  /youtubei\/v1\/(?:player|get_watch|next|player_streaming|reel\/reel_item_watch|reel\/reel_watch_sequence)|\/player\?|get_watch\?|playlist\?list=/i;
+
+/** A Shorts feed entry that is an ad (uBO: `entries.[-].command.reelWatchEndpoint.adClientParams.isAd`). */
+function isShortsAdEntry(entry: unknown): boolean {
+  const ad = (entry as { command?: { reelWatchEndpoint?: { adClientParams?: unknown } } } | null)?.command
+    ?.reelWatchEndpoint?.adClientParams;
+  return !!ad && typeof ad === 'object' && 'isAd' in ad;
+}
+
+/**
+ * Drop the ad entries from a Shorts feed answer, where uBO's pair of rules looks: `entries` at
+ * the top, or under `reelWatchSequenceResponse`. Removed from the list, as uBO's `[-]` does, so
+ * the feed goes straight on to the next short.
+ */
+export function stripYoutubeShortsAds(obj: unknown): boolean {
+  if (!obj || typeof obj !== 'object') return false;
+  const rec = obj as { entries?: unknown; reelWatchSequenceResponse?: { entries?: unknown } };
+  let changed = false;
+  for (const holder of [rec, rec.reelWatchSequenceResponse]) {
+    const entries = holder?.entries;
+    if (!holder || !Array.isArray(entries) || !entries.some(isShortsAdEntry)) continue;
+    holder.entries = entries.filter((e) => !isShortsAdEntry(e));
+    changed = true;
+  }
+  return changed;
+}
 
 /**
  * Passive in-place scrub of the inline player blob. Never redefine getters on
@@ -2176,6 +2206,7 @@ export function installYoutubeEarlyHooks(): void {
     try {
       const obj = JSON.parse(body);
       stripYoutubeAdKeys(obj);
+      stripYoutubeShortsAds(obj);
       return keepJsonValid(body, JSON.stringify(obj));
     } catch {
       return keepJsonValid(
@@ -2195,6 +2226,7 @@ export function installYoutubeEarlyHooks(): void {
   hookFetchTextTransform(transform, isPlayerApi);
   hookXhrTextTransform(transform, isPlayerApi, (_url, obj) => {
     stripYoutubeAdKeys(obj);
+    stripYoutubeShortsAds(obj);
   });
 }
 

@@ -190,18 +190,22 @@ function leaveShortsPage(): void {
   }
 }
 
-/** Redirect a /shorts URL to the homepage. Used by the click handler below. */
-function redirectIfShortsUrl(url: string | URL | null | undefined): boolean {
-  if (!url) return false;
+/** A YouTube Shorts page URL (relative ones resolved against this page). */
+function isShortsUrl(href: string): boolean {
   try {
-    const u = typeof url === 'string' ? new URL(url, location.origin) : url;
-    if (!isYoutubeHost(u.hostname) || !isShortsPath(u.pathname)) return false;
-    leavingShorts = true;
-    location.replace(`${u.origin}/`);
-    return true;
+    const u = new URL(href, location.href);
+    return isYoutubeHost(u.hostname) && isShortsPath(u.pathname);
   } catch {
     return false;
   }
+}
+
+/**
+ * A click the browser turns into a new tab or window (Ctrl/Cmd/Shift), a download (Alt), or no
+ * navigation at all (not the primary button). The tab it opens leaves its Shorts page by itself.
+ */
+function opensElsewhere(ev: MouseEvent): boolean {
+  return ev.button !== 0 || ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.altKey;
 }
 
 // NOTE: we deliberately do NOT wrap history.pushState/replaceState here. The content script
@@ -213,23 +217,22 @@ function hookShortsClicks(getOpts: () => YoutubeOptionsData | null): void {
   if (clicksHooked) return;
   clicksHooked = true;
 
-  // Clicks on Shorts links before SPA navigation.
+  // A click on a Shorts link goes nowhere. It used to send this tab to the home page with
+  // location.replace, whatever the click was: a Ctrl-click meant for a background tab lost the
+  // video being watched, and Back skipped over it.
   const onClick = (ev: MouseEvent): void => {
-    if (!redirectsShorts(getOpts())) return;
+    if (opensElsewhere(ev) || !redirectsShorts(getOpts())) return;
     const t = ev.target;
     if (!(t instanceof Element)) return;
-    const a = t.closest('a[href*="/shorts"]');
-    if (!a) return;
-    const href = a.getAttribute('href');
-    if (!href) return;
-    if (redirectIfShortsUrl(href)) {
-      ev.preventDefault();
-      ev.stopPropagation();
-    }
+    const href = t.closest('a[href*="/shorts"]')?.getAttribute('href');
+    if (!href || !isShortsUrl(href)) return;
+    ev.preventDefault();
+    ev.stopPropagation();
   };
-  document.addEventListener('click', onClick, true);
+  // Added on window at document_start, it runs ahead of every click listener YouTube adds.
+  window.addEventListener('click', onClick, true);
   teardown.push(() => {
-    document.removeEventListener('click', onClick, true);
+    window.removeEventListener('click', onClick, true);
     clicksHooked = false;
   });
 }

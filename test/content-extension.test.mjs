@@ -195,6 +195,37 @@ test('about:blank, srcdoc and document.write frames get the page host cosmetics 
   }
 });
 
+test('about:blank, srcdoc and document.write frames ask for dark mode with the page host (B25)', async (t) => {
+  if (skip(t)) return;
+  await configure({ hosts: {} });
+  const page = await openPage({
+    '/': `<!doctype html><body>
+      <iframe id="src" srcdoc="<p>srcdoc</p>"></iframe>
+      <iframe id="blank"></iframe>
+      <script>
+        const f = document.createElement('iframe');
+        document.body.appendChild(f);
+        f.contentDocument.open();
+        f.contentDocument.write('<!doctype html><body><p>written</p></body>');
+        f.contentDocument.close();
+      </script></body>`,
+  });
+  try {
+    await page.goto(`${ORIGIN}/`);
+    const asked = () =>
+      sw.evaluate(() =>
+        self.log.filter((l) => l.type === 'darkmode:get' && l.frameId !== 0).map((l) => l.hostname),
+      );
+    // Three frames; before B25 none of them asked at all.
+    const threeAsked = await until(async () => (await asked()).length >= 3, true);
+    const hosts = await asked();
+    assert.equal(threeAsked, true, `dark mode asked from ${JSON.stringify(hosts)}`);
+    assert.ok(hosts.every((h) => h === 'site.test'), JSON.stringify(hosts));
+  } finally {
+    await page.close();
+  }
+});
+
 test('an exception cancels a hide of the browser-injected sheet', async (t) => {
   if (skip(t)) return;
   await configure({ hosts: { 'site.test': { unhide: ['.bait'] }, 'other.test': {} } });

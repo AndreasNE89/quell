@@ -1,7 +1,7 @@
 # Paid dark mode — design spec
 
 **Date:** 2026-07-15  
-**Status:** Implemented (MVP — smart invert + already-dark auto-off)  
+**Status:** Implemented. The MVP's smart invert and already-dark auto-off (B.3.1) have since been replaced by the dynamic recoloring engine  
 **Product:** StampStack (MV3 Chromium ad/tracker blocker; repo may still be named `quell`)  
 **Price point:** $2 USD one-time unlock  
 
@@ -236,6 +236,8 @@ Paying introduces the **first** third-party data flow:
 ### B.3 Technical architecture
 
 #### B.3.1 How dark mode applies
+
+> **Superseded.** Dark mode no longer inverts and no longer stores an auto-off. A registered top-frame sheet (`dark-mode.css`) paints a dark canvas and a scrim at `document_start`; the engine (`src/content/dark-mode-dynamic.ts`, started by `dark-mode-smart.ts` in every frame) gives each surface a dark color, leaves media alone, and recognizes an already-dark page at runtime (`siteCanvasIsDark`). `darkModeAutoOff` has no writer left. The model below is the MVP as first shipped.
 
 **Hybrid model (shipped MVP):**
 

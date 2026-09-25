@@ -17,6 +17,7 @@ before(async () => {
   rgbToHsl, hslToRgb, rgbToCss,
   remapBackgroundColor, remapForegroundColor, remapBorderColor,
   remapGradient, remapBackgroundImage, splitBackgroundLayers,
+  isDarkInkColor, urlLayersCoverBox, mightBeColorValue, isColorRelevantProperty, isDarkInkImage,
 } from './src/shared/dark-mode-dynamic.js';
 export { THEME_ATTRIBUTE_FILTER } from './src/content/dark-mode-dynamic.ts';`,
       resolveDir: ROOT,
@@ -162,6 +163,75 @@ test('should watch theme data attributes, not only class and style', () => {
   assert.ok(mod.THEME_ATTRIBUTE_FILTER.includes('data-color-mode'));
   assert.ok(mod.THEME_ATTRIBUTE_FILTER.includes('class'));
   assert.ok(mod.THEME_ATTRIBUTE_FILTER.includes('style'));
+});
+
+test('contenteditable switches are watched: editors turn themselves on after their content is in', () => {
+  assert.ok(mod.THEME_ATTRIBUTE_FILTER.includes('contenteditable'));
+});
+
+test('url() backdrops: icons and bullets do not cover their box, photos and tiles do (B65)', () => {
+  const icon = 'url("https://x/icon.svg")';
+  // Search box magnifier, list bullet, sprite: untiled and small.
+  assert.equal(mod.urlLayersCoverBox(icon, 'auto', 'no-repeat', 300, 30), false);
+  assert.equal(mod.urlLayersCoverBox(icon, 'auto', 'no-repeat', 700, 20), false);
+  assert.equal(mod.urlLayersCoverBox(icon, '16px 16px', 'no-repeat', 300, 200), false);
+  // Photos, textures and strips.
+  assert.equal(mod.urlLayersCoverBox(icon, 'cover', 'no-repeat', 300, 30), true);
+  assert.equal(mod.urlLayersCoverBox(icon, 'contain', 'no-repeat', 300, 30), true);
+  assert.equal(mod.urlLayersCoverBox(icon, 'auto', 'repeat', 300, 30), true);
+  assert.equal(mod.urlLayersCoverBox(icon, 'auto', 'repeat-x', 300, 30), true);
+  assert.equal(mod.urlLayersCoverBox(icon, '100% auto', 'no-repeat', 300, 200), true);
+  // An untiled auto-sized image in a big box is usually a hero picture.
+  assert.equal(mod.urlLayersCoverBox(icon, 'auto', 'no-repeat', 800, 400), true);
+  // Gradient-only layers are not images; the url() layer's own size/repeat decide.
+  assert.equal(
+    mod.urlLayersCoverBox(`linear-gradient(red, blue), ${icon}`, 'cover, auto', 'repeat, no-repeat', 300, 30),
+    false,
+  );
+  assert.equal(mod.urlLayersCoverBox('none', 'auto', 'repeat', 300, 300), false);
+});
+
+test('custom-property values: scroll and pointer numbers are not colors (B72)', () => {
+  const colorWord = (w) => ['white', 'red', 'transparent', 'currentcolor'].includes(w.toLowerCase());
+  for (const v of ['412', '37.5%', '7.2px', '0.5', '10px 20px', 'calc(100vh - 10px)', 'auto', 'ease-in-out', '']) {
+    assert.equal(mod.mightBeColorValue(v, colorWord), false, v);
+  }
+  for (const v of ['#fff', 'white', 'rgb(1 2 3)', 'hsl(210 40% 98%)', '255 255 255', '0 0% 100%', 'var(--x)', 'color-mix(in srgb, red, blue)']) {
+    assert.equal(mod.mightBeColorValue(v, colorWord), true, v);
+  }
+  assert.equal(mod.isColorRelevantProperty('background-color'), true);
+  assert.equal(mod.isColorRelevantProperty('border-top-color'), true);
+  assert.equal(mod.isColorRelevantProperty('color'), true);
+  assert.equal(mod.isColorRelevantProperty('fill'), true);
+  assert.equal(mod.isColorRelevantProperty('transform'), false);
+  assert.equal(mod.isColorRelevantProperty('opacity'), false);
+  assert.equal(mod.isColorRelevantProperty('top'), false);
+});
+
+test('dark ink: near-black low-chroma paint and flat-ink transparent images (M4, SVG icons)', () => {
+  assert.equal(mod.isDarkInkColor('rgb(33, 33, 33)'), true);
+  assert.equal(mod.isDarkInkColor('rgb(3, 19, 35)'), true, 'navy wordmark');
+  assert.equal(mod.isDarkInkColor('rgb(200, 30, 30)'), false, 'vivid red');
+  assert.equal(mod.isDarkInkColor('rgb(120, 120, 120)'), false, 'mid grey is visible on charcoal');
+  assert.equal(mod.isDarkInkColor('rgba(0, 0, 0, 0.2)'), false);
+
+  const pixels = (fn, n = 32 * 32) => {
+    const d = new Uint8ClampedArray(n * 4);
+    for (let i = 0; i < n; i++) d.set(fn(i), i * 4);
+    return d;
+  };
+  // A formula: black strokes on transparent.
+  assert.equal(mod.isDarkInkImage(pixels((i) => (i % 5 === 0 ? [0, 0, 0, 255] : [0, 0, 0, 0]))), true);
+  // Opaque (no transparency): a screenshot or a photo.
+  assert.equal(mod.isDarkInkImage(pixels(() => [10, 10, 10, 255])), false);
+  // Colored logo on transparent.
+  assert.equal(mod.isDarkInkImage(pixels((i) => (i % 3 === 0 ? [220, 40, 40, 255] : [0, 0, 0, 0]))), false);
+  // A shaded dark object: many mid tones.
+  assert.equal(
+    mod.isDarkInkImage(pixels((i) => (i % 2 === 0 ? [(i * 7) % 160, (i * 7) % 160, (i * 7) % 160, 255] : [0, 0, 0, 0]))),
+    false,
+  );
+  assert.equal(mod.isDarkInkImage(new Uint8ClampedArray(0)), false);
 });
 
 // helper: parse an rgb()/rgba() string back to {r,g,b,a} for assertions

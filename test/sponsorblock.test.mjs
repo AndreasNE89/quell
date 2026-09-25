@@ -29,6 +29,7 @@ before(async () => {
           SPONSORBLOCK_CATEGORY_INFO,
           SPONSORBLOCK_DEFAULT_ON,
           enabledSponsorCategories,
+          migrateLegacySponsorCategories,
         } from './src/shared/sponsorblock.ts';
       `,
       resolveDir: ROOT,
@@ -211,4 +212,37 @@ test('a segment ending at the video end is still found', () => {
   );
   assert.ok(hit);
   assert.equal(hit.segment[1], 300);
+});
+
+// --- 2.2.0 category choices -----------------------------------------------------------------
+// Up to 2.2.0 a category without an explicit false was on, and Options showed it on. 2.2.1
+// reads an absent key as the sponsor-only default instead, so the same blob changed meaning.
+
+test('a 2.2.0 "everything but sponsors" choice keeps skipping everything but sponsors', () => {
+  const prefs = { sponsor: false };
+  assert.deepEqual(contentMod.enabledSponsorCategories(prefs), [], 'the bug: nothing is skipped');
+  const migrated = contentMod.migrateLegacySponsorCategories(prefs, '2.2.0');
+  assert.deepEqual(
+    contentMod.enabledSponsorCategories(migrated),
+    ['selfpromo', 'interaction', 'intro', 'outro', 'preview', 'music_offtopic'],
+  );
+  // One category switched off in 2.2.0 left the six others on.
+  const introOff = contentMod.migrateLegacySponsorCategories({ intro: false, filler: true }, '2.1.1');
+  assert.equal(contentMod.enabledSponsorCategories(introOff).length, 6);
+  assert.equal(introOff.intro, false);
+  assert.equal(introOff.filler, true, 'keys it does not know are kept as they were');
+});
+
+test('category choices are only migrated when leaving 2.2.0 or older', () => {
+  // Written by 2.2.1 or later, the same blob means what it says now.
+  for (const v of ['2.2.1', '2.2.3', '2.3.0', '2.10.0', '3.0']) {
+    assert.equal(contentMod.migrateLegacySponsorCategories({ sponsor: false }, v), null, v);
+  }
+  assert.equal(contentMod.migrateLegacySponsorCategories({ sponsor: false }, undefined), null);
+  // Never touched: sponsor-only is the deliberate 2.2.1 default for those users.
+  assert.equal(contentMod.migrateLegacySponsorCategories({}, '2.2.0'), null);
+  assert.equal(contentMod.migrateLegacySponsorCategories(undefined, '2.2.0'), null);
+  // Every category already explicit: nothing to add.
+  const all = Object.fromEntries(contentMod.SPONSORBLOCK_SKIP_CATEGORIES.map((c) => [c, c === 'intro']));
+  assert.equal(contentMod.migrateLegacySponsorCategories(all, '2.2.0'), null);
 });

@@ -1,13 +1,16 @@
-// Dark mode orchestration (ISOLATED world, every http/https frame).
+// Dark mode orchestration (ISOLATED world, every frame content.ts starts it in).
 // Gating/toggle plumbing; the actual recoloring is the dynamic engine (dark-mode-dynamic.ts),
-// which recolors backgrounds/text per element and never touches media.
+// which recolors backgrounds/text per element and leaves media alone.
 //
 // Frames: the engine runs in EVERY frame (a dark host page with light iframes — or worse,
-// a dark shell without recolored text — breaks embeds like Stripe/Disqus/login widgets).
-// The service worker resolves darkmode:get against the TOP document's host (sender.tab.url),
-// so all frames in a tab follow the top site's setting. Only the top frame paints the opaque
-// charcoal canvas; subframes keep transparent backgrounds transparent (overlay iframes must
-// not become opaque dark slabs).
+// a dark shell without recolored text — breaks embeds like Stripe/Disqus/login widgets). The
+// gate below also admits about:blank, srcdoc and blob: frames, whose text would otherwise be
+// dark on the darkened host; content.ts decides which frames start it. The service worker
+// resolves darkmode:get against the TOP document's host, so all frames in a tab follow the
+// top site's setting (a prerendered page reports its own top host, B27). Only the top frame
+// paints the opaque charcoal canvas; subframes keep transparent backgrounds transparent, and
+// every frame declares color-scheme: dark so Chromium does not paint an opaque light canvas
+// behind a transparent embed (B64).
 
 import type { DarkModePageData, Message } from '../shared/types.js';
 import { isExtensionRestrictedHostname } from '../shared/dark-mode.js';
@@ -26,9 +29,12 @@ function isTopFrame(): boolean {
   }
 }
 
+const DARK_PROTOCOLS = new Set(['http:', 'https:', 'about:', 'blob:']);
+
 export function startDarkModeSmart(): void {
-  if (location.protocol !== 'http:' && location.protocol !== 'https:') return;
-  if (isExtensionRestrictedHostname(location.hostname)) return;
+  if (!DARK_PROTOCOLS.has(location.protocol)) return;
+  // about:blank / srcdoc / blob: frames have no host of their own; they carry their creator's.
+  if (isExtensionRestrictedHostname(frameScope().host)) return;
   const onMessage = (
     msg: Message,
     _sender: chrome.runtime.MessageSender,
@@ -74,12 +80,12 @@ export function stopDarkModeSmart(): void {
 async function run(): Promise<void> {
   // Each run supersedes older ones so a slow initial run can't apply after a newer toggle.
   const gen = ++runGeneration;
-  const host = location.hostname;
+  const scope = frameScope();
   let data: DarkModePageData | null = null;
   try {
     // The worker decides against the tab's page; a prerendered page is not that page yet, so it
     // says which top host it belongs to (B27).
-    data = (await send({ type: 'darkmode:get', hostname: host, topHost: frameScope().top })) as
+    data = (await send({ type: 'darkmode:get', hostname: scope.host, topHost: scope.top })) as
       | DarkModePageData
       | null;
   } catch {
@@ -101,7 +107,8 @@ async function run(): Promise<void> {
     return;
   }
 
-  document.documentElement?.removeAttribute('data-stampstack-off');
+  // The engine re-arms the registered shell itself (it removes data-stampstack-off), and keeps
+  // it disarmed on a natively dark page; clearing it here would repaint that page's canvas.
   await waitForBody(2000);
   if (gen !== runGeneration) return;
   applyDynamicDark(isTopFrame());

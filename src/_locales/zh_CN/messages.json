@@ -1188,6 +1188,39 @@
       }
     }
   },
+  "sponsorblock_toast_cat_interaction": {
+    "message": "互动提醒"
+  },
+  "sponsorblock_toast_cat_intro": {
+    "message": "片头"
+  },
+  "sponsorblock_toast_cat_music_offtopic": {
+    "message": "非音乐部分"
+  },
+  "sponsorblock_toast_cat_outro": {
+    "message": "片尾"
+  },
+  "sponsorblock_toast_cat_preview": {
+    "message": "预告"
+  },
+  "sponsorblock_toast_cat_selfpromo": {
+    "message": "自我推广"
+  },
+  "sponsorblock_toast_cat_sponsor": {
+    "message": "赞助"
+  },
+  "sponsorblock_toast_skipped": {
+    "message": "已跳过：$CATEGORY$",
+    "placeholders": {
+      "category": {
+        "content": "$1",
+        "example": "赞助"
+      }
+    }
+  },
+  "sponsorblock_toast_undo": {
+    "message": "撤销"
+  },
   "ui_lang": {
     "message": "zh-CN"
   }

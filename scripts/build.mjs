@@ -1,7 +1,8 @@
 // Bundle StampStack into a loadable unpacked extension in dist/.
 //
 // Flags:
-//   --watch   rebuild JS on change
+//   --watch   rebuild on change: JS through esbuild, and the manifest, rulesets, CSS and other
+//             static files whenever compile-filters finishes or a static source changes
 //   --store   Chrome Web Store build (minified, no feedback permission)
 //
 // Assumes `npm run compile-filters` has produced src/generated/.
@@ -16,15 +17,21 @@ import {
   cpSync,
   readdirSync,
   statSync,
+  watchFile,
 } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { joinScriptletBundle } from './lib/scriptlet-shards.mjs';
 import { cosmeticDataFiles } from './lib/cosmetic-files.mjs';
 import { chromeRejectsText } from './lib/text-encoding.mjs';
+import { rulesetProblems } from './lib/package-checks.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = join(__dirname, '..');
+// STAMPSTACK_BUILD_ROOT points the build at another tree; test/build-script.test.mjs builds a
+// small fixture that way instead of the real sources.
+const ROOT = process.env.STAMPSTACK_BUILD_ROOT
+  ? resolve(process.env.STAMPSTACK_BUILD_ROOT)
+  : join(__dirname, '..');
 const SRC = join(ROOT, 'src');
 const GEN = join(SRC, 'generated');
 const DIST = join(ROOT, 'dist');
@@ -37,6 +44,8 @@ const COMMON = {
   target: 'chrome120',
   platform: 'browser',
   logLevel: 'info',
+  // The bundled packages' notices and licence texts ship as files instead (docs/licenses/ →
+  // dist/licenses/, linked from attributions.html); their sources carry no legal comments.
   legalComments: 'none',
   minify: store,
   sourcemap: false,
@@ -63,6 +72,9 @@ const ENTRIES = [
   ['popup/popup.ts', 'popup.js', 'esm'],
   ['options/options.ts', 'options.js', 'esm'],
 ];
+
+/** A build that must stop. Thrown rather than exiting so watch mode can report it and go on. */
+class BuildError extends Error {}
 
 function assertGenerated() {
   if (!existsSync(join(GEN, 'meta.json'))) {
@@ -137,8 +149,7 @@ function buildManifest() {
   }
 
   if (!meta.lists.length) {
-    console.error('No compiled filter lists in meta.json — refusing to build an empty blocker.');
-    process.exit(1);
+    throw new BuildError('No compiled filter lists in meta.json — refusing to build an empty blocker.');
   }
 
   manifest.declarative_net_request.rule_resources = meta.lists.map((l) => ({
@@ -146,6 +157,11 @@ function buildManifest() {
     enabled: l.enabledByDefault,
     path: `generated/${l.rulesetFile}`,
   }));
+  // Chrome refuses the whole extension over these, so fail here rather than at load time.
+  const problems = rulesetProblems(manifest.declarative_net_request.rule_resources);
+  if (problems.length) {
+    throw new BuildError(`The manifest's rulesets break Chrome's limits:\n  ${problems.join('\n  ')}`);
+  }
 
   writeFileSync(join(DIST, 'manifest.json'), JSON.stringify(manifest, null, store ? 0 : 2));
 }
@@ -193,8 +209,10 @@ function copyStatic() {
 
   // _locales must sit at the package root for chrome.i18n to find it. Chrome picks the
   // browser's UI language and falls back to default_locale, so nothing detects anything.
+  // Normalized like every other text file: a raw copy kept the checkout's CRLF, so the same
+  // commit zipped differently on Windows and on the Linux runner.
   const localesSrc = join(SRC, '_locales');
-  if (existsSync(localesSrc)) cpSync(localesSrc, join(DIST, '_locales'), { recursive: true });
+  if (existsSync(localesSrc)) copyTree(localesSrc, join(DIST, '_locales'));
   copyTree(join(SRC, 'redirects'), join(DIST, 'redirects'));
 
   // In-extension privacy page (also publish docs/privacy-policy.html on the web).
@@ -205,6 +223,10 @@ function copyStatic() {
   // from EasyList / uBO data under GPLv3 / CC BY-SA.
   const attribSrc = join(ROOT, 'docs', 'attributions.html');
   if (existsSync(attribSrc)) copyText(attribSrc, join(DIST, 'attributions.html'));
+  // The notices and licence texts the page links to: GPLv3 / LGPLv3 for the lists and ExtPay,
+  // MPL-2.0 for webextension-polyfill. Those licences require the text to travel with a copy.
+  const licensesSrc = join(ROOT, 'docs', 'licenses');
+  if (existsSync(licensesSrc)) copyTree(licensesSrc, join(DIST, 'licenses'));
 
   mkdirSync(join(DIST, 'generated', 'rulesets'), { recursive: true });
   mkdirSync(join(DIST, 'generated', 'generic-cosmetic'), { recursive: true });
@@ -220,8 +242,7 @@ function copyStatic() {
   // Per-host list scriptlet data, registered as MAIN-world content scripts by the SW.
   const shardDir = join(GEN, 'scriptlets');
   if (!existsSync(join(GEN, 'scriptlet-shards.json')) || !existsSync(shardDir)) {
-    console.error('Missing src/generated/scriptlets/. Run `npm run compile-filters` first.');
-    process.exit(1);
+    throw new BuildError('Missing src/generated/scriptlets/. Run `npm run compile-filters` first.');
   }
   copyTree(shardDir, join(DIST, 'generated', 'scriptlets'));
   // Cosmetic rules as the files the worker fetches (core + one per list, REVIEW_2026-09-24 B35).
@@ -296,6 +317,74 @@ const scriptletBundlesOnRebuild = {
   },
 };
 
+/** Every file copyStatic reads, other than src/generated/ (watched through meta.json). */
+function staticSources() {
+  const files = [
+    join(SRC, 'manifest.json'),
+    join(SRC, 'popup', 'popup.html'),
+    join(SRC, 'popup', 'popup.css'),
+    join(SRC, 'options', 'options.html'),
+    join(SRC, 'options', 'options.css'),
+    join(SRC, 'content', 'dark-mode.css'),
+    join(ROOT, 'docs', 'privacy-policy.html'),
+    join(ROOT, 'docs', 'attributions.html'),
+  ];
+  const walk = (dir) => {
+    if (!existsSync(dir)) return;
+    for (const name of readdirSync(dir)) {
+      const p = join(dir, name);
+      if (statSync(p).isDirectory()) walk(p);
+      else files.push(p);
+    }
+  };
+  for (const dir of [join(SRC, '_locales'), join(SRC, 'redirects'), join(SRC, 'icons'), join(ROOT, 'docs', 'licenses')]) {
+    walk(dir);
+  }
+  return files;
+}
+
+/**
+ * Watch mode for everything esbuild does not bundle.
+ *
+ * esbuild rebuilds background.js when compile-filters rewrites src/generated/*.json, because the
+ * worker imports them. The manifest's rule_resources, the ruleset files and the generic CSS used
+ * to stay as they were at startup, so the worker enabled rulesets the manifest never declared
+ * and registered CSS files that did not exist. compile-filters writes meta.json last, so a change
+ * to it means the generated tree is complete. fs.watchFile polls, which also sees a file that is
+ * replaced rather than edited. A file added while watching needs a restart.
+ */
+function watchStatic() {
+  let timer = null;
+  let retried = false;
+  const refresh = (delay = 300) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      try {
+        // Drop the old generated tree: a list removed from the registry must not linger.
+        rmSync(join(DIST, 'generated'), { recursive: true, force: true });
+        buildManifest();
+        copyStatic();
+        writeScriptletBundles({ lenient: true });
+        retried = false;
+        console.log('[static] manifest, rulesets, CSS and static files refreshed');
+      } catch (e) {
+        // Caught mid-write by compile-filters: one more look once it has finished.
+        if (e instanceof SyntaxError && !retried) {
+          retried = true;
+          refresh(1500);
+          return;
+        }
+        console.error(e instanceof BuildError ? `[static] ${e.message}` : e);
+      }
+    }, delay);
+  };
+  for (const file of [join(GEN, 'meta.json'), ...staticSources()]) {
+    watchFile(file, { interval: 400 }, (cur, prev) => {
+      if (cur.mtimeMs !== prev.mtimeMs || cur.size !== prev.size) refresh();
+    });
+  }
+}
+
 async function run() {
   assertGenerated();
   ensureExtPayLocalConfig();
@@ -316,7 +405,10 @@ async function run() {
     await Promise.all(ctxs.map((c) => c.watch()));
     buildManifest();
     copyStatic();
-    console.log('watching for changes… (re-run `npm run compile-filters` if filters change)');
+    watchStatic();
+    console.log(
+      'watching for changes… (run `npm run compile-filters` after a list change; the manifest and rulesets follow)',
+    );
   } else {
     await Promise.all(configs.map((c) => build(c)));
     buildManifest();
@@ -331,6 +423,6 @@ async function run() {
 }
 
 run().catch((e) => {
-  console.error(e);
+  console.error(e instanceof BuildError ? e.message : e);
   process.exit(1);
 });

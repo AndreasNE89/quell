@@ -1,0 +1,64 @@
+StampStack - third-party notices
+================================
+
+This extension contains software and data from the projects below. Each remains under its own
+license. The license texts that must travel with a copy are in this folder: GPL-3.0.txt,
+LGPL-3.0.txt and MPL-2.0.txt. The Creative Commons licenses allow a link in place of the text,
+and it is given with each list.
+
+
+Bundled software
+----------------
+
+Both packages are compiled, unmodified, into background.js and extpay-bridge.js (minified in
+store builds). The source of each exact version is the npm tarball named below.
+
+extpay 3.1.2 (ExtensionPay)
+  Project:  https://github.com/Glench/ExtPay
+  Source:   https://registry.npmjs.org/extpay/-/extpay-3.1.2.tgz
+  License:  The package states two licenses. Its package.json declares AGPL-3.0-or-later, and
+            its source header says "AGPLv3 licensed"; its LICENSE file says LGPL-3.0.
+            LGPL-3.0: LGPL-3.0.txt, which incorporates GPL-3.0.txt.
+            AGPL-3.0: https://www.gnu.org/licenses/agpl-3.0.txt
+
+webextension-polyfill 0.7.0 (a dependency of extpay)
+  Project:  https://github.com/mozilla/webextension-polyfill
+  Source:   https://registry.npmjs.org/webextension-polyfill/-/webextension-polyfill-0.7.0.tgz
+  License:  Mozilla Public License 2.0: MPL-2.0.txt
+
+
+Filter lists
+------------
+
+The rulesets, cosmetic rules and scriptlet data under generated/ are compiled from these lists.
+StampStack translates their rules into Chrome's Declarative Net Request format and drops the
+rules that format cannot express.
+
+EasyList, EasyPrivacy
+  https://easylist.to
+  GPL-3.0 (GPL-3.0.txt) or CC BY-SA 3.0 (https://creativecommons.org/licenses/by-sa/3.0/)
+
+EasyList China
+  https://github.com/easylist/easylistchina
+  GPL-3.0 (GPL-3.0.txt) or CC BY-SA 3.0 (https://creativecommons.org/licenses/by-sa/3.0/)
+
+EasyList Cookie List
+  https://easylist.to
+  CC BY 3.0 (https://creativecommons.org/licenses/by/3.0/)
+
+uBlock Origin filters: Ads, Badware risks, Unbreak
+  https://github.com/uBlockOrigin/uAssets
+  GPL-3.0 (GPL-3.0.txt)
+
+CJX's Annoyance List
+  https://github.com/cjx82630/cjxlist
+  LGPL-3.0 (LGPL-3.0.txt, which incorporates GPL-3.0.txt)
+
+
+Data fetched at run time
+------------------------
+
+SponsorBlock segment data
+  https://sponsor.ajay.app
+  CC BY-NC-SA 4.0 (https://creativecommons.org/licenses/by-nc-sa/4.0/). Not bundled: the
+  extension queries it while you watch, with a 4-character hash prefix of the video id.

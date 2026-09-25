@@ -6,10 +6,10 @@ StampStack is a private Manifest V3 Chromium extension (`stampstack-adblock`) th
 
 - `npm run build` — compile filters + bundle to `dist/`
 - `npm run typecheck` — TypeScript strict check
-- `npm run update-lists` — refresh downloadable lists under `filters/` (re-stamps the lock)
+- `npm run update-lists -- [ids…] [--allow-shrink]` — refresh downloadable lists under `filters/`: every download is checked, all are written or none, then the lock is re-stamped
 - `npm run check-lists` — verify `filters/*.txt` against `filters/lists.lock.json`
 - `npm run smoke-extpay` — ExtPay id + store Dev-unlock gate (restores `[dev]` dist)
-- `npm run watch` — JS rebuild only (re-run compile-filters after list/parser changes)
+- `npm run watch` — JS rebuild; the manifest, rulesets, CSS and static files follow `src/generated/meta.json` and their sources (run compile-filters yourself after list/parser changes)
 - `npm run preview -- --page=options --state=stale-lists` — render a UI state without Chrome
 
 Load unpacked from `dist/`. Store cadence: `docs/RELEASE_CHECKLIST.md`. Breakage inbox: `docs/SUPPORT_TRIAGE.md`.
@@ -18,7 +18,9 @@ Load unpacked from `dist/`. Store cadence: `docs/RELEASE_CHECKLIST.md`. Breakage
 
 - Runtime extension: `src/**/*.ts`, `src/**/*.html|css`, `src/manifest.json`
 - Filter → DNR pipeline: `scripts/compile-filters.mjs`, `scripts/lib/{parse-filter,to-dnr,limits,redirects}.mjs`
-- List registry: `filters/lists.json` (+ `.txt` files)
+- List registry: `filters/lists.json` (+ `.txt` files); `minRules` is the package gate's per-list floor
+- List and package tooling: `scripts/{update-lists,lock-lists,package}.mjs`, `scripts/lib/{list-lock,list-update,package-checks,zip}.mjs`
+- License texts: `docs/licenses/` (copied to `dist/licenses/`), listed on `docs/attributions.html` and in `ATTRIBUTIONS.md`
 - Shared protocol: `src/shared/types.ts` (update all message handlers together)
 
 Do not hand-edit `src/generated/` or `dist/`.
@@ -39,7 +41,7 @@ Do not hand-edit `src/generated/` or `dist/`.
 
 ## Testing
 
-Prefer `node --test` next to changed pure logic (parser, matching, hostname). There is no browser automation suite yet — verify MV3 behavior by loading `dist/` in Chrome when touching SW/DNR/content scripts.
+Prefer `node --test` next to changed pure logic (parser, matching, hostname). Page behaviour is tested in real Chromium through Playwright (`*-dom.test.mjs`, `content-extension.test.mjs`); those tests skip when Chromium cannot launch. `test/build-script.test.mjs` runs `scripts/build.mjs` on a fixture tree through `STAMPSTACK_BUILD_ROOT`. Still load `dist/` in Chrome when touching SW/DNR registration.
 
 ## Style
 

@@ -57,6 +57,16 @@ test('should honor paid within grace window', () => {
   );
 });
 
+test('a verify stamp days in the future does not hold paid open', () => {
+  // Grace is measured from the stamp, so a forged one would keep it open for good.
+  const now = 1_000_000_000_000;
+  const day = 24 * 60 * 60 * 1000;
+  assert.equal(mod.isLicenseEffectivelyPaid({ paid: true, verifiedAt: now + 365 * day }, now), false);
+  assert.equal(mod.isLicenseEffectivelyPaid({ paid: true, verifiedAt: now + 2 * day }, now), false);
+  // An hour of clock skew is tolerated, as loadLicense tolerates it.
+  assert.equal(mod.isLicenseEffectivelyPaid({ paid: true, verifiedAt: now + 60 * 60 * 1000 }, now), true);
+});
+
 test('should expire paid after grace window', () => {
   const now = 1_000_000_000_000;
   assert.equal(
@@ -231,7 +241,9 @@ test('the engine lifts the scrim on both completion and shutdown', () => {
   assert.match(src, /data-stampstack-ready/);
   // A timer too: neither the ready path nor the CSS animation covers "engine started, threw
   // mid-drain" — the first never fires, and the second only applies when the engine never ran.
-  assert.match(src, /setTimeout\(liftScrim/);
+  // In a hidden tab it waits for the pass to finish or the tab to be shown (see the DOM tests).
+  assert.match(src, /setTimeout\(\(\) => scrimFallback\(gen\), 1600\)/);
+  assert.match(src, /function scrimFallback[\s\S]{0,400}liftScrim\(\)/);
   // Shutdown must not wait for a timer.
   assert.match(src, /stopDynamicDark\(\): void \{[\s\S]{0,200}liftScrim\(\)/);
 });

@@ -2,8 +2,9 @@
 //
 // Instead of inverting the whole page (which unavoidably hits images), the engine reads each
 // element's OWN colors and remaps them onto a dark palette: light backgrounds → soft charcoal,
-// dark text → gentle off-white, hues preserved. Media (img/video/canvas/…) is never remapped.
-// No chrome.* / DOM here — unit-tested.
+// dark text → gentle off-white, hues preserved. Media (img/video/canvas/…) is never remapped;
+// the one exception is a transparent image drawn in flat dark ink (isDarkInkImage), which the
+// engine inverts so it does not vanish. No chrome.* / DOM here — unit-tested.
 //
 // Keep/remap decisions use WCAG relative luminance, not HSL lightness: HSL "l" badly misjudges
 // saturated hues (a teal #00a0a0 has l≈0.31 but reads mid-light; saturated blue #6666ff has
@@ -79,7 +80,7 @@ export function rgbToCss(rgb: Rgb): string {
 }
 
 // Palette / tuning knobs (iterate on these for taste).
-const BG_KEEP_LUMINANCE = 0.15; // backgrounds dimmer than this are kept (already dark)
+export const BG_KEEP_LUMINANCE = 0.15; // backgrounds dimmer than this are kept (already dark)
 const FG_KEEP_LUMINANCE = 0.45; // text brighter than this is kept (already light enough)
 const BORDER_KEEP_LUMINANCE = 0.18;
 
@@ -184,4 +185,139 @@ export function remapBackgroundImage(value: string, kind: 'bg' | 'fg' = 'bg'): s
     return remapped;
   });
   return changed ? out.join(', ') : null;
+}
+
+/**
+ * Near-black, low-chroma paint: monochrome icon ink and navy wordmarks (Stripe's #031323) that
+ * vanish on a darkened surface. Vivid colors are rarely this dark, so the gate protects artwork.
+ */
+export function isDarkInkColor(css: string): boolean {
+  const rgb = parseCssColor(css);
+  if (!rgb || rgb.a < 0.5) return false;
+  if (lumOf(rgb) >= 0.15) return false;
+  return Math.max(rgb.r, rgb.g, rgb.b) - Math.min(rgb.r, rgb.g, rgb.b) <= 90;
+}
+
+type Repeat = 'repeat' | 'space' | 'round' | 'no-repeat';
+
+function repeatAxes(value: string): [Repeat, Repeat] {
+  const t = value.trim().split(/\s+/);
+  if (t[0] === 'repeat-x') return ['repeat', 'no-repeat'];
+  if (t[0] === 'repeat-y') return ['no-repeat', 'repeat'];
+  const x = (t[0] || 'repeat') as Repeat;
+  return [x, (t[1] as Repeat | undefined) ?? x];
+}
+
+/** One background-size component against the box edge it sizes; null for `auto`. */
+function sizeFraction(token: string | undefined, edge: number): number | null {
+  if (!token || token === 'auto') return null;
+  const v = parseFloat(token);
+  if (Number.isNaN(v)) return null;
+  if (token.endsWith('%')) return v / 100;
+  return edge > 0 ? v / edge : 1;
+}
+
+/**
+ * Whether any url() layer of a computed background plausibly paints the whole box — a photo,
+ * pattern or tiled texture the engine refuses to darken, so text over it keeps its own color.
+ *
+ * A small untiled image does not: search-box magnifiers, list bullets and sprite icons sit in a
+ * corner of a surface whose background COLOR the engine darkens, and treating them as a light
+ * photo left dark text on charcoal (REVIEW_2026-09-24 B65). An untiled auto-sized image in a big
+ * box stays "covering": it is usually a hero picture whose size the computed style cannot tell.
+ */
+export function urlLayersCoverBox(
+  image: string,
+  size: string,
+  repeat: string,
+  boxW: number,
+  boxH: number,
+): boolean {
+  if (!image || !image.includes('url(')) return false;
+  const layers = splitBackgroundLayers(image);
+  const sizes = splitBackgroundLayers(size || 'auto');
+  const repeats = splitBackgroundLayers(repeat || 'repeat');
+  for (let i = 0; i < layers.length; i++) {
+    if (!layers[i].includes('url(')) continue;
+    const [rx, ry] = repeatAxes(repeats[i % repeats.length] ?? 'repeat');
+    // Tiled in either direction: a texture or a header strip, not an icon.
+    if (rx !== 'no-repeat' || ry !== 'no-repeat') return true;
+    const s = (sizes[i % sizes.length] ?? 'auto').trim();
+    if (s === 'cover' || s === 'contain') return true;
+    const [sw, sh] = s.split(/\s+/);
+    const fw = sizeFraction(sw, boxW);
+    const fh = sizeFraction(sh ?? 'auto', boxH);
+    if (fw == null && fh == null) {
+      if (boxW >= 240 && boxH >= 120) return true;
+      continue;
+    }
+    if ((fw ?? fh ?? 0) >= 0.5 && (fh ?? fw ?? 0) >= 0.5) return true;
+  }
+  return false;
+}
+
+const NUMERIC_TOKEN = /^[-+]?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?(?:%|[a-z]+)?$/i;
+const COLOR_FUNCTION = /#|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color|color-mix|light-dark|(?:repeating-)?(?:linear|radial|conic)-gradient|var)\(/i;
+
+/**
+ * Could this custom-property value feed a color? Scroll- and pointer-driven variables
+ * (`--scroll-y: 412`, `--x: 37.5%`, `--vh: 7.2px`) cannot, and re-walking a subtree for each of
+ * their per-frame writes cost a long task every frame (REVIEW_2026-09-24 B72). Anything
+ * ambiguous counts as a color: channel triples (`255 255 255`, `0 0% 100%`) and var() chains.
+ * `isColorKeyword` decides bare words (the engine passes CSS.supports).
+ */
+export function mightBeColorValue(
+  value: string,
+  isColorKeyword: (word: string) => boolean = () => true,
+): boolean {
+  const v = value.trim();
+  if (!v) return false;
+  if (COLOR_FUNCTION.test(v)) return true;
+  let numbers = 0;
+  for (const token of v.split(/[\s,/]+/)) {
+    if (!token) continue;
+    if (NUMERIC_TOKEN.test(token)) numbers++;
+    else if (/^[a-z-]+$/i.test(token) && isColorKeyword(token)) return true;
+  }
+  return numbers >= 3;
+}
+
+/** Inline properties whose change can alter what the engine reads or writes on an element. */
+export function isColorRelevantProperty(prop: string): boolean {
+  return /^(?:background|border|color|fill|stroke|-webkit-text-fill-color|outline-color|all$)/.test(
+    prop,
+  );
+}
+
+/**
+ * Pixels (RGBA, e.g. a downscaled getImageData) of an image drawn in flat dark ink on a
+ * transparent background: a formula, a line diagram, a monochrome logo. Those vanish on the
+ * darkened page (REVIEW_2026-09-24 M4); inverting them is safe. Photos fail the flatness test:
+ * their opaque pixels spread across tones.
+ */
+export function isDarkInkImage(data: ArrayLike<number>): boolean {
+  let transparent = 0;
+  let opaque = 0;
+  let ink = 0;
+  const total = Math.floor(data.length / 4);
+  if (!total) return false;
+  for (let i = 0; i + 3 < data.length; i += 4) {
+    const a = data[i + 3];
+    if (a < 26) {
+      transparent++;
+      continue;
+    }
+    if (a < 128) continue; // anti-aliased edge: neither ink nor background
+    opaque++;
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    if (
+      relativeLuminance(r, g, b) < 0.1 &&
+      Math.max(r, g, b) - Math.min(r, g, b) <= 60
+    ) {
+      ink++;
+    }
+  }
+  return transparent / total >= 0.2 && opaque / total >= 0.01 && ink / opaque >= 0.85;
 }

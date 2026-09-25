@@ -70,6 +70,11 @@ export async function syncOneRegisteredScript(
       await chrome.scripting.updateContentScripts([desired]);
       return;
     }
+    const duplicate = DUPLICATE_ID_RE.test(String((err as Error)?.message ?? err));
+    if (duplicate && (await retryAfterDuplicate(script, desired))) {
+      console.warn(`[StampStack] ${script.id}: registered on a second try after a duplicate-id refusal`, err);
+      return;
+    }
     if (previous) {
       try {
         await chrome.scripting.registerContentScripts([forApi(previous)]);
@@ -78,6 +83,32 @@ export async function syncOneRegisteredScript(
       }
     }
     throw err;
+  }
+}
+
+/** Chrome's refusal when an id is already registered, e.g. "Duplicate script ID 'quell-dark-mode'". */
+const DUPLICATE_ID_RE = /Duplicate script ID/i;
+const DUPLICATE_RETRY_MS = 150;
+
+/**
+ * Chrome refused an id as a duplicate while a read shows no such id (seen for quell-dark-mode):
+ * a registration kept by persistAcrossSessions can still be restoring, or an unregister made
+ * elsewhere has not settled. Look once more after a moment and write our shape over whatever
+ * is there then, replacing rather than patching (see syncOneRegisteredScript).
+ */
+async function retryAfterDuplicate(
+  script: chrome.scripting.RegisteredContentScript,
+  desired: chrome.scripting.RegisteredContentScript,
+): Promise<boolean> {
+  await new Promise((r) => setTimeout(r, DUPLICATE_RETRY_MS));
+  try {
+    const live = await chrome.scripting.getRegisteredContentScripts({ ids: [script.id] });
+    if (live[0] && registrationShape(live[0]) === registrationShape(script)) return true;
+    if (live.length) await chrome.scripting.unregisterContentScripts({ ids: [script.id] });
+    await chrome.scripting.registerContentScripts([desired]);
+    return true;
+  } catch {
+    return false;
   }
 }
 

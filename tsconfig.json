@@ -1,4 +1,10 @@
 {
+  // Type-checks the extension (src/). The build scripts under scripts/ are plain ESM .mjs and
+  // are not checked: an "include" of scripts/**/*.mjs without allowJs/checkJs selected nothing
+  // and only suggested otherwise. Checking them needs @types/node, which is not a dependency, and
+  // turning on checkJs today reports about 980 errors, mostly untyped parameters. Their safety
+  // net is `node --test` (test/*.test.mjs runs update-lists, lock-lists, build and the package
+  // checks) until someone types them with JSDoc and adds a scripts tsconfig.
   "compilerOptions": {
     "target": "ES2022",
     "module": "ES2022",
@@ -18,6 +24,6 @@
     "verbatimModuleSyntax": false,
     "noEmit": true
   },
-  "include": ["src/**/*.ts", "scripts/**/*.mjs"],
+  "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }

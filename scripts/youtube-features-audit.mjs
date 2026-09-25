@@ -226,7 +226,7 @@ async function waitForShortsOutcome(page, { expectLeave, timeoutMs = 12000 } = {
 async function measure(page, label) {
   await new Promise((r) => setTimeout(r, 2000));
   const data = await page.evaluate(() => {
-    const style = document.getElementById('StampStack-youtube-features');
+    const style = document.getElementById('quell-youtube-features');
     const css = style?.textContent || '';
     const visible = (sel) => {
       try {

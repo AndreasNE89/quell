@@ -3,8 +3,17 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { buildLock, diffLock, formatLockDiff, readLock, stampFor, writeLock } from '../scripts/lib/list-lock.mjs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import {
+  buildLock,
+  diffLock,
+  formatLockDiff,
+  readLock,
+  registryProblems,
+  stampFor,
+  writeLock,
+} from '../scripts/lib/list-lock.mjs';
 
 const STAMP = '2026-07-27T00:00:00.000Z';
 
@@ -209,7 +218,7 @@ test('a clean diff against a previous lock with no stamp still takes now', () =>
 import { spawnSync } from 'node:child_process';
 import { cpSync, mkdirSync } from 'node:fs';
 
-const REPO = process.cwd();
+const REPO = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 /** A throwaway repo root with filters/ populated, so lock-lists.mjs can run against it. */
 function repoFixture(lockContents) {
@@ -272,6 +281,68 @@ test('CLI: the recovery message does not point at a command that fails', () => {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// --- registry sanity -------------------------------------------------------------------------
+// A duplicated id collapsed into one lock entry, one ruleset and one manifest rule_resources id
+// (which Chrome rejects), and nothing said so until much later.
+
+test('a duplicated list id or file is a registry problem, and the lock refuses it', () => {
+  const dup = { lists: [{ id: 'a', file: 'a.txt' }, { id: 'a', file: 'b.txt' }, { id: 'c', file: 'A.txt' }] };
+  const problems = registryProblems(dup);
+  assert.ok(problems.some((p) => /duplicate id "a"/.test(p)), problems.join('\n'));
+  assert.ok(problems.some((p) => /duplicate file "A.txt"/.test(p)), 'file names clash case-insensitively');
+  const dir = fixture({ 'a.txt': 'alpha', 'b.txt': 'beta' });
+  try {
+    assert.throws(() => buildLock(dup, dir, STAMP), (e) => e?.code === 'REGISTRY_INVALID');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('list files must be plain names under filters/', () => {
+  for (const file of ['../package.json', 'sub/x.txt', '.hidden.txt', 'x.json', '']) {
+    assert.equal(registryProblems({ lists: [{ id: 'x', file }] }).length, 1, file);
+  }
+  assert.deepEqual(registryProblems({ lists: [{ id: 'Bad Id', file: 'x.txt' }] }).length, 1);
+});
+
+test('the shipped registry has no problems', () => {
+  const registry = JSON.parse(readFileSync(join(REPO, 'filters', 'lists.json'), 'utf8'));
+  assert.deepEqual(registryProblems(registry), []);
+});
+
+test('.gitattributes pins every list byte for byte and collapses every upstream one', () => {
+  // The two Chinese lists were added in 2.2.0 without the linguist-generated line, so their
+  // refresh diffs expanded in full.
+  const attrs = readFileSync(join(REPO, '.gitattributes'), 'utf8');
+  assert.match(attrs, /^filters\/\*\.txt\s+-text\b/m, 'without -text, autocrlf breaks every hash in the lock');
+  const registry = JSON.parse(readFileSync(join(REPO, 'filters', 'lists.json'), 'utf8'));
+  const missing = registry.lists
+    .filter((l) => l.url)
+    .filter((l) => !new RegExp(`^filters/${l.file.replace(/\./g, '\\.')}\\s+linguist-generated=true`, 'm').test(attrs));
+  assert.deepEqual(missing.map((l) => l.file), []);
+});
+
+test('CLI: a list id handed to lock-lists is an error, not silently ignored', () => {
+  // `npm run update-lists -- easylist` appended the id to the lock-lists half of the chained
+  // script; update-lists then refreshed everything and this ignored the id.
+  const dir = repoFixture(undefined);
+  try {
+    const r = runLock(dir, ['easylist']);
+    assert.equal(r.code, 1);
+    assert.match(r.out, /takes no list ids/);
+    assert.match(r.out, /node scripts\/update-lists\.mjs easylist/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('npm run update-lists hands its list ids to update-lists, which stamps the lock itself', () => {
+  // npm appends `-- <ids>` to the end of the script. Chained with `&& node scripts/lock-lists.mjs`,
+  // the ids reached lock-lists and update-lists refreshed every list.
+  const pkg = JSON.parse(readFileSync(join(REPO, 'package.json'), 'utf8'));
+  assert.equal(pkg.scripts['update-lists'], 'node scripts/update-lists.mjs');
 });
 
 test('CLI: a healthy lock is untouched by a rewrite', () => {
