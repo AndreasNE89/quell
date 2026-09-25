@@ -164,6 +164,9 @@ Written for users, not for the commit log. Internal refactors and test-only work
   for sites that other lists break. As in uBlock Origin, it also narrows a few blocks that were
   too broad: sites such as fullstory.com, chartbeat.com and smartadserver.com work again,
   while their trackers stay blocked on every other site.
+- **Fresher filter lists.** EasyList, EasyPrivacy, uBlock Origin's lists (Unbreak included),
+  EasyList Cookie and the Chinese lists were refreshed from upstream on 25 September 2026:
+  137,221 network rules in all. EasyList brings about 6,200 more, mostly newly seen ad servers.
 - The uBlock Origin list is now called "uBlock Origin — Ads" in Options. It never contained
   uBlock Origin's privacy list.
 - The attributions page now lists the libraries StampStack bundles and links their license
