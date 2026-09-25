@@ -1,13 +1,13 @@
 # StampStack Privacy Policy
 
 **Effective date:** July 13, 2026  
-**Last updated:** July 27, 2026
+**Last updated:** September 25, 2026
 
 **Host this HTML for the Chrome Web Store:** publish [`privacy-policy.html`](./privacy-policy.html) at a stable HTTPS URL (GitHub Pages, your site, etc.) and paste that URL into the Store’s Privacy practices form.
 
 ## Short version
 
-StampStack does **not** collect, sell, or transmit your browsing history. Filtering runs on your device. Settings stay in your browser’s local storage. An optional one-time purchase for dark mode is processed by ExtensionPay (Stripe); we do not receive your browsing history as part of payment.
+StampStack does **not** collect, sell, or transmit your browsing history. Filtering runs on your device. Settings stay in your browser’s local storage. An optional one-time purchase for dark mode is processed by ExtensionPay (Stripe); we do not receive your browsing history as part of payment. If you start a purchase or a restore, the ExtensionPay library stores a license key — and, once you have paid or signed in, your purchase email — in Chrome’s synced storage, which Chrome copies to the other browsers where you are signed in with sync turned on (see **Optional purchase** below).
 
 ## Who we are
 
@@ -20,11 +20,11 @@ StampStack is a browser extension that blocks ads and trackers using Declarative
 | Category | Practice |
 |----------|----------|
 | Browsing activity | Not sent to us. Blocking uses Chrome’s DNR engine and the filter rules packaged into the extension. |
-| Settings & allowlist | Stored locally via `chrome.storage`. Not uploaded. |
+| Settings & allowlist | Stored locally via `chrome.storage.local` on your device. Not uploaded, and not synced to your other browsers. There is one set of settings for normal and Incognito windows, as in uBlock Origin: a site switch, repair step, dark-mode choice or picked element you set in an Incognito window is saved with the others and applies in normal windows too. |
 | Statistics | On-device only when available. Not synced to a StampStack server. |
 | Page analysis (on your device) | To show you what a page connects to, and to power the element picker and your own filters, StampStack reads the current page in your browser: the addresses it references and the elements its rules match. **None of this is transmitted anywhere** — not to us, not to any third party. It exists only for as long as the page is open, and the popup is the only thing that ever sees it. |
-| Breakage reports (only if you start one) | If you use **Still broken? Tell the developer**, StampStack composes an email and opens it in your own mail app. **StampStack does not send it** — you read, edit and send it yourself, or close it. The draft contains the site's hostname and StampStack's own settings (version, filter-list date, which lists are on, repair step, browser version). It contains nothing about the page itself: no page content, no full URL, and none of what the page report observed. |
-| Optional purchase | If you buy dark mode, ExtensionPay / Stripe process payment and may collect an email for receipt and restore. StampStack caches a local paid flag; **browsing history and allowlist are not sent** to the payment provider. |
+| Breakage reports (only if you start one) | If you use **Still broken? Tell the developer**, StampStack composes an email and opens it in your own mail app. **StampStack does not send it** — you read, edit and send it yourself, or close it. The draft contains the site's hostname and StampStack's own settings (version, filter-list date, which lists are on, whether StampStack is paused, repair step, how many of your own filters apply to the site, dark mode and the YouTube switches, browser version). It never contains the text of your filters. It contains nothing about the page itself: no page content, no full URL, and none of what the page report observed. |
+| Optional purchase | If you buy dark mode, ExtensionPay / Stripe process payment and may collect an email for receipt and restore. StampStack caches the license status (paid flag, time of the last check, and purchase email) in `chrome.storage.local`. **Synced storage:** StampStack includes the ExtensionPay library, which keeps its own data in `chrome.storage.sync`. It always records the date the extension was installed. When you start a purchase or a restore, it also stores a license key, together with the account details ExtensionPay returns for that key — once you have paid or signed in, including your purchase email. Chrome syncs `chrome.storage.sync` to the other browsers where you are signed in with sync turned on, so StampStack in those browsers uses the same key; if you are not signed in, or sync is off, it stays on this device. **Browsing history and allowlist are not sent** to the payment provider. |
 | SponsorBlock (on by default) | The **Auto-skip sponsor segments** toggle is **on by default**. While it is on, StampStack asks the community SponsorBlock API (`sponsor.ajay.app`) which segments to skip. It sends only the **first 4 characters of a SHA-256 hash of the YouTube video id** — never the video id itself, the page URL, or any account identifier — and the request is made without cookies or credentials. The API answers with every video sharing that 4-character prefix, and the right one is selected on your device. You can also choose which segment types to skip; StampStack asks only for the ones you picked, and turning them all off stops these requests entirely. |
 
 ## Permissions
@@ -33,14 +33,14 @@ StampStack is a browser extension that blocks ads and trackers using Declarative
 |------------|-----|
 | `declarativeNetRequest` | Apply filter rules on the network path. |
 | `scripting` | Inject cosmetic filters, approved scriptlets, and optional dark-mode CSS. |
-| `storage` | Save preferences, site allowlist, and license cache. |
+| `storage` | Save preferences, site allowlist, and license cache locally; the ExtensionPay library uses synced storage as described under **Optional purchase**. |
 | Host access `<all_urls>` | Required for a general-purpose ad/tracker blocker (and optional page darkening). |
 
 ## Third parties
 
 Filter lists are compiled into the extension when a release is built. StampStack does **not** download filter lists while you browse, and never contacts a list publisher from your browser.
 
-**Optional payments:** Dark mode unlock uses [ExtensionPay](https://extensionpay.com) (Stripe under the hood). Contacting ExtensionPay happens only when you open checkout, restore a purchase, or the extension refreshes license status. We do not sell or share browsing data.
+**Optional payments:** Dark mode unlock uses [ExtensionPay](https://extensionpay.com) (Stripe under the hood). Contacting ExtensionPay happens only when you open checkout or restore a purchase, and — once you have done either, here or in another browser that shares your Chrome sync — when the extension re-checks the license status (at browser start, every few hours, and when you open its popup or Options). We do not sell or share browsing data.
 
 **SponsorBlock:** Segment lookups go to the [SponsorBlock](https://sponsor.ajay.app) community service. Auto-skip is **on by default**; while it is on, each lookup sends a 4-character SHA-256 hash prefix of the video id (not the video id, not the page URL) with no cookies attached. Turn off **Auto-skip sponsor segments** in Options to stop these requests.
 

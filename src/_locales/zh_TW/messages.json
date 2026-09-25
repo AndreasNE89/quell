@@ -755,7 +755,7 @@
     "message": "購買深色模式"
   },
   "popup_checkout_unavailable": {
-    "message": "無法結帳。請試試還原購買，或開啟選項。"
+    "message": "無法開啟結帳頁面。請檢查網路連線後再試一次。"
   },
   "popup_checkout_unavailable_unpacked": {
     "message": "無法結帳 — 請用開發解鎖，或在 extpay-config.local.ts 中設定 ExtensionPay id 後重新建置。"
@@ -1072,7 +1072,7 @@
     "message": "還原購買"
   },
   "popup_restore_unavailable": {
-    "message": "無法還原。請開啟選項 → 還原購買。"
+    "message": "無法開啟還原購買頁面。請檢查網路連線後再試一次。"
   },
   "popup_restricted_page": {
     "message": "Chrome 不允許擴充功能在 Chrome 線上應用程式商店頁面上執行。"

@@ -24,6 +24,23 @@ export function isLicenseEffectivelyPaid(
   return nowMs - license.verifiedAt <= LICENSE_GRACE_MS;
 }
 
+/**
+ * Whether a write to the stored license changes what the popup and Options show: the paid flag
+ * or the purchase email. The worker re-verifies on its own (when either page opens, on wake), and
+ * a check that only moved `verifiedAt` must not redraw: that would replace a message the page
+ * had just put up, such as "Dev unlock applied" or "couldn't reach ExtensionPay".
+ */
+export function licenseChangeIsVisible(change: { oldValue?: unknown; newValue?: unknown } | undefined): boolean {
+  if (!change) return false;
+  const shown = (v: unknown): [boolean, unknown] => {
+    const l = (v && typeof v === 'object' ? v : {}) as Partial<LicenseState>;
+    return [l.paid === true, l.email ?? null];
+  };
+  const [paidBefore, emailBefore] = shown(change.oldValue);
+  const [paidAfter, emailAfter] = shown(change.newValue);
+  return paidBefore !== paidAfter || emailBefore !== emailAfter;
+}
+
 /** Local dev unlock on unpacked installs (`license:devUnlock` / auto-grant). */
 export function isDevUnlockLicense(license: Pick<LicenseState, 'paid' | 'provider' | 'verifiedAt'>): boolean {
   return license.paid && license.provider === 'none' && license.verifiedAt != null;

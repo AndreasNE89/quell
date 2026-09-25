@@ -12,7 +12,7 @@ Required to inject cosmetic CSS and approved scriptlets into pages so leftover a
 
 ## storage
 
-Required to persist user settings (enabled filter lists, preferences) and the per-site allowlist locally on the device. Data is not uploaded to StampStack servers.
+Required to persist user settings (enabled filter lists, preferences) and the per-site allowlist locally on the device (`chrome.storage.local`). Data is not uploaded to StampStack servers. The optional ExtensionPay payment library also uses `chrome.storage.sync`: it always records the install date there, and once the user starts a purchase or a restore, a license key and the account details for it (with the purchase email once the user has paid or signed in). Chrome syncs that storage across the user's signed-in browsers.
 
 ## Host permission: &lt;all_urls&gt;
 

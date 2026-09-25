@@ -1134,7 +1134,11 @@ async function maybeReverifyLicense(): Promise<void> {
   if (now - licenseUiRecheckAt < LICENSE_UI_RECHECK_MS) return;
   licenseUiRecheckAt = now;
   const cached = await loadLicense();
-  if (cached.verifiedAt != null && now - cached.verifiedAt < LICENSE_UI_RECHECK_MS) return;
+  // A stamp ahead of the clock is not a recent check (loadLicense lets up to a day of skew
+  // through), and licenseIsFresh keeps a wake from asking about it either: this is where it
+  // gets re-verified.
+  const age = cached.verifiedAt == null ? null : now - cached.verifiedAt;
+  if (age != null && age >= 0 && age < LICENSE_UI_RECHECK_MS) return;
   const wasPaid = isLicenseEffectivelyPaid(cached);
   const license = await refreshLicenseShared(LICENSE_UI_RECHECK_MS);
   // A new unlock has already re-synced through onLicenseUnlocked; a lapse or refund must here.

@@ -87,6 +87,7 @@ Privacy
 • Filter lists are built into the extension, so no lists are downloaded while you browse
 • Sponsor-segment lookups identify the video only by the first 4 characters of a hash of its ID. They never send the video ID or the page address, and carry no cookies. You can narrow them or switch them off in Settings
 • The optional dark-mode purchase goes through ExtensionPay / Stripe. They may ask for your email, for the receipt and to restore the purchase later. No browsing data is shared with them
+• Starting a purchase or a restore stores an ExtensionPay license key (and, once you have paid or signed in, your purchase email) in Chrome's synced storage, which Chrome copies to your other browsers signed in with sync on
 • Export your settings to a file and import them again at any time
 
 Tips
@@ -114,6 +115,10 @@ Check these before each release. The description must not promise more than the 
 - Shorts off and sponsors only by default: `src/background/settings.ts` and
   `src/shared/sponsorblock.ts`.
 - The 4-character hash prefix, sent without cookies: `src/background/sponsorblock-api.ts`.
+- What sits in synced storage: the ExtensionPay library (`node_modules/extpay`) writes
+  `extensionpay_installed_at` always, `extensionpay_api_key` when checkout or restore opens, and
+  `extensionpay_user` (with the email) after each license check once a key exists. StampStack's
+  own license cache is `stampstack.license` in `chrome.storage.local` (`src/background/license.ts`).
 
 ## Category
 
@@ -185,6 +190,7 @@ When answering Chrome Web Store privacy practices, disclose:
 
 - Optional one-time in-extension purchase via ExtensionPay (Stripe)
 - Email may be collected by the payment provider for receipt / restore
+- ExtensionPay's library stores a license key and, once the user has paid or signed in, the purchase email in `chrome.storage.sync`, which Chrome syncs across the user's signed-in browsers (StampStack's own license cache is in `chrome.storage.local`); it always stores the install date there too
 - SponsorBlock: on by default; sends a 4-character SHA-256 hash prefix of the video id to sponsor.ajay.app (never the video id or page URL, no cookies), and can be turned off in Options
 - No browsing history shared with the payment provider
 - Update the hosted privacy policy URL after publishing `docs/privacy-policy.html`

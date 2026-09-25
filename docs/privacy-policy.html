@@ -53,13 +53,17 @@
 <body>
   <main>
     <h1>StampStack Privacy Policy</h1>
-    <p class="meta">Effective date: July 13, 2026 · Last updated: July 27, 2026</p>
+    <p class="meta">Effective date: July 13, 2026 · Last updated: September 25, 2026</p>
 
     <div class="box">
       <strong>Short version:</strong> StampStack does not collect, sell, or transmit your browsing history.
       Filtering runs on your device. Settings stay in your browser’s local storage.
       An optional one-time purchase for dark mode is processed by ExtensionPay (Stripe);
       browsing history is not sent as part of payment.
+      If you start a purchase or a restore, the ExtensionPay library stores a license key —
+      and, once you have paid or signed in, your purchase email — in Chrome’s synced storage,
+      which Chrome copies to the other browsers where you are signed in with sync turned on (see
+      <strong>Optional purchase</strong> below).
     </div>
 
     <h2>Who we are</h2>
@@ -77,11 +81,11 @@
     </p>
     <ul>
       <li><strong>Browsing activity:</strong> Not sent to us. Network blocking is applied by Chrome’s Declarative Net Request engine using rules shipped in the extension package.</li>
-      <li><strong>Settings &amp; allowlist:</strong> Stored locally via <code>chrome.storage</code> on your device. Not uploaded. There is one set of settings for normal and Incognito windows, as in uBlock Origin: a site switch, repair step, dark-mode choice or picked element you set in an Incognito window is saved with the others and applies in normal windows too.</li>
+      <li><strong>Settings &amp; allowlist:</strong> Stored locally via <code>chrome.storage.local</code> on your device. Not uploaded, and not synced to your other browsers. There is one set of settings for normal and Incognito windows, as in uBlock Origin: a site switch, repair step, dark-mode choice or picked element you set in an Incognito window is saved with the others and applies in normal windows too.</li>
       <li><strong>Statistics:</strong> Any on-device counters (e.g. badge hints) stay local when available. StampStack does not sync them to a server.</li>
       <li><strong>Page analysis (on your device):</strong> To show you what a page connects to, and to power the element picker and your own filters, StampStack reads the current page in your browser — the addresses it references and the elements its rules match. <strong>None of this is transmitted anywhere</strong>, to us or to any third party. It exists only while the page is open, and the popup is the only thing that ever sees it.</li>
       <li><strong>Breakage reports (only if you start one):</strong> If you use &ldquo;Still broken? Tell the developer&rdquo;, StampStack composes an email and opens it in your own mail app. <strong>StampStack does not send it</strong> — you read, edit and send it yourself, or close it. The draft contains the site&rsquo;s hostname and StampStack&rsquo;s own settings (version, filter-list date, which lists are on, whether StampStack is paused, repair step, how many of your own filters apply to the site, dark mode and the YouTube switches, browser version). It never contains the text of your filters. It contains nothing about the page itself: no page content, no full URL, and none of what the page report observed.</li>
-      <li><strong>Optional purchase:</strong> If you buy dark mode, ExtensionPay / Stripe process payment and may collect an email for receipt and restore. StampStack caches a local paid flag; <strong>browsing history and allowlist are not sent</strong> to the payment provider.</li>
+      <li><strong>Optional purchase:</strong> If you buy dark mode, ExtensionPay / Stripe process payment and may collect an email for receipt and restore. StampStack caches the license status (paid flag, time of the last check, and purchase email) in <code>chrome.storage.local</code>. <strong>Synced storage:</strong> StampStack includes the ExtensionPay library, which keeps its own data in <code>chrome.storage.sync</code>. It always records the date the extension was installed. When you start a purchase or a restore, it also stores a license key, together with the account details ExtensionPay returns for that key — once you have paid or signed in, including your purchase email. Chrome syncs <code>chrome.storage.sync</code> to the other browsers where you are signed in with sync turned on, so StampStack in those browsers uses the same key; if you are not signed in, or sync is off, it stays on this device. <strong>Browsing history and allowlist are not sent</strong> to the payment provider.</li>
       <li><strong>SponsorBlock (on by default):</strong> The Auto-skip sponsor segments toggle is <strong>on by default</strong>. While it is on, StampStack asks the community SponsorBlock API (<code>sponsor.ajay.app</code>) which segments to skip. It sends only the <strong>first 4 characters of a SHA-256 hash of the YouTube video id</strong> — never the video id itself, the page URL, or any account identifier — and the request is made without cookies or credentials. The API answers with every video sharing that 4-character prefix, and the right one is selected on your device. You can also choose which segment types to skip; StampStack asks only for the ones you picked, and turning them all off stops these requests entirely.</li>
     </ul>
 
@@ -90,7 +94,7 @@
     <ul>
       <li><code>declarativeNetRequest</code> — apply filter rules without reading page content on the network path.</li>
       <li><code>scripting</code> — inject cosmetic filters, approved scriptlets, and optional dark-mode CSS.</li>
-      <li><code>storage</code> — save preferences, site allowlist, and license cache.</li>
+      <li><code>storage</code> — save preferences, site allowlist, and license cache locally; the ExtensionPay library uses synced storage as described under <strong>Optional purchase</strong>.</li>
       <li><code>&lt;all_urls&gt;</code> host access — required so blocking, cosmetics, and optional page darkening can work on websites generally.</li>
     </ul>
 
@@ -103,8 +107,10 @@
     <p>
       <strong>Optional payments:</strong> Dark mode unlock uses
       <a href="https://extensionpay.com" rel="noopener">ExtensionPay</a> (Stripe under the hood).
-      Contacting ExtensionPay happens only when you open checkout, restore a purchase, or the
-      extension refreshes license status. We do not sell or share browsing data.
+      Contacting ExtensionPay happens only when you open checkout or restore a purchase, and —
+      once you have done either, here or in another browser that shares your Chrome sync — when
+      the extension re-checks the license status (at browser start, every few hours, and when you
+      open its popup or Options). We do not sell or share browsing data.
     </p>
     <p>
       <strong>SponsorBlock:</strong> Segment lookups go to the

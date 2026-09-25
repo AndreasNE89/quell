@@ -14,6 +14,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 
 import { listFloorProblems, rulesetProblems } from './lib/package-checks.mjs';
+import { devUnlockReachableProblems, readExtPayIds, storeBundleExtPayProblems } from './lib/store-gates.mjs';
 import { readZipEntries, zipDirectory } from './lib/zip.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -69,7 +70,7 @@ function assertReadableZip(zipPath, expected) {
   }
 }
 
-function validateDist() {
+async function validateDist() {
   const manPath = join(DIST, 'manifest.json');
   if (!existsSync(manPath)) {
     console.error('dist/manifest.json missing — build first.');
@@ -89,6 +90,8 @@ function validateDist() {
     'icons/icon-128.png',
     'background.js',
     'content.js',
+    // Without it ExtensionPay's checkout page cannot tell the worker a purchase went through.
+    'extpay-bridge.js',
     'privacy.html',
     // The worker fetches cosmetic data at run time; without it nothing is hidden (B35).
     'generated/cosmetic/core.json',
@@ -119,10 +122,23 @@ function validateDist() {
   // Dev-unlock path that hands out the paid feature for free. `npm run smoke-extpay` restores
   // a [dev] dist as its last act, so "whatever is in dist/" is genuinely often a dev build.
   const background = readFileSync(join(DIST, 'background.js'), 'utf8');
-  if (/DEV_BUILD\s*=\s*(?:true|!0)\b/.test(background)) {
+  const devProblems = devUnlockReachableProblems(background);
+  if (devProblems.length) {
     console.error(
-      'dist/background.js is a DEV build (Dev unlock reachable). Run npm run build:store before packaging.',
+      `dist/background.js is not a store build (${devProblems.join('; ')}). ` +
+        'Run npm run build:store before packaging.',
     );
+    process.exit(1);
+  }
+
+  // The ExtensionPay id is where the money goes: a local override in a store zip bills buyers
+  // against a project that is not linked to this CWS item.
+  const idProblems = storeBundleExtPayProblems(
+    ['background.js', 'extpay-bridge.js'].map((f) => [f, readFileSync(join(DIST, f), 'utf8')]),
+    await readExtPayIds(ROOT),
+  );
+  if (idProblems.length) {
+    console.error(`ExtensionPay id check failed: ${idProblems.join('; ')}.`);
     process.exit(1);
   }
 
@@ -156,6 +172,18 @@ function validateDist() {
   return { man, rules };
 }
 
+// ALLOW_UNCONFIGURED_EXTPAY=1 is a local-testing escape hatch for build.mjs --store. It is
+// inherited by the build this script spawns, so without this check a variable left exported from
+// an earlier test session would package an upload with paid dark mode unpurchasable. Checked
+// first, before the list refresh and the build it would otherwise sit through.
+if (process.env.ALLOW_UNCONFIGURED_EXTPAY) {
+  console.error(
+    'ALLOW_UNCONFIGURED_EXTPAY is set. A store package must never be built unconfigured — ' +
+      'unset it (e.g. `unset ALLOW_UNCONFIGURED_EXTPAY`) and re-run npm run package.',
+  );
+  process.exit(1);
+}
+
 console.log('== StampStack store package ==');
 if (!skipLists) {
   console.log('\n[1/5] Updating filter lists…');
@@ -183,7 +211,7 @@ console.log('\n[3/5] Store build…');
 run('npm', ['run', 'compile-filters']);
 run(process.execPath, [join('scripts', 'build.mjs'), '--store']);
 
-const { man, rules } = validateDist();
+const { man, rules } = await validateDist();
 
 console.log('\n[4/5] Obfuscation scan…');
 run(process.execPath, [join('scripts', 'scan-package-obfuscation.mjs')]);

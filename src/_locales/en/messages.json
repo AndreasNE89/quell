@@ -755,7 +755,7 @@
     "message": "Buy dark mode"
   },
   "popup_checkout_unavailable": {
-    "message": "Checkout unavailable. Try Restore purchase, or open Options."
+    "message": "Checkout could not open. Check your connection and try again."
   },
   "popup_checkout_unavailable_unpacked": {
     "message": "Checkout unavailable — use Dev unlock, or set the ExtensionPay id in extpay-config.local.ts and rebuild."
@@ -1072,7 +1072,7 @@
     "message": "Restore purchase"
   },
   "popup_restore_unavailable": {
-    "message": "Restore unavailable. Open Options → Restore purchase."
+    "message": "Restore purchase could not open. Check your connection and try again."
   },
   "popup_restricted_page": {
     "message": "Chrome doesn't let extensions run on Chrome Web Store pages."

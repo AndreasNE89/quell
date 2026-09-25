@@ -21,7 +21,8 @@ import { siteFixLabel } from '../shared/site-fix.js';
 import { siteRuleCovers, siteRuleKeyFromInput, siteRuleScope } from '../shared/site-rules.js';
 import { listAge, localizedListDate } from '../shared/list-age.js';
 import { applyI18n, msg, uiLanguage } from '../shared/i18n.js';
-import { STORAGE_KEY } from '../shared/constants.js';
+import { LICENSE_STORAGE_KEY, STORAGE_KEY } from '../shared/constants.js';
+import { licenseChangeIsVisible } from '../shared/dark-mode.js';
 import { listRowState } from './list-state.js';
 import { mergeFilterText } from './filter-merge.js';
 
@@ -665,7 +666,13 @@ $<HTMLFormElement>('darkOverrideForm').addEventListener('submit', async (e) => {
 // same toggles from the popup. Without this the stale form would silently write its old values
 // back on the next edit (re-enabling SponsorBlock's network calls, for instance).
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== 'local' || !changes[STORAGE_KEY]) return;
+  if (area !== 'local') return;
+  // A purchase finished in the checkout tab, a restore, a lapse or a refund lands in the license,
+  // not in settings — often from the worker's own re-check when this page opened.
+  if (!changes[STORAGE_KEY]) {
+    if (licenseChangeIsVisible(changes[LICENSE_STORAGE_KEY])) void loadDarkMode();
+    return;
+  }
   void loadOverview();
   void loadYoutubeOptions();
   void loadDarkMode();

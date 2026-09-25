@@ -42,7 +42,7 @@ StampStack — Ad & Tracker Blocker
 
 - `declarativeNetRequest` — DNR rulesets for ads/trackers  
 - `scripting` — cosmetic CSS + scriptlets  
-- `storage` — local settings / allowlist only  
+- `storage` — local settings / allowlist; ExtensionPay's library uses `chrome.storage.sync` for its license key  
 - Host `<all_urls>` — general-purpose blocker across sites  
 
 ## Privacy practices (critical paste targets)
@@ -69,7 +69,10 @@ Homepage / Official URL: leave blank until a public site exists. Do not paste th
 3. **Privacy policy HTTPS URL** — already hosted at the URL above; confirm it still loads.
 4. **Screenshots** — the five 1280×800 shots from `npm run build:store && npm run store-screenshots`
    (then `npm run bundle` to get a dev `dist/` back). They land in `store/screenshots/`; see its README.
-5. Privacy practices — no account, no remote telemetry, settings local-only (match privacy policy).
+5. Privacy practices — no account, no remote telemetry, settings in local storage; for dark-mode
+   purchases, ExtensionPay's license key and the buyer's email sit in `chrome.storage.sync`, which
+   Chrome syncs across the user's signed-in browsers (match privacy policy and the
+   "Privacy / payments disclosure" list in `store/LISTING.md`).
 6. **Settings:** provide + verify publisher contact email (blocks Submit until done).
 7. Submit for review only when the dashboard shows no required-field errors.
 

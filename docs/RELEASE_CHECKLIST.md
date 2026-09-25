@@ -72,7 +72,7 @@ Support loop:
 ## Listing / privacy
 
 - [ ] `store/LISTING.md` matches shipped features (ad blocker first; dark mode $2 add-on; YouTube toggles)
-- [ ] Hosted privacy policy (`docs/privacy-policy.html`) matches disclosures (ExtPay email; SponsorBlock when enabled)
+- [ ] Hosted privacy policy (`docs/privacy-policy.html`) matches disclosures (ExtPay email and its `chrome.storage.sync` key; SponsorBlock, on by default)
 - [ ] Screenshots refreshed if UI rows changed: `npm run build:store && npm run store-screenshots` (then `npm run build` for local Dev unlock)
 - [ ] Support / contact path documented (publisher email in privacy policy; CWS review replies use [`SUPPORT_TRIAGE.md`](./SUPPORT_TRIAGE.md))
 

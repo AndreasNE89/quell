@@ -21,8 +21,9 @@ before(async () => {
   isHttpOrHttpsUrl,
   isExtensionRestrictedHostname,
   isDarkModeInjectibleUrl,
+  licenseChangeIsVisible,
 } from './src/shared/dark-mode.js';
-export { LICENSE_GRACE_MS } from './src/shared/constants.js';`,
+export { LICENSE_GRACE_MS, LICENSE_FUTURE_SKEW_MS } from './src/shared/constants.js';`,
       resolveDir: ROOT,
       loader: 'ts',
     },
@@ -65,6 +66,26 @@ test('a verify stamp days in the future does not hold paid open', () => {
   assert.equal(mod.isLicenseEffectivelyPaid({ paid: true, verifiedAt: now + 2 * day }, now), false);
   // An hour of clock skew is tolerated, as loadLicense tolerates it.
   assert.equal(mod.isLicenseEffectivelyPaid({ paid: true, verifiedAt: now + 60 * 60 * 1000 }, now), true);
+  // What a hand-edited storage entry would hold.
+  assert.equal(mod.isLicenseEffectivelyPaid({ paid: true, verifiedAt: 9e15 }, now), false);
+  assert.equal(mod.isLicenseEffectivelyPaid({ paid: true, verifiedAt: Infinity }, now), false);
+  assert.equal(mod.isLicenseEffectivelyPaid({ paid: true, verifiedAt: now + mod.LICENSE_FUTURE_SKEW_MS }, now), true);
+  assert.equal(mod.isLicenseEffectivelyPaid({ paid: true, verifiedAt: now + mod.LICENSE_FUTURE_SKEW_MS + 1 }, now), false);
+});
+
+test('only a license write that changes the paid state or email is worth a redraw', () => {
+  const at = (verifiedAt, over = {}) => ({ paid: false, provider: 'extensionpay', verifiedAt, ...over });
+  assert.equal(mod.licenseChangeIsVisible(undefined), false);
+  // A re-verify with the same answer moves only the stamp.
+  assert.equal(mod.licenseChangeIsVisible({ oldValue: at(1), newValue: at(2) }), false);
+  assert.equal(mod.licenseChangeIsVisible({ oldValue: at(1, { paid: true }), newValue: at(2, { paid: true }) }), false);
+  assert.equal(mod.licenseChangeIsVisible({ oldValue: at(1), newValue: at(2, { paid: true }) }), true);
+  assert.equal(mod.licenseChangeIsVisible({ oldValue: at(1, { paid: true }), newValue: at(2) }), true);
+  assert.equal(mod.licenseChangeIsVisible({ oldValue: at(1, { paid: true }), newValue: at(2, { paid: true, email: 'a@b.c' }) }), true);
+  // First write ever, and a cleared entry.
+  assert.equal(mod.licenseChangeIsVisible({ newValue: at(2) }), false);
+  assert.equal(mod.licenseChangeIsVisible({ newValue: at(2, { paid: true }) }), true);
+  assert.equal(mod.licenseChangeIsVisible({ oldValue: at(1, { paid: true }) }), true);
 });
 
 test('should expire paid after grace window', () => {

@@ -213,10 +213,12 @@ async function refreshLicenseLocked(): Promise<{ license: LicenseState; reached:
     const user = await withTimeout(getExtPay().getUser(), LICENSE_FETCH_TIMEOUT_MS);
     // A purchase that completed while this request was in flight has already been written with
     // a newer verifiedAt. Never let this response downgrade it — that is the "I paid and it
-    // locked itself again" report.
+    // locked itself again" report. Such a stamp was written between startedAt and now, so it
+    // cannot lie ahead of the clock: one that does (up to LICENSE_FUTURE_SKEW_MS survives
+    // loadLicense) is not a newer purchase, and keeping it here would outlive every unpaid answer.
     if (!user.paid) {
       const now = await loadLicense();
-      if (now.paid && now.verifiedAt != null && now.verifiedAt >= startedAt) {
+      if (now.paid && now.verifiedAt != null && now.verifiedAt >= startedAt && now.verifiedAt <= Date.now()) {
         return { license: now, reached: true };
       }
     }

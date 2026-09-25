@@ -57,8 +57,8 @@ const catalog = (locale) =>
 function chromeStub({ catalog, ui, commands, tabUrl }) {
   const listeners = [];
   window.__sent = [];
-  window.__fireStorage = () => {
-    for (const fn of listeners) fn({ 'stampstack.settings': { newValue: {} } }, 'local');
+  window.__fireStorage = (changes = { 'stampstack.settings': { newValue: {} } }) => {
+    for (const fn of listeners) fn(changes, 'local');
   };
   const getMessage = (key, subs) => {
     const entry = catalog[key];
@@ -190,6 +190,20 @@ function darkData(over = {}, licenseOver = {}) {
     siteOverrides: {},
     ...over,
     license: license({ paid: !!over.paid, ...licenseOver }),
+  };
+}
+
+/** A write to the stored license, as chrome.storage.onChanged reports it. */
+function licenseWrite(before, after) {
+  const stored = (over) => ({ paid: false, provider: 'extensionpay', verifiedAt: Date.now() - 60_000, ...over });
+  return { 'stampstack.license': { oldValue: stored(before), newValue: stored({ verifiedAt: Date.now(), ...after }) } };
+}
+
+/** darkmode:get answering unpaid until `state.paid`, and counting the asks. */
+function paidWhen(state) {
+  return () => {
+    state.asks = (state.asks ?? 0) + 1;
+    return state.paid ? darkData({ paid: true, enabled: true, apply: true }, { provider: 'extensionpay' }) : darkData();
   };
 }
 
@@ -383,6 +397,46 @@ test('popup: dark mode is not "on here" on a page it cannot reach', async (t) =>
   if (!ui) return;
   await ui.settle();
   assert.equal(await text(ui.page, '#darkSummary'), 'not available here');
+});
+
+test('popup: a purchase the worker verifies after the popup drew unlocks it in place', async (t) => {
+  // Opening the popup starts the worker's re-check without waiting for it (M16); its answer
+  // arrives as a license write.
+  const state = { paid: false };
+  const ui = await open(t, 'popup', popupReplies({}, { 'darkmode:get': paidWhen(state) }));
+  if (!ui) return;
+  await ui.settle();
+  const { page } = ui;
+  assert.equal(await isHidden(page, '#darkUpsell'), false);
+  const asks = state.asks;
+  // A re-check that found nothing new: no redraw.
+  await page.evaluate((c) => window.__fireStorage(c), licenseWrite({}, {}));
+  await ui.settle();
+  assert.equal(state.asks, asks);
+  state.paid = true;
+  await page.evaluate((c) => window.__fireStorage(c), licenseWrite({}, { paid: true, email: 'a@b.c' }));
+  await ui.settle();
+  assert.equal(await isHidden(page, '#darkUpsell'), true, 'still offering the purchase just made');
+  assert.equal(await isHidden(page, '#darkBuyBtn'), true);
+  assert.equal(await isHidden(page, '#darkModeRow'), false);
+});
+
+test('popup: Buy or Restore with no answer from the worker does not send the user to Options', async (t) => {
+  // Options runs the same request through the same worker, so "open Options → Restore purchase"
+  // was a second try at what had just failed.
+  const ui = await open(t, 'popup', popupReplies({}, { 'license:openCheckout': null, 'license:openRestore': null }));
+  if (!ui) return;
+  await ui.settle();
+  const { page } = ui;
+  await page.click('details:has(#darkSummary) > summary');
+  await page.click('#darkRestoreBtn');
+  await ui.settle();
+  assert.match(await text(page, '#darkHint'), /could not open\. Check your connection/);
+  assert.doesNotMatch(await text(page, '#darkHint'), /Options/);
+  await page.click('#darkBuyBtn');
+  await ui.settle();
+  assert.match(await text(page, '#darkHint'), /Checkout could not open/);
+  assert.doesNotMatch(await text(page, '#darkHint'), /Options/);
 });
 
 test('popup: in an Incognito window the site switch says it applies to normal windows too', async (t) => {
@@ -657,6 +711,42 @@ test('options: a paid user is not offered Buy again', async (t) => {
   await ui.settle();
   assert.equal(await isHidden(ui.page, '#darkBuy'), true);
   assert.equal(await isHidden(ui.page, '#darkRestore'), false);
+});
+
+test('options: a license the worker verifies after the page drew redraws dark mode', async (t) => {
+  // Options stays open in a tab: a purchase made meanwhile, or the worker's re-check when the
+  // page opened (M16), lands in the license, not in settings.
+  const state = { paid: false };
+  const ui = await open(t, 'options', optionsReplies({ 'darkmode:get': paidWhen(state) }));
+  if (!ui) return;
+  await ui.settle();
+  const { page } = ui;
+  assert.equal(await isHidden(page, '#darkBuy'), false);
+  state.paid = true;
+  await page.evaluate((c) => window.__fireStorage(c), licenseWrite({}, { paid: true, email: 'a@b.c' }));
+  await ui.settle();
+  assert.equal(await isHidden(page, '#darkBuy'), true, 'still offering the purchase just made');
+  assert.equal(await page.isChecked('#darkModeEnabled'), true);
+});
+
+test('options: a re-verify that changed nothing shown leaves the message on screen', async (t) => {
+  const state = { paid: false };
+  const ui = await open(
+    t,
+    'options',
+    optionsReplies({ 'darkmode:get': paidWhen(state), 'license:refresh': { ...license(), unreachable: true } }),
+  );
+  if (!ui) return;
+  await ui.settle();
+  const { page } = ui;
+  await page.click('#darkRefresh');
+  await ui.settle();
+  assert.match(await text(page, '#darkActionHint'), /Could not reach ExtensionPay/);
+  const asks = state.asks;
+  await page.evaluate((c) => window.__fireStorage(c), licenseWrite({}, {}));
+  await ui.settle();
+  assert.equal(state.asks, asks);
+  assert.match(await text(page, '#darkActionHint'), /Could not reach ExtensionPay/);
 });
 
 test('options: a null Dev unlock answer is not reported as applied', async (t) => {

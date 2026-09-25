@@ -168,6 +168,18 @@ Written for users, not for the commit log. Internal refactors and test-only work
   uBlock Origin's privacy list.
 - The attributions page now lists the libraries StampStack bundles and links their license
   texts, which now ship inside the extension. EasyList Cookie's license is shown correctly.
+- **Dark mode unlocks on the page you have open.** When StampStack confirms a purchase or restore
+  while the popup or Options is open (bought on another device, or confirmed just after the page
+  appeared), that page updates straight away instead of on the next visit. A refund or a lapsed
+  license shows up the same way.
+- If Buy or Restore purchase cannot open the payment page, the popup now says to check your
+  connection instead of sending you to Options to try the same thing again.
+- A license check dated ahead of the computer's clock no longer keeps dark mode unlocked until the
+  clock catches up. StampStack checks it again the next time the popup or Options opens.
+- **Privacy policy updated.** It now says that the ExtensionPay payment library keeps its data in
+  Chrome's synced storage, which Chrome copies to your other browsers when sync is on: the install
+  date, a license key from the moment you open checkout or restore, and your purchase email once
+  you have paid or signed in. StampStack's own settings stay in local storage and are not synced.
 
 ## 2.3.0
 

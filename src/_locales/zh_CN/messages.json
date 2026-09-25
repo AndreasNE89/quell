@@ -755,7 +755,7 @@
     "message": "购买深色模式"
   },
   "popup_checkout_unavailable": {
-    "message": "无法结账。请试试恢复购买，或打开设置。"
+    "message": "无法打开结账页面。请检查网络连接后重试。"
   },
   "popup_checkout_unavailable_unpacked": {
     "message": "无法结账 — 请用开发解锁，或在 extpay-config.local.ts 中设置 ExtensionPay id 后重新构建。"
@@ -1072,7 +1072,7 @@
     "message": "恢复购买"
   },
   "popup_restore_unavailable": {
-    "message": "无法恢复。请打开设置 → 恢复购买。"
+    "message": "无法打开恢复购买页面。请检查网络连接后重试。"
   },
   "popup_restricted_page": {
     "message": "Chrome 不允许扩展在 Chrome 应用商店页面上运行。"

@@ -1,5 +1,6 @@
 // license.ts against a fake chrome.storage and ExtensionPay: a hung ExtensionPay request is
-// bounded (B34), and a stored verify stamp from the future is not trusted.
+// bounded (B34), and a stored verify stamp from the future is not trusted — neither on load nor
+// by the guard that keeps a purchase made while a request was in flight.
 import { test, before, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
@@ -80,4 +81,29 @@ test('a verify stamp more than a day ahead reads as never verified', async () =>
   store['stampstack.license'] = { paid: 'yes', provider: 'extensionpay', verifiedAt: 'soon' };
   const odd = await lic.loadLicense(now);
   assert.deepEqual([odd.paid, odd.verifiedAt], [false, null]);
+});
+
+test('an unpaid answer corrects a paid stamp from the future', async () => {
+  // Within the day of skew loadLicense tolerates, so the stamp survives the load. The guard that
+  // keeps a purchase made mid-request read it as "newer than this request" and kept it.
+  store['stampstack.license'] = { paid: true, provider: 'extensionpay', verifiedAt: Date.now() + 3_600_000 };
+  globalThis.__getUser = async () => ({ paid: false });
+  const r = await lic.refreshLicenseDetailed();
+  assert.equal(r.reached, true);
+  assert.equal(r.license.paid, false);
+  assert.equal(store['stampstack.license'].paid, false);
+  assert.ok(store['stampstack.license'].verifiedAt <= Date.now());
+});
+
+test('a purchase written while the request was in flight still outlives its unpaid answer', async () => {
+  store['stampstack.license'] = { paid: false, provider: 'extensionpay', verifiedAt: Date.now() - 60_000 };
+  globalThis.__getUser = async () => {
+    // What ExtensionPay's onPaid writes, landing before this request's answer.
+    store['stampstack.license'] = { paid: true, provider: 'extensionpay', verifiedAt: Date.now(), email: 'a@b.c' };
+    return { paid: false };
+  };
+  const r = await lic.refreshLicenseDetailed();
+  assert.equal(r.license.paid, true);
+  assert.equal(store['stampstack.license'].paid, true);
+  assert.equal(store['stampstack.license'].email, 'a@b.c');
 });

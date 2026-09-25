@@ -50,7 +50,12 @@ Use this when uploading StampStack to the [Chrome Web Store Developer Dashboard]
 - `privacy.html` bundled
 - Obfuscation scan (`atob` / long base64)
 - **Fails** if `declarativeNetRequestFeedback` or `tabs` is present
-- **Fails** if ExtensionPay id is still a placeholder
+- **Fails** if ExtensionPay id is still a placeholder, or before it starts if
+  `ALLOW_UNCONFIGURED_EXTPAY` is set
+- **Fails** unless `background.js` and `extpay-bridge.js` carry exactly the tracked ExtensionPay id
+  (`EXTPAY_EXTENSION_ID_TRACKED`), never a local `extpay-config.local.ts` override
+- **Fails** if `background.js` is a dev build: the dev define, or a Dev-unlock guard that is not a
+  constant `false` (`scripts/lib/store-gates.mjs`, also run by `npm run smoke-extpay`)
 
 ---
 
@@ -94,7 +99,11 @@ These steps require your Google account, developer registration, and (usually) p
 - [ ] Single purpose (short purpose only — do **not** paste host-permission text): paste the
   "Single purpose" block from [store/LISTING.md](../store/LISTING.md) verbatim. That is the only
   variant that covers the dark-mode theming; do not retype a shorter one.
-- [ ] Declare you **do not** collect user data (no remote analytics)
+- [ ] Data usage: answer from the "Privacy / payments disclosure" list in
+  [store/LISTING.md](../store/LISTING.md), not "does not collect user data". No analytics and no
+  browsing history leave the device, but the optional purchase handles the buyer's email
+  (ExtensionPay / Stripe, and ExtensionPay's library keeps it with a license key in
+  `chrome.storage.sync`), and SponsorBlock lookups send a 4-character hash prefix of the video id
 - [ ] Remote code: **No** (extension does not load remote code)
 - [ ] Paste permission justifications from [store/PERMISSIONS.md](../store/PERMISSIONS.md) — each field once, matching that permission
 - [ ] Certify limited-use / privacy compliance checkboxes
@@ -123,8 +132,10 @@ Single purpose: Block ads and trackers using Declarative Net Request, cosmetic f
 Permissions:
 - declarativeNetRequest: apply packaged EasyList-style rulesets
 - scripting: inject cosmetic CSS and allowlisted scriptlets
-- storage: local settings and site allowlist only
+- storage: settings and site allowlist in chrome.storage.local; the ExtensionPay payment library keeps its license key (and a buyer's email) in chrome.storage.sync
 - host <all_urls>: required for general-purpose blocking on websites
+
+Network requests the extension makes itself: SponsorBlock segment lookups to sponsor.ajay.app (on by default; a 4-character SHA-256 prefix of the video id, no cookies) and, for the optional $2 dark-mode unlock, ExtensionPay (extensionpay.com) once the user opens checkout or restore.
 
 No remote code execution. No analytics. Privacy policy: <PASTE_YOUR_HTTPS_URL>
 

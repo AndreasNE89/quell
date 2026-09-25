@@ -172,6 +172,28 @@ test('opening the popup re-verifies the purchase, at most once per ten minutes (
   assert.equal(ext.calls, 1);
 });
 
+test('opening the popup re-verifies a paid stamp from the future', async () => {
+  // Within the day of skew loadLicense tolerates, a wake counts it as fresh and it reads as a
+  // check made "just now". The popup re-check skipped it, and the in-flight purchase guard then
+  // kept it over ExtensionPay's unpaid answer.
+  const ext = { calls: 0, getUser: async () => (ext.calls++, { paid: false }) };
+  const sw = await bootServiceWorker({
+    host: 'news.example',
+    settings: { darkModeEnabled: true },
+    license: { paid: true, provider: 'extensionpay', verifiedAt: Date.now() + 60 * 60 * 1000 },
+    extpay: ext,
+  });
+  await sw.settle();
+  assert.equal(ext.calls, 0);
+  assert.ok(sw.script('quell-dark-mode'));
+  await sw.send({ type: 'popup:get' });
+  await sw.settle();
+  assert.equal(ext.calls, 1);
+  assert.equal(sw.local()['stampstack.license'].paid, false);
+  assert.ok(sw.local()['stampstack.license'].verifiedAt <= Date.now());
+  assert.equal(sw.script('quell-dark-mode'), undefined);
+});
+
 test('dark mode switched on then off in quick succession leaves nothing registered', async () => {
   // The registration sync ran outside settingsChain: the "on" sync, still registering, finished
   // after the "off" sync had found nothing to remove (9 of 60 fast toggles).
@@ -211,6 +233,46 @@ test('the first unlock still switches dark mode on', async () => {
   assert.equal(sw.local()['stampstack.darkUnlockedOnce.v1'], true);
   await sw.settle();
   assert.ok(sw.script('quell-dark-mode'));
+});
+
+test('a buyer who turned dark mode off after the first unlock keeps it off through a lapse', async () => {
+  // No flag seeded: the first unlock records it.
+  const answer = { paid: true };
+  const sw = await bootServiceWorker({
+    host: 'news.example',
+    settings: { darkModeEnabled: false },
+    license: { paid: false, provider: 'extensionpay', verifiedAt: Date.now() - 20 * DAY },
+    extpay: { getUser: async () => ({ ...answer }) },
+  });
+  await sw.settle();
+  assert.equal(sw.settings().darkModeEnabled, true, 'the first unlock switches it on');
+  await sw.send({ type: 'darkmode:setEnabled', enabled: false });
+  answer.paid = false;
+  assert.equal((await sw.send({ type: 'license:refresh' })).paid, false);
+  answer.paid = true;
+  assert.equal((await sw.send({ type: 'license:refresh' })).paid, true);
+  await sw.settle();
+  assert.equal(sw.settings().darkModeEnabled, false);
+});
+
+test('a buyer from before the first-unlock flag is recorded on start and keeps dark mode off', async () => {
+  const answer = { paid: true };
+  const sw = await bootServiceWorker({
+    host: 'news.example',
+    settings: { darkModeEnabled: false },
+    license: PAID(),
+    extpay: { getUser: async () => ({ ...answer }) },
+  });
+  sw.startup();
+  await sw.settle();
+  assert.equal(sw.local()['stampstack.darkUnlockedOnce.v1'], true);
+  answer.paid = false;
+  await sw.send({ type: 'license:refresh' });
+  answer.paid = true;
+  await sw.send({ type: 'license:refresh' });
+  await sw.settle();
+  assert.equal(sw.local()['stampstack.license'].paid, true);
+  assert.equal(sw.settings().darkModeEnabled, false);
 });
 
 test('a verify stamp from the future does not keep dark mode unlocked', async () => {

@@ -10,7 +10,8 @@ import type {
 } from '../shared/types.js';
 import { nextSiteFix } from '../shared/site-fix.js';
 import type { BreakageReport } from '../shared/breakage-report.js';
-import { SUPPORT_EMAIL } from '../shared/constants.js';
+import { LICENSE_STORAGE_KEY, SUPPORT_EMAIL } from '../shared/constants.js';
+import { licenseChangeIsVisible } from '../shared/dark-mode.js';
 import { applyI18n, msg, uiLanguage } from '../shared/i18n.js';
 import {
   fixLanded,
@@ -929,6 +930,13 @@ el.darkResetBtn.addEventListener('click', async () => {
   renderDarkMode(data);
   // The link hides itself once the override is gone; hand focus to the switch it reset.
   if (el.darkResetBtn.hidden) el.darkSiteToggle.focus();
+});
+
+// Opening the popup makes the worker re-check the purchase (M16) without waiting for it, so a
+// purchase made on another device, or a refund, arrives as a license write after the popup has
+// drawn the old state. Follow it; a check that changed nothing shown is ignored.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && licenseChangeIsVisible(changes[LICENSE_STORAGE_KEY])) void loadDark();
 });
 
 function openOptions(): void {

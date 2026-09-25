@@ -54,7 +54,10 @@ Messages are a single discriminated union in `src/shared/types.ts`. Keep handler
 
 ### Paid dark mode / ExtensionPay
 
-- Config: `src/shared/extpay-config.ts` (placeholder) or gitignored `extpay-config.local.ts` (from `.example`).
+- Config: `src/shared/extpay-config.ts` holds the real production id (`EXTPAY_EXTENSION_ID_TRACKED`).
+  The gitignored `extpay-config.local.ts` (from `.example`) may override it in dev builds only —
+  `--store` stubs it out, and `npm run package` / `npm run smoke-extpay` verify that both
+  `background.js` and `extpay-bridge.js` carry exactly the tracked id (`scripts/lib/store-gates.mjs`).
 - Unpacked QA: popup/options **Dev unlock**.
 - Already-dark hosts are handled at runtime by the engine's per-surface luminance check
   (`siteCanvasIsDark`), not by a persisted override. The old `darkmode:autoSkip` message that

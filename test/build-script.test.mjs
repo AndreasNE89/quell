@@ -9,6 +9,7 @@
 //   and CSS from startup, so the worker enabled rulesets the manifest never declared.
 // - The licence texts the attributions page links to must be in the package.
 // (REVIEW_2026-09-24 P3 build entries and M17.)
+// - A `--store` build must carry the tracked ExtensionPay id, not a developer's local override.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -135,6 +136,66 @@ test('more than 100 static rulesets, more than 50 enabled, or a repeated id fail
     assert.equal((await build(ok)).code, 0, 'exactly 50 enabled is allowed');
   } finally {
     rmSync(ok, { recursive: true, force: true });
+  }
+});
+
+test("a store build ships the tracked ExtensionPay id, never the local override", async () => {
+  // The old gate read the override with a regex that needed a `: string` annotation, so the
+  // example's own spelling slipped past it and the runtime then preferred the local slug.
+  const dir = fixture();
+  try {
+    for (const f of ['extpay-config.ts', 'build-flags.ts']) {
+      put(dir, `src/shared/${f}`, readFileSync(join(ROOT, 'src', 'shared', f)));
+    }
+    put(dir, 'src/shared/extpay-config.local.ts', "export const EXTPAY_EXTENSION_ID_OVERRIDE = 'dev-slug';\r\n");
+    put(
+      dir,
+      'src/content/extpay-bridge.ts',
+      "import { EXTPAY_EXTENSION_ID } from '../shared/extpay-config.js';\r\nconsole.log(EXTPAY_EXTENSION_ID);\r\n",
+    );
+    const tracked = /EXTPAY_EXTENSION_ID_TRACKED: string = '([^']+)'/.exec(
+      readFileSync(join(ROOT, 'src', 'shared', 'extpay-config.ts'), 'utf8'),
+    )[1];
+
+    const store = await build(dir, ['--store']);
+    assert.equal(store.code, 0, store.out);
+    const bridge = dist(dir, 'extpay-bridge.js');
+    assert.equal(bridge.includes('dev-slug'), false, 'the local slug reached the store bundle');
+    assert.ok(bridge.includes(`"${tracked}"`), bridge);
+    assert.match(store.out, /Ignoring local ExtensionPay override "dev-slug"/);
+
+    // A dev build still honours it: the override is a dev affordance, not dead.
+    const dev = await build(dir);
+    assert.equal(dev.code, 0, dev.out);
+    assert.ok(dist(dir, 'extpay-bridge.js').includes('dev-slug'));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a local override does not rescue a store build whose tracked id is the placeholder', async () => {
+  const dir = fixture();
+  try {
+    put(
+      dir,
+      'src/shared/extpay-config.ts',
+      readFileSync(join(ROOT, 'src', 'shared', 'extpay-config.ts'), 'utf8').replace(
+        /(EXTPAY_EXTENSION_ID_TRACKED: string = ')[^']+'/,
+        "$1YOUR_EXTENSIONPAY_ID'",
+      ),
+    );
+    put(dir, 'src/shared/build-flags.ts', readFileSync(join(ROOT, 'src', 'shared', 'build-flags.ts')));
+    put(dir, 'src/shared/extpay-config.local.ts', "export const EXTPAY_EXTENSION_ID_OVERRIDE = 'dev-slug';\r\n");
+
+    const store = await build(dir, ['--store']);
+    assert.equal(store.code, 1, store.out);
+    assert.match(store.out, /ExtensionPay id is not configured/);
+    assert.match(store.out, /Ignoring local ExtensionPay override "dev-slug"/);
+    // It used to name the missing id as the tracked id "null".
+    assert.doesNotMatch(store.out, /"null"/);
+    assert.equal(existsSync(join(dir, 'dist', 'manifest.json')), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });
 
