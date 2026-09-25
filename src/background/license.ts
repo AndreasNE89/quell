@@ -41,11 +41,32 @@ export function defaultLicense(): LicenseState {
   };
 }
 
-export async function loadLicense(): Promise<LicenseState> {
+/**
+ * How far in the future a stored `verifiedAt` may lie before it is distrusted. A verify stamped
+ * by a clock that was fast and has since been corrected stays usable; a forged stamp years
+ * ahead does not keep the grace window open for good, since isLicenseEffectivelyPaid measures
+ * grace from it and a negative age always passes.
+ */
+export const LICENSE_FUTURE_SKEW_MS = 24 * 60 * 60 * 1000;
+
+/** How long a service worker waits on ExtensionPay before it falls back to the cache. */
+export const LICENSE_FETCH_TIMEOUT_MS = 10_000;
+
+/**
+ * The stored license, with anything that could extend it on its own reset. A `verifiedAt` that
+ * is not a finite number, or lies more than LICENSE_FUTURE_SKEW_MS ahead, reads as never
+ * verified: the paid state then waits for the next ExtensionPay answer instead of lasting forever.
+ */
+export async function loadLicense(nowMs: number = Date.now()): Promise<LicenseState> {
   const stored = await chrome.storage.local.get(LICENSE_STORAGE_KEY);
   const raw = stored[LICENSE_STORAGE_KEY] as Partial<LicenseState> | undefined;
-  if (!raw) return defaultLicense();
-  return { ...defaultLicense(), ...raw };
+  if (!raw || typeof raw !== 'object') return defaultLicense();
+  const license: LicenseState = { ...defaultLicense(), ...raw, paid: raw.paid === true };
+  const at = license.verifiedAt;
+  if (at != null && (typeof at !== 'number' || !Number.isFinite(at) || at > nowMs + LICENSE_FUTURE_SKEW_MS)) {
+    license.verifiedAt = null;
+  }
+  return license;
 }
 
 export async function saveLicense(license: LicenseState): Promise<void> {
@@ -137,16 +158,42 @@ export function toLicenseData(license: LicenseState, nowMs: number = Date.now())
  * Returns the license state that should be used for gating.
  */
 export async function refreshLicense(): Promise<LicenseState> {
+  return (await refreshLicenseDetailed()).license;
+}
+
+/**
+ * refreshLicense, plus whether ExtensionPay actually answered. A refresh the user asked for
+ * must be able to say "could not reach ExtensionPay" instead of silently showing the cache.
+ */
+export async function refreshLicenseDetailed(): Promise<{ license: LicenseState; reached: boolean }> {
   const before = await loadLicense();
-  const next = await withLicenseLock(() => refreshLicenseLocked());
+  const result = await withLicenseLock(() => refreshLicenseLocked());
+  const next = result.license;
   // Restore-purchase and any refresh that observes the unlock before ExtPay's own onPaid does
   // must still light up the paid features. The listener is idempotent (it re-syncs state), so
   // firing here as well as from onPaid is safe.
   if (!before.paid && next.paid && paidListener) await paidListener(next);
-  return next;
+  return result;
 }
 
-async function refreshLicenseLocked(): Promise<LicenseState> {
+/** `p`, or a rejection once `ms` have passed: a hung request must not hold the license lock. */
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`timed out after ${ms} ms`)), ms);
+    p.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
+}
+
+async function refreshLicenseLocked(): Promise<{ license: LicenseState; reached: boolean }> {
   const cached = await loadLicense();
   const startedAt = Date.now();
 
@@ -155,9 +202,9 @@ async function refreshLicenseLocked(): Promise<LicenseState> {
     if (!isLicenseEffectivelyPaid(cached)) {
       const expired = { ...cached, paid: false };
       await saveLicense(expired);
-      return expired;
+      return { license: expired, reached: true };
     }
-    return cached;
+    return { license: cached, reached: true };
   }
 
   if (!isExtPayConfigured()) {
@@ -165,19 +212,21 @@ async function refreshLicenseLocked(): Promise<LicenseState> {
     if (cached.paid && !isLicenseEffectivelyPaid(cached)) {
       const expired = { ...cached, paid: false };
       await saveLicense(expired);
-      return expired;
+      return { license: expired, reached: false };
     }
-    return cached;
+    return { license: cached, reached: false };
   }
 
   try {
-    const user = await getExtPay().getUser();
+    const user = await withTimeout(getExtPay().getUser(), LICENSE_FETCH_TIMEOUT_MS);
     // A purchase that completed while this request was in flight has already been written with
     // a newer verifiedAt. Never let this response downgrade it — that is the "I paid and it
     // locked itself again" report.
     if (!user.paid) {
       const now = await loadLicense();
-      if (now.paid && now.verifiedAt != null && now.verifiedAt >= startedAt) return now;
+      if (now.paid && now.verifiedAt != null && now.verifiedAt >= startedAt) {
+        return { license: now, reached: true };
+      }
     }
     const next: LicenseState = {
       paid: !!user.paid,
@@ -186,16 +235,16 @@ async function refreshLicenseLocked(): Promise<LicenseState> {
       email: user.email ?? undefined,
     };
     await saveLicense(next);
-    return next;
+    return { license: next, reached: true };
   } catch (e) {
     console.warn('[StampStack] license refresh failed; using cache', e);
-    if (cached.paid && isLicenseEffectivelyPaid(cached)) return cached;
+    if (cached.paid && isLicenseEffectivelyPaid(cached)) return { license: cached, reached: false };
     if (cached.paid && !isLicenseEffectivelyPaid(cached)) {
       const expired = { ...cached, paid: false };
       await saveLicense(expired);
-      return expired;
+      return { license: expired, reached: false };
     }
-    return cached;
+    return { license: cached, reached: false };
   }
 }
 
@@ -212,9 +261,27 @@ function extPayMisconfiguredError(action: 'checkout' | 'restore'): string {
   );
 }
 
-export async function openCheckout(): Promise<{ ok: boolean; error?: string }> {
+/**
+ * Why a purchase page could not open, as a code the popup and Options translate
+ * (popup_error_<code>); `error` stays English, for the console and English pages.
+ */
+export type PurchaseErrorCode = 'network' | 'unconfigured' | 'provider';
+
+export interface PurchaseResult {
+  ok: boolean;
+  error?: string;
+  code?: PurchaseErrorCode;
+}
+
+/** A fetch that never reached the server (offline, DNS, a blocked request), as Chrome reports it. */
+function isNetworkFailure(e: unknown): boolean {
+  const text = e instanceof Error ? `${e.name} ${e.message}` : String(e);
+  return /Failed to fetch|NetworkError|network|ERR_INTERNET|ERR_NAME_NOT_RESOLVED|timed? ?out/i.test(text);
+}
+
+export async function openCheckout(): Promise<PurchaseResult> {
   if (!isExtPayConfigured()) {
-    return { ok: false, error: extPayMisconfiguredError('checkout') };
+    return { ok: false, code: 'unconfigured', error: extPayMisconfiguredError('checkout') };
   }
   try {
     await getExtPay().openPaymentPage();
@@ -224,14 +291,15 @@ export async function openCheckout(): Promise<{ ok: boolean; error?: string }> {
     const detail = e instanceof Error ? e.message : String(e);
     return {
       ok: false,
+      code: isNetworkFailure(e) ? 'network' : 'provider',
       error: `Checkout failed (${detail}). Confirm the ExtensionPay project is linked to the Chrome Web Store item.`,
     };
   }
 }
 
-export async function openRestore(): Promise<{ ok: boolean; error?: string }> {
+export async function openRestore(): Promise<PurchaseResult> {
   if (!isExtPayConfigured()) {
-    return { ok: false, error: extPayMisconfiguredError('restore') };
+    return { ok: false, code: 'unconfigured', error: extPayMisconfiguredError('restore') };
   }
   try {
     await getExtPay().openLoginPage();
@@ -241,6 +309,7 @@ export async function openRestore(): Promise<{ ok: boolean; error?: string }> {
     const detail = e instanceof Error ? e.message : String(e);
     return {
       ok: false,
+      code: isNetworkFailure(e) ? 'network' : 'provider',
       error: `Restore failed (${detail}). Use the email from your ExtensionPay / Stripe receipt.`,
     };
   }

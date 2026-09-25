@@ -779,8 +779,15 @@ export function toDnrRule(f) {
 
   // Cosmetic-only exceptions are never network actions — even when they carry a URL
   // pattern (`@@||example.com^$generichide`). Emitting `allow` would unblock traffic.
+  // uBO reads ghide/ehide/shide as types next to the network ones, though: the network types a
+  // filter lists are allowed too (`@@*$script,xhr,ghide,domain=uptoplay.net` also allows that
+  // site's scripts and XHRs). Only listed types: without one, an allow would cover every request.
   if (f.cosmeticException) {
-    return { cosmeticException: f.cosmeticException, pattern: f.pattern, isException: f.isException };
+    const cosmetic = { cosmeticException: f.cosmeticException, pattern: f.pattern, isException: f.isException };
+    if (!f.isException || !f.options?.resourceTypes?.length) return cosmetic;
+    const net = toDnrRule({ ...f, cosmeticException: null });
+    if (net.skip) return { ...cosmetic, networkSkip: net.skip };
+    return { ...net, ...cosmetic };
   }
 
   // $redirect-rule means "redirect only if the request would otherwise be blocked".

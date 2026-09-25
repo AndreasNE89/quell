@@ -22,6 +22,12 @@
         <p class="tagline" data-i18n="options_subtitle">Ad and tracker blocker · no account, no telemetry</p>
       </header>
 
+      <!-- Nothing else on the page said "paused": the list rows read as refused by Chrome and
+           the rule card as 0 without a reason. -->
+      <p class="paused-banner" id="pausedBanner" role="status" hidden data-i18n="options_paused_banner">
+        StampStack is paused everywhere, so nothing is blocked. Turn it back on from the toolbar button.
+      </p>
+
       <section class="cards">
         <div class="card">
           <div class="card-num" id="statTotal">0</div>
@@ -75,6 +81,8 @@
           </div>
         </div>
 
+        <p class="hint" id="youtubeStatus" role="status"></p>
+
         <h3 class="subhead" data-i18n="options_which_segments_to_skip">Which segments to skip</h3>
         <p class="hint" data-i18n="options_which_segments_hint">
           Applies only while “Skip sponsor segments” is on. StampStack asks the SponsorBlock
@@ -113,7 +121,7 @@
             Dev unlock (unpacked)
           </button>
         </div>
-        <p class="hint" id="darkActionHint"></p>
+        <p class="hint" id="darkActionHint" role="status"></p>
         <h3 class="subhead" data-i18n="options_per_site_overrides">Per-site overrides</h3>
         <p class="hint" data-i18n="options_force_on_or_off_for_specific_hostnames">Force on or off for specific hostnames. Clear an entry to follow the global toggle.</p>
         <div id="darkOverrides" class="lists" data-i18n="options_none_yet">None yet.</div>
@@ -121,8 +129,9 @@
           <input
             type="text"
             id="darkOverrideHost"
-            placeholder="example.com" data-i18n-attr="placeholder:options_example_com"
+            placeholder="example.com"
             aria-label="Hostname for dark mode override"
+            data-i18n-attr="placeholder:options_example_com,aria-label:options_dark_override_host"
             autocomplete="off"
           />
           <select id="darkOverrideValue" aria-label="Override value" data-i18n-attr="aria-label:options_override_value">
@@ -158,8 +167,9 @@
           <input
             type="text"
             id="siteRuleHost"
-            placeholder="example.com" data-i18n-attr="placeholder:options_example_com"
+            placeholder="example.com"
             aria-label="Site hostname"
+            data-i18n-attr="placeholder:options_example_com,aria-label:options_site_rule_host"
             autocomplete="off"
           />
           <select id="siteRuleLevel" aria-label="Rule" data-i18n-attr="aria-label:options_rule">
@@ -167,7 +177,7 @@
             <option value="injection" data-i18n="options_element_hiding_scriptlets_off">Element hiding + script patches off</option>
             <option value="allowlist" data-i18n="options_no_blocking_at_all">No blocking at all</option>
           </select>
-          <button type="submit" data-i18n="options_add">Add</button>
+          <button type="submit" class="btn btn-secondary" data-i18n="options_add">Add</button>
         </form>
         <p class="filter-error" id="siteRuleError" role="alert"></p>
       </section>
@@ -184,7 +194,7 @@
           placeholder="example.com##.sponsored-widget"
         ></textarea>
         <div class="backup-row">
-          <button type="button" id="customSave" data-i18n="options_save_filters">Save filters</button>
+          <button type="button" class="btn" id="customSave" data-i18n="options_save_filters">Save filters</button>
           <span class="hint" id="customStatus" role="status"></span>
         </div>
         <div id="customErrors" class="filter-errors"></div>
@@ -197,8 +207,8 @@
           machine. Purchases are not included — restore those with the email from your receipt.
         </p>
         <div class="backup-row">
-          <button type="button" id="exportBtn" data-i18n="options_export_settings">Export settings</button>
-          <button type="button" id="importBtn" data-i18n="options_import_settings">Import settings…</button>
+          <button type="button" class="btn btn-secondary" id="exportBtn" data-i18n="options_export_settings">Export settings</button>
+          <button type="button" class="btn btn-secondary" id="importBtn" data-i18n="options_import_settings">Import settings…</button>
           <input type="file" id="importFile" accept="application/json,.json" hidden />
         </div>
         <p class="hint" id="backupStatus" role="status"></p>
@@ -206,8 +216,8 @@
 
       <footer class="page-foot">
         <span>StampStack v<span id="ver">0.1.0</span></span>
-        <a href="privacy.html" target="_blank" rel="noopener">Privacy</a>
-        <a href="attributions.html" target="_blank" rel="noopener">Attributions</a>
+        <a href="privacy.html" target="_blank" rel="noopener" data-i18n="options_privacy">Privacy</a>
+        <a href="attributions.html" target="_blank" rel="noopener" data-i18n="options_attributions">Attributions</a>
       </footer>
     </main>
     <script type="module" src="options.js"></script>

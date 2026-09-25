@@ -21,12 +21,23 @@ export interface BreakageFacts {
   siteFix: SiteFixLevel | null;
   /** Blocking switched off entirely for this host. */
   allowlisted: boolean;
+  /** Paused everywhere. Absent in reports built before it was a fact. */
+  paused?: boolean;
   version: string;
   listsGeneratedAt: string | null;
   activeRuleCount: number;
   /** Chrome refused to load a list the user enabled. */
   degraded: boolean;
+  /** Lists Chrome has loaded: a list it refused does not count as on. */
   enabledLists: string[];
+  /** Lists the user switched on that Chrome did not load (the shared rule pool is full). */
+  refusedLists?: string[];
+  /** The user's own element-hiding rules that apply to this host. */
+  customRules?: number;
+  /** Dark mode on this host; null when it is not purchased. */
+  darkMode?: boolean | null;
+  /** The YouTube switches, on a YouTube host; null elsewhere. */
+  youtube?: { sponsored: boolean; shorts: boolean; sponsorBlock: boolean } | null;
   /** e.g. "Chrome 138" — best effort, "unknown" is fine. */
   browser: string;
   now: number;
@@ -42,6 +53,7 @@ export interface BreakageReport {
 
 /** The line the reader of the report needs first: how much filtering was still on. */
 function repairState(facts: BreakageFacts): string {
+  if (facts.paused) return 'paused everywhere';
   if (facts.allowlisted) return 'blocking off for this site (allowlisted)';
   if (facts.siteFix === 'injection') return 'element hiding and script patches off';
   if (facts.siteFix === 'cosmetics') return 'element hiding off';
@@ -64,8 +76,25 @@ function diagnostics(facts: BreakageFacts): string {
       `${facts.activeRuleCount.toLocaleString('en-US')}${facts.degraded ? ' (reduced — a list did not load)' : ''}`,
     ],
     ['lists on', facts.enabledLists.length ? facts.enabledLists.join(', ') : 'none'],
-    ['browser', facts.browser],
   ];
+  // Each of these is a layer the breakage could come from, so each is named when it is in play:
+  // the user's own rules and dark mode restyle pages as much as any list does.
+  if (facts.refusedLists?.length) rows.push(['not loaded', facts.refusedLists.join(', ')]);
+  if (facts.customRules != null) {
+    rows.push(['your filters', facts.customRules ? `${facts.customRules} for this site` : 'none for this site']);
+  }
+  if (facts.darkMode !== undefined) {
+    rows.push(['dark mode', facts.darkMode == null ? 'not purchased' : facts.darkMode ? 'on here' : 'off here']);
+  }
+  if (facts.youtube) {
+    const y = facts.youtube;
+    rows.push([
+      'youtube',
+      `sponsored ${y.sponsored ? 'hidden' : 'shown'}, shorts ${y.shorts ? 'hidden' : 'shown'}, ` +
+        `sponsorblock ${y.sponsorBlock ? 'on' : 'off'}`,
+    ]);
+  }
+  rows.push(['browser', facts.browser]);
   const width = Math.max(...rows.map(([k]) => k.length));
   return rows.map(([k, v]) => `${(k + ':').padEnd(width + 2)}${v}`).join('\n');
 }

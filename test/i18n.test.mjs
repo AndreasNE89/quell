@@ -39,9 +39,10 @@ function keysUsed() {
   // the direct-literal form reported 25 live keys as orphans. The `popup_`/`options_` prefix
   // makes these unambiguous — nothing else in the source is shaped like that.
   const prefixes = [];
-  for (const f of ['src/popup/popup.ts', 'src/options/options.ts']) {
+  // The element picker is a content script; it reads its own `picker_` keys.
+  for (const f of ['src/popup/popup.ts', 'src/options/options.ts', 'src/content/picker.ts']) {
     const ts = readFileSync(f, 'utf8');
-    for (const m of ts.matchAll(/['"`]((?:popup|options)_[a-z0-9_]+)['"`]/g)) used.add(m[1]);
+    for (const m of ts.matchAll(/['"`]((?:popup|options|picker)_[a-z0-9_]+)['"`]/g)) used.add(m[1]);
     // Keys assembled at runtime: msg(`options_list_age_${level}`). The literal part is a
     // prefix, and every catalog key under it is reachable.
     for (const m of ts.matchAll(/`((?:popup|options)_[a-z0-9_]*)\$\{/g)) prefixes.push(m[1]);
@@ -50,6 +51,8 @@ function keysUsed() {
   // description doubles as the Web Store summary). No UI file names those keys, so without
   // this they would be reported as orphans.
   for (const m of readFileSync('src/manifest.json', 'utf8').matchAll(/__MSG_(\w+)__/g)) used.add(m[1]);
+  // The shared helper reads a key of its own (`ui_lang`), by a direct msg('key') call.
+  for (const m of readFileSync('src/shared/i18n.ts', 'utf8').matchAll(/\bmsg\(\s*'([a-z0-9_]+)'/g)) used.add(m[1]);
   return { used, prefixes };
 }
 
@@ -170,6 +173,108 @@ test('every message with a placeholder declares it', () => {
       }
     }
   }
+});
+
+test('every catalog names its own language for <html lang>', () => {
+  // applyI18n tags the page with the catalog's language, not the browser's: a French browser
+  // gets the English catalog, and tagging that text "fr" would have it read with a French voice.
+  for (const locale of locales) {
+    const tag = catalog(locale).ui_lang?.message;
+    assert.equal(tag, locale.replace('_', '-'), `${locale}/ui_lang must be the catalog's BCP 47 tag`);
+  }
+});
+
+// Words in the markup that stay as they are in every language.
+const UNTRANSLATABLE = new Set(['StampStack', 'StampStack v', 'example.com##.sponsored-widget']);
+const VOID_TAGS = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr']);
+const SPOKEN_ATTRS = ['aria-label', 'title', 'alt', 'placeholder'];
+
+function parseAttrs(src) {
+  const attrs = {};
+  for (const m of src.matchAll(/([^\s=/]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g)) {
+    attrs[m[1].toLowerCase()] = m[2] ?? m[3] ?? m[4] ?? '';
+  }
+  return attrs;
+}
+
+/**
+ * Text a user sees or hears in the markup that no catalog key replaces: text outside any
+ * [data-i18n] element, and aria-label/title/alt/placeholder values the element's
+ * data-i18n-attr does not name. The key-existence checks above cannot see these — a string with
+ * no key at all is simply English in every locale, which is how "Hide an element", the shortcut
+ * tip and the upsell paragraph shipped while the changelog said "translated everywhere".
+ */
+function untranslatedMarkup(html) {
+  const src = html
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<!doctype[^>]*>/i, '')
+    .replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, '');
+  const found = [];
+  const stack = [];
+  const tokens = /<(\/?)([a-zA-Z][\w-]*)((?:[^>"']|"[^"]*"|'[^']*')*?)(\/?)>|([^<]+)/g;
+  for (const m of src.matchAll(tokens)) {
+    if (m[5] !== undefined) {
+      const text = m[5].replace(/&[a-z]+;/g, ' ').replace(/\s+/g, ' ').trim();
+      if (/\p{L}/u.test(text) && !stack.some((e) => e.translated) && !UNTRANSLATABLE.has(text)) {
+        found.push(text);
+      }
+      continue;
+    }
+    const tag = m[2].toLowerCase();
+    if (m[1]) {
+      const at = stack.map((e) => e.tag).lastIndexOf(tag);
+      if (at >= 0) stack.length = at;
+      continue;
+    }
+    const attrs = parseAttrs(m[3]);
+    const covered = new Set(
+      (attrs['data-i18n-attr'] ?? '').split(',').map((p) => p.split(':')[0].trim()).filter(Boolean),
+    );
+    for (const a of SPOKEN_ATTRS) {
+      const v = attrs[a];
+      if (v && /\p{L}/u.test(v) && !covered.has(a) && !UNTRANSLATABLE.has(v)) found.push(`${a}="${v}"`);
+    }
+    if (!VOID_TAGS.has(tag) && !m[4]) stack.push({ tag, translated: 'data-i18n' in attrs });
+  }
+  return found;
+}
+
+for (const page of ['popup', 'options']) {
+  test(`${page}.html: every visible or spoken string has a catalog key`, () => {
+    const html = readFileSync(`src/${page}/${page}.html`, 'utf8');
+    assert.deepEqual(untranslatedMarkup(html), [], 'these stay English in every locale');
+  });
+}
+
+test('the markup detector catches what 2.3.0 shipped untranslated', () => {
+  // Verbatim shapes from the 2.3.0 popup and Options.
+  const shipped = `
+    <button class="icon-btn" id="optionsBtn" title="Settings" data-i18n-attr="title:popup_settings" aria-label="Settings">⚙</button>
+    <button type="button" class="action" id="pickBtn">
+      <span class="action-icon" aria-hidden="true">✛</span> Hide an element
+    </button>
+    <p class="shortcut-hint">
+      Tip: <kbd data-i18n="popup_alt">Alt</kbd>+<kbd data-i18n="popup_shift">Shift</kbd>+<kbd>X</kbd> starts the picker
+    </p>
+    <a href="privacy.html" target="_blank" rel="noopener">Privacy</a>
+    <input id="siteRuleHost" placeholder="example.com" data-i18n-attr="placeholder:options_example_com" aria-label="Site hostname" />`;
+  assert.deepEqual(untranslatedMarkup(shipped), [
+    'aria-label="Settings"',
+    'Hide an element',
+    'Tip:',
+    'X',
+    'starts the picker',
+    'Privacy',
+    'aria-label="Site hostname"',
+  ]);
+});
+
+test('the markup detector leaves translated and brand text alone', () => {
+  const ok = `
+    <button type="button" class="action"><span aria-hidden="true">✛</span> <span data-i18n="k">Hide an element</span></button>
+    <p data-i18n="k">Nested <strong>words</strong> inside a translated element</p>
+    <img alt="StampStack" /><input aria-label="Name" data-i18n-attr="aria-label:k" />`;
+  assert.deepEqual(untranslatedMarkup(ok), []);
 });
 
 test('no conversion fragments were left behind', () => {

@@ -144,3 +144,38 @@ test('junk entries are skipped rather than throwing', () => {
     ['Criteo'],
   );
 });
+
+// --- blocked, from the lists Chrome has loaded (REVIEW_2026-09-24 B39) -------------------
+// A compile-time "blocked" called OneTrust blocked with EasyList Cookie off, and 55 trackers
+// blocked with EasyPrivacy off. The index now names the lists; the worker passes the loaded ones.
+
+const LISTED = {
+  domains: {
+    'cookielaw.org': { label: 'OneTrust', blocked: true, lists: ['easylist-cookie'] },
+    'google-analytics.com': { label: 'Google Analytics', blocked: true, lists: ['easyprivacy', 'ubo-filters'] },
+    'hotjar.com': { label: 'Hotjar', blocked: true, lists: [], partial: ['easyprivacy'] },
+  },
+};
+
+test('a tracker is blocked only while one of its lists is loaded', () => {
+  const loaded = new Set(['quell-seed', 'easylist', 'easyprivacy']);
+  const { trackers } = mod.classifyHosts(
+    ['cdn.cookielaw.org', 'www.google-analytics.com', 'static.hotjar.com'],
+    LISTED,
+    loaded,
+  );
+  const by = Object.fromEntries(trackers.map((t) => [t.label, t]));
+  assert.equal(by.OneTrust.blocked, false, 'the cookie list is off');
+  assert.equal(by['Google Analytics'].blocked, true);
+  assert.equal(by.Hotjar.blocked, false);
+  assert.equal(by.Hotjar.partial, true, 'only some of its requests are blocked');
+  assert.equal(mod.classifyHosts(['www.google-analytics.com'], LISTED, new Set()).trackers[0].blocked, false);
+});
+
+test('an index without lists keeps its compile-time answer', () => {
+  const { trackers } = mod.classifyHosts(['plausible.io', 'doubleclick.net'], INDEX, new Set());
+  assert.deepEqual(
+    trackers.map((t) => [t.label, t.blocked]),
+    [['Plausible', false], ['Google Ads', true]],
+  );
+});

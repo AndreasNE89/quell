@@ -2,6 +2,103 @@
 
 Written for users, not for the commit log. Internal refactors and test-only work are omitted.
 
+## Unreleased
+
+- **Google Search ads are hidden again.** EasyList's rules for Google Search are written for
+  `www.google.*`, and StampStack never applied them, so sponsored results stayed visible on every
+  Google domain. The same fix brings back rules written for a site name across all its endings,
+  such as `read.amazon.*`, and uBlock Origin rules written with `>>`, as a pattern, or with
+  non-Latin site names.
+- **Fixed: filters meant to repair a page broke it instead.** uBlock Origin filters that restyle
+  an element, or remove one of its attributes or classes, were applied as "hide this element".
+  The play button on hianime.ms and a captcha form on networkhint.com disappeared, and pages such
+  as bitdefender.com could stay blank. These filters now do what they say, and filters StampStack
+  cannot carry out are left out instead of hiding anything.
+- **A page can no longer bring back what StampStack hides everywhere.** A site's own `!important`
+  style could undo StampStack's general element hiding. That hiding now also applies at the
+  browser's user level, as in uBlock Origin, with no new flash of ads.
+- **One broken filter no longer switches off the others.** A single malformed rule, in a list or
+  in My filters, could cancel every other site-specific hide on a page, and very large sets of
+  rules were only partly applied. Each rule now stands on its own.
+- **A rule for www no longer applies to the whole site.** A filter or exception written for
+  www.youtube.com or www.yahoo.com also reached music.youtube.com, mail.yahoo.com and every other
+  subdomain. It now stays on the site it names, as in uBlock Origin.
+- **Anti-adblock bait stays visible where uBlock Origin keeps it visible.** uBlock Origin's list
+  stops EasyList from hiding elements that sites use to detect ad blockers. StampStack now honors
+  those exceptions across lists, so fewer "please disable your ad blocker" walls appear. As in
+  uBlock Origin, some pages may now show an empty box where an ad would have been.
+- **Fixed: elements hidden on the very sites a rule was meant to spare.** An exception that left
+  out some sites made StampStack hide elements on exactly those sites (onet.pl, fakt.pl,
+  forbes.pl and others).
+- Chinese-list and other rules that look for text inside an element's children now hide what
+  they target: 149 of EasyList China's text-matching rules matched nothing before.
+- Hidden list rows come back when a site reuses them for normal content, and an ad stays hidden
+  when the page rewrites its style.
+- Ads written into blank frames on a page now get that page's element hiding, the general rules
+  included.
+- **Turning StampStack off for a site now also covers what is embedded in it.** Ads and widgets
+  in frames from other sites kept their element hiding on a site you switched off. They no longer
+  do, as in uBlock Origin. The other way round, a site you switched off no longer loses element
+  hiding when it appears inside a site you have not.
+- **The site switch and repair steps now work on go.dev, lg.com, wordpress.com, codesandbox.io
+  and single-name intranet hosts**, covering that host only. IPv6 addresses and Chrome Web Store
+  pages say why they cannot be switched.
+- **Repair steps now reach StampStack's YouTube features too.** The first step also stops the
+  sponsored and Shorts hiding; the second also stops the Shorts redirect and sponsor skipping.
+- A repair step on one subdomain no longer deletes the parent site's fix, Remove in Settings
+  deletes only that row, and turning blocking back on also clears the repair steps. The popup's
+  status line shows an active repair step, and names the parent site an inherited fix comes from.
+- **Your own exceptions now work on every kind of rule**, including rules that find ads by their
+  text, and a list's "no site-specific hiding" exception now turns those off too.
+- My filters: text-matching and `:style()` rules now work, rules that could never apply are shown
+  as errors instead of being counted, and `example.*`, localhost and non-Latin site names are
+  accepted.
+- Element picker: ad iframes can be picked, the page no longer sees the click, Esc always closes
+  it, widening survives small mouse moves, and a pick is narrowed to the one element you pointed
+  at, with a live match count. It says so when a pick could not be saved, does not start where
+  element hiding is off, and works on single-name intranet hosts.
+- Settings: My filters no longer loses unsaved text, and keeps rules the picker added while you
+  were editing. Switching a list on no longer shows a false "Not active — rule limit full"
+  warning; while paused, lists read "paused" and a banner says so. Paid users are no longer
+  offered Buy again. Keyboard focus stays put after toggles, long hostnames wrap, and the dark
+  theme's warning colours and native buttons are readable.
+- **The popup and Settings are now fully translated**, including "Hide an element", "Site
+  broken?", the dark-mode offer, the footer links, every screen-reader label, the element
+  picker's hints, and the errors a purchase or a settings import can show. Pages announce their
+  language to assistive tech, and list dates are shown in it.
+- The picker tip shows the shortcut Chrome actually assigned, and is hidden when there is none.
+- The site switch and repair steps are only offered where StampStack can keep them, and a change
+  that did not take effect no longer asks you to reload. Chrome Web Store and chrome:// pages no
+  longer claim "Blocking on this site" or "Dark mode on here".
+- In an Incognito window, the popup says that a site switch set there also applies in normal
+  windows: settings are shared, as in uBlock Origin. The privacy policy says so too.
+- The page report calls a tracker "blocked" only when a list that blocks it outright is on, and
+  "partly blocked" when a list blocks only some of its addresses. The "ad slots hidden" count
+  counts each slot once, only when it is really hidden, and says it covers rules for that site.
+- Breakage reports now include how many of your own filters apply to the site (never the filters
+  themselves), dark mode, the YouTube switches, pause, and any list Chrome refused to load.
+- **Faster.** Filter data is read from the package when it is needed instead of on every wake of
+  StampStack's background worker: a wake that needs no element-hiding data answers in about 9 ms
+  instead of 42 ms. Element hiding runs about 5 times faster on busy pages such as Facebook, and
+  Google results pages no longer receive 14,000 exception rules on every search.
+- A stuck tab (an open alert, a busy page) no longer holds up toggles. After an update, your
+  pause and list choices are restored before the license check, which now times out. Tabs open
+  during an install or update get StampStack back without a reload, and the old copy steps aside
+  instead of running twice.
+- Pages restored with Back pick up allowlist and filter changes, and a hiccup while refreshing no
+  longer drops all hiding. A page Chrome loads ahead of time follows the settings of the site it
+  belongs to, dark mode included.
+- Security: web pages can no longer get StampStack to change settings or read its storage,
+  dark-mode answers to pages no longer include the purchase email or the site list, and a
+  future-dated license stamp is no longer trusted.
+- Settings import keeps a setting whose value has the wrong type instead of erasing it, and
+  updates open tabs. The size limit for My filters now cuts at a whole line. Re-verifying your
+  purchase no longer switches dark mode back on after you turned it off, and "Refresh license"
+  says when ExtensionPay cannot be reached.
+- Pages a filter list switches off entirely, such as the ad-industry opt-out page, now also keep
+  their elements visible. A few filters that also let a site's own scripts or images through
+  (uptoplay.net, im9.eu) now do both.
+
 ## 2.3.0
 
 - **Pages that would not load now load.** Some filters are written to block one kind of

@@ -109,9 +109,10 @@ Terms kept consistent with the zh_TW UI strings: 腳本修補 (script patches), 
 我的過濾規則, 彈出視窗. 背景彈出視窗 describes a pop-under in words a Taiwanese reader
 recognizes; the gloss after it does the rest.
 
-The popup's "Hide an element" and "Site broken?" buttons, its Alt+Shift+X tip, and the
-sponsor-skip notice are still English-only in the UI, so the copy describes those actions rather
-than quoting a label. Quote them once they are localized.
+The popup's "Hide an element" and "Site broken?" buttons are localized since the release after
+2.3.0: 隱藏元素 and 網站有問題？. Its shortcut tip now names the key Chrome actually assigned
+(提示：按 … 可直接啟動元素挑選器). The sponsor-skip notice on YouTube is still English-only, so
+describe it rather than quoting a label.
 
 Same screenshot note as the Simplified listing — capture with a 繁體中文 profile if you want the
 images to match.

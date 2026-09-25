@@ -137,6 +137,45 @@ test('the filter line is always domain-scoped', () => {
   assert.ok(mod.filterLineFor('example.com', '.ad').startsWith('example.com#'));
 });
 
+test('attribute values are serialized as complete CSS strings', () => {
+  // A trailing backslash used to escape the closing quote, and a newline ended the string:
+  // either way the selector swallowed the rest of the page's stylesheet.
+  assert.equal(mod.cssString('Close\\'), '"Close\\\\"');
+  assert.equal(mod.cssString('say "hi"'), '"say \\"hi\\""');
+  assert.equal(mod.cssString('a\nb'), '"a\\a b"');
+  const el = node('BUTTON', { classList: ['css-1a2b3c'], attrs: { 'aria-label': 'Close\\' } });
+  assert.equal(mod.stepFor(el), 'button[aria-label="Close\\\\"]');
+});
+
+test('bare-tag chains are recognized, anything with a hook or position is not', () => {
+  for (const s of ['div', 'div > div > div > div', 'aside > div', 'main div']) {
+    assert.equal(mod.isBareTagSelector(s), true, s);
+  }
+  for (const s of ['div.ad', '#x > div', 'div:nth-of-type(2) > div', 'div[role="banner"]']) {
+    assert.equal(mod.isBareTagSelector(s), false, s);
+  }
+});
+
+test('candidates go from stable hooks to positions to generated classes', () => {
+  const ad = node('DIV', {
+    classList: ['css-gg44hh'],
+    indexOfType: 1,
+    countOfType: 3,
+    parent: node('ASIDE', { classList: ['sidebar'], parent: node('BODY') }),
+  });
+  assert.deepEqual(mod.selectorCandidates(ad), [
+    'div:nth-of-type(2)',
+    'aside.sidebar > div:nth-of-type(2)',
+    'div.css-gg44hh',
+    'aside.sidebar > div.css-gg44hh',
+    'div.css-gg44hh:nth-of-type(2)',
+    'aside.sidebar > div.css-gg44hh:nth-of-type(2)',
+  ]);
+  // A stable class is preferred, and pinned by position only when asked to be.
+  const card = node('DIV', { classList: ['promo'], indexOfType: 0, countOfType: 2, parent: node('BODY') });
+  assert.deepEqual(mod.selectorCandidates(card), ['div.promo', 'div.promo:nth-of-type(1)']);
+});
+
 test('special characters in a class are escaped', () => {
   const el = node('DIV', { classList: ['ad:slot'] });
   const step = mod.stepFor(el);

@@ -189,7 +189,8 @@ function showToast(hit: SponsorSegment, from: number): void {
 function enabled(): boolean {
   const opts = getOpts?.();
   if (!opts) return false;
-  if (opts.paused || opts.allowlisted) return false;
+  // Skipping seeks the page's player: the repair ladder's script-patch rung stops it too (B32).
+  if (opts.paused || opts.allowlisted || opts.scriptletsOff) return false;
   return !!opts.youtubeSponsorBlock;
 }
 
@@ -319,16 +320,35 @@ function syncFromLocation(): void {
   }
 }
 
+let unhookSpa: (() => void) | null = null;
+
 function hookSpa(): void {
   if (spaHooked) return;
   spaHooked = true;
   const run = (): void => {
     syncFromLocation();
   };
-  document.addEventListener('yt-navigate-finish', run, true);
-  document.addEventListener('yt-navigate-start', run, true);
-  document.addEventListener('yt-page-data-updated', run, true);
+  const events = ['yt-navigate-finish', 'yt-navigate-start', 'yt-page-data-updated'];
+  for (const e of events) document.addEventListener(e, run, true);
   window.addEventListener('popstate', run);
+  unhookSpa = () => {
+    for (const e of events) document.removeEventListener(e, run, true);
+    window.removeEventListener('popstate', run);
+    spaHooked = false;
+  };
+}
+
+/** Stand down for good: an updated extension's content script has taken over this page. */
+export function stopSponsorBlock(): void {
+  active = false;
+  segments = [];
+  currentVideoId = null;
+  fetchGen++;
+  if (tickTimer != null) window.clearInterval(tickTimer);
+  tickTimer = null;
+  unhookSpa?.();
+  unhookSpa = null;
+  document.getElementById(TOAST_ID)?.remove();
 }
 
 /**

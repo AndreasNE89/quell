@@ -20,6 +20,8 @@ import {
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { joinScriptletBundle } from './lib/scriptlet-shards.mjs';
+import { cosmeticDataFiles } from './lib/cosmetic-files.mjs';
+import { chromeRejectsText } from './lib/text-encoding.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -222,6 +224,14 @@ function copyStatic() {
     process.exit(1);
   }
   copyTree(shardDir, join(DIST, 'generated', 'scriptlets'));
+  // Cosmetic rules as the files the worker fetches (core + one per list, REVIEW_2026-09-24 B35).
+  // Without them a fresh install registers no generic sheet and hides nothing site-specific.
+  const cosmetic = JSON.parse(readFileSync(join(GEN, 'cosmetic.json'), 'utf8'));
+  for (const f of cosmeticDataFiles(cosmetic)) {
+    const out = join(DIST, f.path);
+    mkdirSync(dirname(out), { recursive: true });
+    writeFileSync(out, f.content);
+  }
   // NOT copied: generated/generic-cosmetic.css. syncRegisteredScripts injects the per-list
   // sheets under generated/generic-cosmetic/, so the combined file is ~530 KB of package
   // weight nothing ever loads. It stays in src/generated for local inspection.
@@ -244,6 +254,30 @@ function writeScriptletBundles({ lenient = false } = {}) {
     const out = join(DIST, bundle.file);
     mkdirSync(dirname(out), { recursive: true });
     writeFileSync(out, joinScriptletBundle(texts));
+  }
+}
+
+/**
+ * Every script and stylesheet in dist/ must be text Chrome loads. A noncharacter such as U+FFFF,
+ * which esbuild copies from a regex literal as is, made executeScript refuse picker.js ("It isn't
+ * UTF-8 encoded"); in a manifest content script it stops the extension from loading.
+ */
+function assertChromeLoadsText(dir = DIST) {
+  const bad = [];
+  const walk = (d) => {
+    for (const name of readdirSync(d)) {
+      const p = join(d, name);
+      if (statSync(p).isDirectory()) walk(p);
+      else if (/\.(js|css|html|json)$/.test(name)) {
+        const why = chromeRejectsText(readFileSync(p));
+        if (why) bad.push(`${p.slice(DIST.length + 1)}: ${why}`);
+      }
+    }
+  };
+  walk(dir);
+  if (bad.length) {
+    console.error(`Chrome would refuse to load these files:\n  ${bad.join('\n  ')}`);
+    process.exit(1);
   }
 }
 
@@ -288,6 +322,7 @@ async function run() {
     buildManifest();
     copyStatic();
     writeScriptletBundles();
+    assertChromeLoadsText();
     const mode = store ? 'store' : 'dev';
     console.log(
       `\nBuilt unpacked extension → dist/  [${mode}]  (chrome://extensions → Load unpacked)`,

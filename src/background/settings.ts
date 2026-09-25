@@ -3,6 +3,7 @@
 
 import type { Settings } from '../shared/types.js';
 import { LEGACY_STORAGE_KEYS, STORAGE_KEY } from '../shared/constants.js';
+import { capFilterText } from './settings-import.js';
 
 export function defaultSettings(): Settings {
   return {
@@ -155,8 +156,9 @@ export function mergeSettings(partial: Partial<Settings>): Settings {
     next.darkModeAutoOff = { ...partial.darkModeAutoOff };
   }
   if (typeof partial.customFilters === 'string') {
-    // Bounded so an imported file cannot wedge the parser or the Options textarea.
-    next.customFilters = partial.customFilters.slice(0, 100_000);
+    // Bounded so an imported file cannot wedge the parser or the Options textarea. Cut at a whole
+    // line, as every writer does: a rule sliced in half would become a different rule.
+    next.customFilters = capFilterText(partial.customFilters).text;
   }
   if (partial.sponsorBlockCategories && typeof partial.sponsorBlockCategories === 'object') {
     next.sponsorBlockCategories = {};

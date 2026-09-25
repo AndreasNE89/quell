@@ -351,6 +351,27 @@ test('$generichide with a pattern is a cosmetic exception, not network allow', (
   assert.equal(dnr.cosmeticException, 'generichide');
 });
 
+test('network types listed next to ghide/ehide are allowed too, as in uBO', () => {
+  // `@@*$script,xhr,ghide,domain=uptoplay.net`: generic hiding off there, and its scripts and XHRs
+  // allowed. Before, only the cosmetic half survived and the site's own scripts stayed blocked.
+  const both = convert('@@*$script,xhr,ghide,domain=uptoplay.net').dnr;
+  assert.equal(both.cosmeticException, 'generichide');
+  assert.equal(both.rule.action.type, 'allow');
+  assert.deepEqual(both.rule.condition.resourceTypes, ['script', 'xmlhttprequest']);
+  assert.deepEqual(both.rule.condition.initiatorDomains, ['uptoplay.net']);
+  const firstParty = convert('@@||im9.eu^$image,ghide,1p').dnr;
+  assert.equal(firstParty.cosmeticException, 'generichide');
+  assert.deepEqual(firstParty.rule.condition.resourceTypes, ['image']);
+  assert.equal(firstParty.rule.condition.domainType, 'firstParty');
+  // With no network type listed there is nothing to allow: an allow would cover every request.
+  for (const line of ['@@||example.com^$generichide', '@@||example.com^$~script,ghide', '@@*$ghide,domain=web.de']) {
+    const { dnr } = convert(line);
+    assert.equal(dnr.cosmeticException, 'generichide', line);
+    assert.equal(dnr.rule, undefined, line);
+    assert.equal(dnr.rules, undefined, line);
+  }
+});
+
 test('should map uBO $ghide/$ehide/$shide aliases to cosmetic exceptions', () => {
   // ubo-filters ships ~859 $ghide rules; treating them as unsupported dropped all of them.
   assert.equal(convert('@@||bild.de^$ghide').dnr.cosmeticException, 'generichide');
@@ -369,7 +390,7 @@ test('should extract entity hosts from generichide patterns for runtime matching
   // EasyList: @@||www.google.*/search?$generichide is scoped to search pages. Keyed by host it
   // would turn generic hiding off on every google.* property, so it yields no host at all.
   assert.deepEqual(hostsFromPattern('||www.google.*/search?', false), []);
-  assert.deepEqual(hostsFromPattern('||www.pahe.*^', false), ['pahe.*']);
+  assert.deepEqual(hostsFromPattern('||www.pahe.*^', false), ['www.pahe.*']);
   assert.deepEqual(hostsFromPattern('||pahe.*^', false), ['pahe.*']);
   assert.deepEqual(hostsFromPattern('||userupload.*^', false), ['userupload.*']);
   assert.deepEqual(hostsFromPattern('||example.com^', false), ['example.com']);

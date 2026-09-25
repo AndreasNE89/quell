@@ -130,12 +130,15 @@ test('keys: a site and all its subdomains share a bucket; what a pattern cannot 
     return `${c.kind}:${c.key}`;
   };
   assert.equal(kind('Example.COM'), 'concrete:example.com');
-  assert.equal(kind('www.example.com'), 'concrete:example.com');
+  // A filter's `www.` is kept: www.example.com and below, as matchScriptlets has it.
+  assert.equal(kind('www.example.com'), 'concrete:www.example.com');
+  assert.equal(bucketOf('www.example.com', ps), bucketOf('example.com', ps));
   assert.equal(kind('1.2.3.4'), 'concrete:1.2.3.4');
   assert.equal(kind('yts.*'), 'broad:yts.*');
   assert.equal(kind('co.uk'), 'broad:co.uk');
-  // hostMatchesDomain can never match these, so they would only cost bytes.
-  assert.equal(kind('vr.pornhat.*'), 'dead:vr.pornhat.*');
+  // A multi-label entity is live (EasyList's `www.google.*`, `read.amazon.*`).
+  assert.equal(kind('vr.pornhat.*'), 'broad:vr.pornhat.*');
+  // filterDomainMatches can never match these (the parser strips `>>` and punycodes names).
   assert.equal(kind('noxx.to>>'), 'dead:noxx.to>>');
   assert.equal(kind('пример.рф'), 'dead:пример.рф');
 });
@@ -414,7 +417,7 @@ function sampleHosts(byList) {
     pick.add(`cdn.${keys[i]}`);
   }
   for (const r of all) {
-    for (const d of r.domains.exclude) if (!d.endsWith('.*')) pick.add(host.normalizeHostname(d));
+    for (const d of r.domains.exclude) if (!d.endsWith('.*')) pick.add(d);
   }
   for (const b of Object.values(byList)) {
     for (const r of b.exceptions) for (const d of r.domains.include) if (!d.endsWith('.*')) pick.add(d);

@@ -11,6 +11,9 @@
   "options_add_a_site": {
     "message": "新增網站"
   },
+  "options_attributions": {
+    "message": "致謝與授權"
+  },
   "options_auto_skip_sponsors_intros_outros_self_promo": {
     "message": "自動略過贊助片段。可在下方選擇更多要略過的類別。"
   },
@@ -35,8 +38,14 @@
   "options_checking_license": {
     "message": "正在檢查授權…"
   },
+  "options_checkout_unavailable": {
+    "message": "無法開啟結帳頁面。請檢查網路連線後再試一次。"
+  },
   "options_clear": {
     "message": "清除"
+  },
+  "options_custom_changed_elsewhere": {
+    "message": "你的過濾規則已在其他地方被修改（例如透過元素挑選器）。儲存時會同時保留兩邊的變更。"
   },
   "options_custom_filters_intro": {
     "message": "你自己的元素隱藏規則，每行一條。彈出視窗中的元素挑選器會寫入這裡。格式：example.com##.selector — 先是一個主機名稱，接著 ##，再接 CSS 選擇器。"
@@ -59,6 +68,12 @@
       }
     }
   },
+  "options_custom_load_failed": {
+    "message": "無法載入你的過濾規則。請重新載入此頁面再試一次。"
+  },
+  "options_custom_merged": {
+    "message": "這段期間在其他地方所做的變更已一併合併。"
+  },
   "options_custom_rules_active_one": {
     "message": "$COUNT$ 條規則生效中",
     "placeholders": {
@@ -76,6 +91,27 @@
         "example": "12"
       }
     }
+  },
+  "options_custom_rules_paused_one": {
+    "message": "已儲存 $COUNT$ 條規則 — StampStack 暫停期間不會生效",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "options_custom_rules_paused_other": {
+    "message": "已儲存 $COUNT$ 條規則 — StampStack 暫停期間不會生效",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "12"
+      }
+    }
+  },
+  "options_custom_save_failed": {
+    "message": "無法儲存你的過濾規則。你輸入的內容還在這裡，請再試一次。"
   },
   "options_custom_saved_one": {
     "message": "已儲存 — $COUNT$ 條規則生效中。",
@@ -95,8 +131,32 @@
       }
     }
   },
+  "options_custom_saved_paused_one": {
+    "message": "已儲存 — $COUNT$ 條規則。StampStack 暫停期間不會生效。",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "options_custom_saved_paused_other": {
+    "message": "已儲存 — $COUNT$ 條規則。StampStack 暫停期間不會生效。",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "12"
+      }
+    }
+  },
+  "options_custom_truncated": {
+    "message": "內容太長，最後幾行沒有儲存。"
+  },
   "options_dark_mode_paid": {
     "message": "深色模式（付費）"
+  },
+  "options_dark_override_host": {
+    "message": "深色模式覆寫設定的主機名稱"
   },
   "options_dev_unlock_applied": {
     "message": "已套用開發解鎖（僅限未封裝版本）。"
@@ -189,6 +249,9 @@
   "options_import_failed": {
     "message": "匯入失敗。"
   },
+  "options_import_filters_truncated": {
+    "message": "你的過濾規則超過 StampStack 的長度上限，最後幾行沒有匯入。"
+  },
   "options_import_settings": {
     "message": "匯入設定…"
   },
@@ -225,8 +288,14 @@
       }
     }
   },
+  "options_license_refresh_failed": {
+    "message": "無法重新整理授權。請再試一次。"
+  },
   "options_license_refresh_hint": {
     "message": "連上網路時會從 ExtensionPay 更新授權。離線寬限期最長 14 天。"
+  },
+  "options_license_refresh_unreachable": {
+    "message": "無法連線到 ExtensionPay，這裡顯示的是已儲存的授權。請在連上網路後再試一次。"
   },
   "options_license_unavailable_hint": {
     "message": "此版本無法購買 — 請從 Chrome 線上應用程式商店更新 StampStack。"
@@ -300,6 +369,15 @@
       }
     }
   },
+  "options_list_paused": {
+    "message": "$COUNT$ 條網路規則 · 已暫停 — StampStack 恢復後會重新載入",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "54,522"
+      }
+    }
+  },
   "options_list_rule_count": {
     "message": "$COUNT$ 條網路規則 · 元素隱藏跟隨此開關",
     "placeholders": {
@@ -308,6 +386,18 @@
         "example": "120,377"
       }
     }
+  },
+  "options_list_toggle_failed": {
+    "message": "無法變更「$TITLE$」。請再試一次。",
+    "placeholders": {
+      "title": {
+        "content": "$1",
+        "example": "EasyList"
+      }
+    }
+  },
+  "options_load_failed": {
+    "message": "無法載入。請重新載入頁面再試一次。"
   },
   "options_loading": {
     "message": "載入中…"
@@ -336,8 +426,14 @@
   "options_paid_sponsored_feed_tiles_and_in_player": {
     "message": "付費／「贊助」動態方塊與播放器內的廣告介面"
   },
+  "options_paused_banner": {
+    "message": "StampStack 已全部暫停，目前不會攔截任何內容。可從工具列按鈕重新開啟。"
+  },
   "options_per_site_overrides": {
     "message": "各網站覆寫設定"
+  },
+  "options_privacy": {
+    "message": "隱私權"
   },
   "options_refresh_license": {
     "message": "重新整理授權"
@@ -348,8 +444,20 @@
   "options_remove": {
     "message": "移除"
   },
+  "options_remove_site_rule": {
+    "message": "移除 $HOST$ 的規則",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
+  },
   "options_requests_blocked": {
     "message": "已攔截的請求"
+  },
+  "options_restore_unavailable": {
+    "message": "無法開啟還原購買頁面。請檢查網路連線後再試一次。"
   },
   "options_rule": {
     "message": "規則"
@@ -360,8 +468,44 @@
   "options_save_filters": {
     "message": "儲存過濾規則"
   },
+  "options_setting_not_saved": {
+    "message": "此變更未儲存。請再試一次。"
+  },
   "options_settings_imported": {
     "message": "設定已匯入。"
+  },
+  "options_settings_imported_ignored": {
+    "message": "設定已匯入。以下項目因檔案中的值類型不正確而維持不變：$FIELDS$。",
+    "placeholders": {
+      "fields": {
+        "content": "$1",
+        "example": "allowlist, siteFixes"
+      }
+    }
+  },
+  "options_site_rule_add_failed": {
+    "message": "「$HOST$」沒有儲存。請再試一次。",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
+  },
+  "options_site_rule_covered_by": {
+    "message": "也受 $HOST$ 的規則涵蓋",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
+  },
+  "options_site_rule_exact_scope": {
+    "message": "僅限此位址"
+  },
+  "options_site_rule_host": {
+    "message": "網站主機名稱"
   },
   "options_site_rule_invalid": {
     "message": "無法為「$HOST$」新增網站規則。請輸入網站名稱（例如 example.com）或完整的 IP 位址（例如 192.168.1.1）。",
@@ -374,6 +518,15 @@
   },
   "options_site_rule_not_applied": {
     "message": "Chrome 未接受此變更，「$HOST$」仍在攔截。沒有儲存任何內容，請再試一次。",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
+  },
+  "options_site_rule_remove_failed": {
+    "message": "無法移除「$HOST$」的規則。請再試一次。",
     "placeholders": {
       "host": {
         "content": "$1",
@@ -474,8 +627,44 @@
   "options_youtube_intro": {
     "message": "YouTube 的額外控制項。隱藏推廣影片會移除付費的動態方塊，並清除播放器的廣告資料。攔截 Shorts 會隱藏 Shorts 區塊並離開 /shorts/ 頁面。SponsorBlock 會使用 sponsor.ajay.app 的社群資料庫略過影片中的贊助片段。"
   },
-  "popup_alt": {
-    "message": "Alt"
+  "picker_click_to_close": {
+    "message": "點擊或按 Esc 關閉。"
+  },
+  "picker_hiding_off": {
+    "message": "此網站已關閉元素隱藏（已暫停、已加入白名單或處於修復步驟），選取的元素不會被隱藏。"
+  },
+  "picker_hint_cancel": {
+    "message": "取消"
+  },
+  "picker_hint_click": {
+    "message": "點擊即可隱藏"
+  },
+  "picker_hint_widen": {
+    "message": "擴大或縮小範圍"
+  },
+  "picker_host_refused": {
+    "message": "無法為此位址儲存過濾規則。"
+  },
+  "picker_match_many": {
+    "message": "$COUNT$ 個相符",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "3"
+      }
+    }
+  },
+  "picker_match_one": {
+    "message": "1 個相符"
+  },
+  "picker_refuse_structural": {
+    "message": "這裡沒有可以可靠定位的內容 — 按 ↑ 選取外面的方框。"
+  },
+  "picker_save_failed": {
+    "message": "未儲存："
+  },
+  "picker_saving": {
+    "message": "正在儲存…"
   },
   "popup_block_on_this_site": {
     "message": "在此網站啟用攔截"
@@ -503,6 +692,12 @@
         "example": "example.com"
       }
     }
+  },
+  "popup_blocking_on_fix_cosmetics": {
+    "message": "攔截中 · 此處已關閉元素隱藏"
+  },
+  "popup_blocking_on_fix_injection": {
+    "message": "攔截中 · 此處已關閉元素隱藏與腳本修補"
   },
   "popup_blocking_on_this_site": {
     "message": "此網站攔截中"
@@ -563,7 +758,7 @@
     "message": "無法結帳。請試試還原購買，或開啟選項。"
   },
   "popup_checkout_unavailable_unpacked": {
-    "message": "無法結帳 — 請用開發解鎖，或在選項中設定 ExtensionPay id。"
+    "message": "無法結帳 — 請用開發解鎖，或在 extpay-config.local.ts 中設定 ExtensionPay id 後重新建置。"
   },
   "popup_copies_a_draft_when_possible_and_opens": {
     "message": "會盡量複製一份草稿，並在有可用的郵件程式時開啟它。內容包含網站名稱與你的 StampStack 設定 — 不含頁面網址或內容。"
@@ -610,6 +805,15 @@
   "popup_dark_summary_unavailable": {
     "message": "此處無法使用"
   },
+  "popup_dark_upsell": {
+    "message": "用聰明的霧面深色主題讓任何網頁變暗。一次性 $PRICE$ 解鎖 — 與廣告攔截分開。重新安裝了嗎？請用收據上的電子郵件「還原購買」。",
+    "placeholders": {
+      "price": {
+        "content": "$1",
+        "example": "$2"
+      }
+    }
+  },
   "popup_details": {
     "message": "詳細資料"
   },
@@ -625,6 +829,21 @@
   "popup_enable_on_all_sites": {
     "message": "在所有網站啟用"
   },
+  "popup_error_network": {
+    "message": "無法連線到付款服務。請檢查網路連線後再試一次。"
+  },
+  "popup_error_not_export": {
+    "message": "該檔案不是 StampStack 的設定匯出檔。"
+  },
+  "popup_error_not_json": {
+    "message": "該檔案不是有效的 JSON。"
+  },
+  "popup_error_provider": {
+    "message": "付款服務傳回錯誤。請稍後再試。"
+  },
+  "popup_error_unconfigured": {
+    "message": "此版本無法購買。"
+  },
   "popup_everything_is_on_for_this_site": {
     "message": "此網站的功能全部開啟。"
   },
@@ -634,8 +853,17 @@
   "popup_hide": {
     "message": "隱藏"
   },
+  "popup_hide_an_element": {
+    "message": "隱藏元素"
+  },
   "popup_hide_promoted_videos": {
     "message": "隱藏推廣影片"
+  },
+  "popup_incognito_note": {
+    "message": "在此無痕視窗中設定的開關會被儲存，並同樣套用到一般視窗。"
+  },
+  "popup_load_failed": {
+    "message": "無法連線到 StampStack。請關閉此面板後重新開啟。"
   },
   "popup_not_available_on_this_page": {
     "message": "此頁面無法使用"
@@ -646,6 +874,9 @@
   "popup_pause_everywhere": {
     "message": "全部暫停"
   },
+  "popup_pause_failed": {
+    "message": "無法變更暫停狀態。請再試一次。"
+  },
   "popup_pause_stampstack_everywhere": {
     "message": "在所有網站暫停 StampStack"
   },
@@ -654,6 +885,18 @@
   },
   "popup_paused_no_rules_active": {
     "message": "已暫停 — 沒有規則生效"
+  },
+  "popup_pick_unavailable_allowlisted": {
+    "message": "此網站已關閉攔截，被隱藏的元素會再次出現。"
+  },
+  "popup_pick_unavailable_fix": {
+    "message": "此處已關閉元素隱藏，選取的元素在下次載入時會再次出現。復原修復步驟後才能使用挑選器。"
+  },
+  "popup_pick_unavailable_host": {
+    "message": "元素挑選器無法為此位址儲存規則。"
+  },
+  "popup_pick_unavailable_paused": {
+    "message": "StampStack 已暫停，被隱藏的元素會再次出現。"
   },
   "popup_pick_which_segment_types_to_skip_in": {
     "message": "可在設定中選擇要略過的片段類型。"
@@ -667,6 +910,9 @@
   "popup_reload_the_page_to_apply_this": {
     "message": "重新載入頁面才會套用。"
   },
+  "popup_repair_failed": {
+    "message": "操作沒有完成。請再試一次。"
+  },
   "popup_repair_hint_allowlist": {
     "message": "最後手段 — 此網站的廣告與追蹤器會回來。"
   },
@@ -675,6 +921,15 @@
   },
   "popup_repair_hint_injection": {
     "message": "可修復被腳本修補弄壞的播放器與登入。"
+  },
+  "popup_repair_inherited": {
+    "message": "此設定來自 $HOST$ 的規則。",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
   },
   "popup_repair_next_allowlist": {
     "message": "關閉此網站的攔截"
@@ -685,6 +940,9 @@
   "popup_repair_next_injection": {
     "message": "同時停止在此執行腳本修補"
   },
+  "popup_repair_no_effect": {
+    "message": "此網站沒有任何變化。請再試一次，或在下方告訴開發者。"
+  },
   "popup_repair_state_allowlisted": {
     "message": "此網站已關閉攔截 — 這裡不會過濾任何東西。"
   },
@@ -692,10 +950,22 @@
     "message": "此處已關閉元素隱藏。廣告攔截與腳本修補仍在運作。"
   },
   "popup_repair_state_injection": {
-    "message": "此處已關閉元素隱藏與腳本修補。廣告仍會被攔截。"
+    "message": "此處已關閉元素隱藏與腳本修補。網路攔截仍在運作。"
+  },
+  "popup_repair_state_injection_youtube": {
+    "message": "此處已關閉元素隱藏與腳本修補，YouTube 影片廣告防護也一併關閉。其他網路攔截仍在運作。"
+  },
+  "popup_repair_state_unsupported_host": {
+    "message": "無法為 $HOST$ 儲存修復步驟。你仍然可以告訴開發者。",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
   },
   "popup_report_ad_slot_one": {
-    "message": "已隱藏 $COUNT$ 個廣告版位。",
+    "message": "此網站的專屬規則已隱藏 $COUNT$ 個廣告版位。",
     "placeholders": {
       "count": {
         "content": "$1",
@@ -704,7 +974,7 @@
     }
   },
   "popup_report_ad_slots_many": {
-    "message": "已隱藏 $COUNT$ 個廣告版位。",
+    "message": "此網站的專屬規則已隱藏 $COUNT$ 個廣告版位。",
     "placeholders": {
       "count": {
         "content": "$1",
@@ -744,6 +1014,9 @@
   },
   "popup_report_state_blocked": {
     "message": "已攔截"
+  },
+  "popup_report_state_partial": {
+    "message": "部分攔截"
   },
   "popup_report_state_unlisted": {
     "message": "不在我們的清單中"
@@ -801,6 +1074,9 @@
   "popup_restore_unavailable": {
     "message": "無法還原。請開啟選項 → 還原購買。"
   },
+  "popup_restricted_page": {
+    "message": "Chrome 不允許擴充功能在 Chrome 線上應用程式商店頁面上執行。"
+  },
   "popup_rules_active": {
     "message": "$COUNT$ 條攔截規則生效中",
     "placeholders": {
@@ -819,20 +1095,50 @@
       }
     }
   },
+  "popup_setting_not_saved": {
+    "message": "此變更未儲存。請再試一次。"
+  },
   "popup_settings": {
     "message": "設定"
   },
-  "popup_shift": {
-    "message": "Shift"
+  "popup_shortcut_tip": {
+    "message": "提示：按 $SHORTCUT$ 可直接啟動元素挑選器，不必開啟此面板。",
+    "placeholders": {
+      "shortcut": {
+        "content": "$1",
+        "example": "Alt+Shift+X"
+      }
+    }
+  },
+  "popup_site_broken": {
+    "message": "網站有問題？"
   },
   "popup_site_toggle_failed": {
-    "message": "無法變更此網站 — 請看設定"
+    "message": "無法變更此網站。請再試一次。"
   },
   "popup_site_toggle_not_applied_off": {
     "message": "Chrome 未接受此變更 — 仍在攔截"
   },
   "popup_site_toggle_not_applied_on": {
     "message": "Chrome 未接受此變更 — 攔截仍為關閉"
+  },
+  "popup_site_toggle_unchanged_off": {
+    "message": "沒有變化 — 此處的攔截仍為關閉。"
+  },
+  "popup_site_toggle_unchanged_on": {
+    "message": "沒有變化 — 此處仍在攔截。"
+  },
+  "popup_site_unsupported_host": {
+    "message": "StampStack 無法為 $HOST$ 儲存網站設定。如需在此停止攔截，請使用「全部暫停」。",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
+  },
+  "popup_site_unsupported_ipv6": {
+    "message": "網站設定不適用於 IPv6 位址。如需在此停止攔截，請使用「全部暫停」。"
   },
   "popup_skip_sponsor_segments": {
     "message": "略過贊助片段"
@@ -852,11 +1158,26 @@
   "popup_this_page": {
     "message": "此頁面"
   },
+  "popup_undo_for_host": {
+    "message": "復原 — 為整個 $HOST$ 重新開啟過濾功能",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
+  },
   "popup_undo_turn_filtering_back_on": {
     "message": "復原 — 重新開啟過濾功能"
   },
   "popup_youtube": {
     "message": "YouTube"
+  },
+  "popup_youtube_off_here_note": {
+    "message": "此網站已關閉攔截，這些功能在此都不會執行。"
+  },
+  "popup_youtube_summary_off_here": {
+    "message": "此網站已關閉"
   },
   "popup_youtube_summary_on": {
     "message": "$COUNT$/3 已開啟",
@@ -866,5 +1187,8 @@
         "example": "2"
       }
     }
+  },
+  "ui_lang": {
+    "message": "zh-TW"
   }
 }

@@ -13,7 +13,8 @@
 // Anything we can't represent is returned with `unsupported` populated so the compiler
 // can count and report coverage instead of silently dropping rules.
 
-import { isProceduralCosmeticBody, normalizeAbpSelector } from './procedural-ops.mjs';
+import { domainToASCII } from 'node:url';
+import { analyzeCosmeticBody, normalizeAbpSelector } from './procedural-ops.mjs';
 
 /** Resource-type keywords (EasyList) → DNR resourceType. `null` = recognized but no DNR equivalent. */
 const RESOURCE_TYPE_MAP = {
@@ -70,18 +71,96 @@ function findCosmeticSeparator(line) {
   return null;
 }
 
-/** Parse the domain-restriction prefix of a cosmetic rule, e.g. `a.com,~b.com`. */
+/**
+ * Split a cosmetic domain list on commas. A uBO regex hostname (`/…/`) may itself hold commas
+ * (`/(\d{0,1})?tamilprint(\d{1,2})?\.[a-z]{3,7}/`), so it runs to a `/` followed by a comma or
+ * the end.
+ */
+function splitDomainList(prefix) {
+  const parts = [];
+  let i = 0;
+  while (i < prefix.length) {
+    const start = prefix[i] === '~' ? i + 1 : i;
+    if (prefix[start] === '/') {
+      let end = -1;
+      for (let k = start + 1; k < prefix.length; k++) {
+        if (prefix[k] === '\\') k++;
+        else if (prefix[k] === '/' && (k + 1 === prefix.length || prefix[k + 1] === ',')) {
+          end = k;
+          break;
+        }
+      }
+      if (end !== -1) {
+        parts.push(prefix.slice(i, end + 1));
+        i = end + 2;
+        continue;
+      }
+    }
+    const comma = prefix.indexOf(',', i);
+    const stop = comma === -1 ? prefix.length : comma;
+    parts.push(prefix.slice(i, stop));
+    i = stop + 1;
+  }
+  return parts;
+}
+
+/**
+ * One entry of a cosmetic domain list in the form the runtime matches (src/shared/hostname.ts),
+ * or null when it cannot be made to match anything:
+ *   - `/regex/` is kept verbatim: lowercasing turned `\D` into `\d`.
+ *   - `host>>` (uBO: the host and the frames it embeds) is its host. The frames it embeds from
+ *     other hosts are not covered: the runtime matches a frame by its own hostname.
+ *   - an internationalized name becomes punycode, which is what location.hostname reports.
+ * `*` (every site) is returned as is; the caller turns it into "generic".
+ */
+function normalizeCosmeticDomain(raw) {
+  let d = raw.trim();
+  if (/^\/.+\/$/.test(d)) {
+    try {
+      new RegExp(d.slice(1, -1));
+    } catch {
+      return null;
+    }
+    return d;
+  }
+  if (d.endsWith('>>')) d = d.slice(0, -2);
+  d = d.toLowerCase();
+  if (!d) return null;
+  if (/[^\x00-\x7f]/.test(d)) {
+    const entity = d.endsWith('.*');
+    const ascii = domainToASCII(entity ? d.slice(0, -2) : d);
+    if (!ascii) return null;
+    d = entity ? `${ascii}.*` : ascii;
+  }
+  return d;
+}
+
+/**
+ * Parse the domain-restriction prefix of a cosmetic rule, e.g. `a.com,~b.com`. An include that
+ * cannot be read is left out (the rule still covers its other hosts). `invalid` is set when the
+ * rule itself must go: an unreadable exclusion would widen it, and a rule whose every include is
+ * unreadable would otherwise become generic.
+ */
 function parseCosmeticDomains(prefix) {
   const include = [];
   const exclude = [];
-  if (!prefix) return { include, exclude };
-  for (const part of prefix.split(',')) {
-    const d = part.trim();
-    if (!d) continue;
-    if (d.startsWith('~')) exclude.push(d.slice(1).toLowerCase());
-    else include.push(d.toLowerCase());
+  let invalid = false;
+  let droppedInclude = false;
+  if (!prefix) return { include, exclude, invalid };
+  for (const part of splitDomainList(prefix)) {
+    const t = part.trim();
+    if (!t) continue;
+    const neg = t.startsWith('~');
+    const d = normalizeCosmeticDomain(neg ? t.slice(1) : t);
+    if (d !== null) (neg ? exclude : include).push(d);
+    else if (neg) invalid = true;
+    else droppedInclude = true;
   }
-  return { include, exclude };
+  if (droppedInclude && !include.length) invalid = true;
+  // uBO: `*##sel` and `*,~a.com##sel` are generic filters, not rules for a host named `*`.
+  if (include.includes('*')) include.length = 0;
+  if (exclude.includes('*')) invalid = true;
+  return { include, exclude, invalid };
 }
 
 /** Parse a uBO scriptlet body: `+js(name, arg1, arg2)` → {name, args}. */
@@ -170,7 +249,8 @@ export function splitArgs(s) {
 function parseCosmetic(line, sep) {
   const domainPrefix = line.slice(0, sep.idx);
   let body = line.slice(sep.idx + sep.tok.length);
-  const domains = parseCosmeticDomains(domainPrefix);
+  const { invalid, ...domains } = parseCosmeticDomains(domainPrefix);
+  if (invalid) return { type: 'cosmetic', kind: 'ignored', raw: line, unsupported: 'domain-invalid' };
 
   // Scriptlet injection: uBO `##+js(...)` or `#@#+js(...)`, or AdGuard `#%#//scriptlet(...)`.
   if (sep.kind === 'adguard-scriptlet' || body.startsWith('+js(')) {
@@ -197,10 +277,15 @@ function parseCosmetic(line, sep) {
     };
   }
 
-  // CSS-injection / snippet rules (`#$#`) that aren't procedural styles are uBO scriptlet
-  // snippets or ABP snippets — out of scope for the prototype's cosmetic CSS engine.
-  if (sep.kind === 'style' && !sep.procedural) {
-    return { type: 'cosmetic', kind: 'ignored', raw: line };
+  // `#$#` / `#$?#` / `#@$#` are AdGuard CSS injection (`sel { decls }`) or ABP snippets. uBO's
+  // own way to style is `##sel:style(decls)`, handled below; these are counted, not shipped.
+  if (sep.kind === 'style' || sep.style) {
+    return {
+      type: 'cosmetic',
+      kind: 'ignored',
+      raw: line,
+      unsupported: body.includes('{') ? 'css-injection' : 'abp-snippet',
+    };
   }
 
   // uBO HTML filters (`##^script:has-text(…)`, `##^responseheader(…)`) edit the response body
@@ -209,23 +294,61 @@ function parseCosmetic(line, sep) {
   if (body.startsWith('^')) {
     return { type: 'cosmetic', kind: 'ignored', raw: line, unsupported: 'html-filter' };
   }
+  // `##sel {decls}` (EasyList carries dozens) is CSS injection in AdGuard's shape, not a selector.
+  // uBO's form is `:style()`; a brace can never reach a stylesheet as part of a selector.
+  if (/[{}]/.test(body)) {
+    return { type: 'cosmetic', kind: 'ignored', raw: line, unsupported: 'css-injection' };
+  }
 
   const abp = normalizeAbpSelector(body);
   if (abp.unsupported) {
     return { type: 'cosmetic', kind: 'ignored', raw: line, unsupported: abp.unsupported };
   }
-  body = abp.selector;
+  body = abp.selector.trim();
+  const analysis = analyzeCosmeticBody(body);
 
-  const isException = sep.kind === 'unhide';
-  const procedural = !!sep.procedural || isProceduralCosmeticBody(body);
-
+  // An exception is matched against its rule by the whole body text (`sel:style(decls)`
+  // included), so it is kept as written; one for a rule that never ships is inert.
+  if (sep.kind === 'unhide') {
+    return {
+      type: 'cosmetic',
+      kind: 'unhide',
+      raw: line,
+      domains,
+      selector: body,
+      isException: true,
+      procedural: analysis.kind === 'procedural' || (analysis.kind === 'action' && analysis.procedural),
+    };
+  }
+  if (analysis.kind === 'unsupported') {
+    return { type: 'cosmetic', kind: 'ignored', raw: line, unsupported: analysis.reason };
+  }
+  if (analysis.kind === 'action') {
+    // `selector` stays the whole body so exceptions and dedup key on what the list wrote;
+    // `target` is what the action applies to.
+    return {
+      type: 'cosmetic',
+      kind: 'action',
+      raw: line,
+      domains,
+      selector: body,
+      target: analysis.selector,
+      procedural: analysis.procedural,
+      action: analysis.action,
+      arg: analysis.arg,
+      isException: false,
+    };
+  }
+  // `#?#` only says the body may be procedural: a body that is plain CSS (native `:has()`)
+  // goes into the stylesheet like any hide.
+  const procedural = analysis.kind === 'procedural';
   return {
     type: 'cosmetic',
-    kind: isException ? 'unhide' : procedural ? 'procedural' : 'hide',
+    kind: procedural ? 'procedural' : 'hide',
     raw: line,
     domains,
-    selector: body.trim(),
-    isException,
+    selector: body,
+    isException: false,
     procedural,
   };
 }
@@ -558,7 +681,8 @@ export function cosmeticExceptionScope(pattern, isRegex) {
     host = host.slice(0, -1);
     entity = true;
   }
-  if (entity && host.startsWith('www.')) host = host.slice(4);
+  // A `www.` stays: `||www.google.*/search?` is Google Search, not every google.* property, and
+  // the runtime matches multi-label entities (hostname.ts entityDomainKeys).
 
   const labels = host.split('.');
   if (!host || labels.some((l) => !/^[a-z0-9_-]+$/.test(l))) return none('partial-host');

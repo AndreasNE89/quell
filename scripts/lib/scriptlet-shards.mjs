@@ -75,14 +75,17 @@ export function bucketOf(host, isPublicSuffixHost, buckets = SHARD_BUCKETS) {
 /**
  * Where one include key of a rule goes.
  * `concrete`: a match pattern can name it; `broad`: an entity or public suffix, checked at
- * runtime on every page; `dead`: hostMatchesDomain can never match it (`>>` forms, non-ASCII
- * names, IPv6, dotted entities), so shipping it would only cost bytes.
+ * runtime on every page; `dead`: filterDomainMatches can never match it (`>>` forms, non-ASCII
+ * names, IPv6, `/regex/`), so shipping it would only cost bytes.
+ *
+ * Keys are the filter's domain as written: `www.yahoo.com` is www.yahoo.com and below, not the
+ * whole site (hostname.ts filterDomainMatches), and `read.amazon.*` is a live entity.
  */
 export function classifyKey(raw, host) {
-  const key = host.normalizeHostname(String(raw));
+  const key = String(raw).trim().toLowerCase();
   if (key.endsWith('.*')) {
-    const label = key.slice(0, -2);
-    if (!label || label.includes('.') || label.includes('*')) return { kind: 'dead', key };
+    const labels = key.slice(0, -2).split('.');
+    if (labels.some((l) => !/^[a-z0-9_-]+$/.test(l))) return { kind: 'dead', key };
     return { kind: 'broad', key, entity: true };
   }
   if (!host.isValidMatchPatternHost(key)) return { kind: 'dead', key };

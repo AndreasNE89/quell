@@ -1,4 +1,7 @@
+/* Without color-scheme the UA kept drawing light scrollbars and form controls on the dark
+   theme. */
 :root {
+  color-scheme: light dark;
   --bg: #ffffff;
   --fg: #1a1d1b;
   --muted: #6b7280;
@@ -369,6 +372,10 @@ body {
 .report-item.blocked .report-state {
   color: var(--accent);
 }
+/* Rules for some of its paths only: neither "blocked" nor "not in our lists". */
+.report-item.partial .report-state {
+  color: var(--fg);
+}
 .report-foot {
   margin: 8px 0 0;
   font-size: 11px;
@@ -405,7 +412,8 @@ body {
   width: 100%;
   padding: 8px 10px;
   background: var(--accent);
-  color: #fff;
+  /* Not #fff: on the dark theme's lighter accent that measured 3.27:1. */
+  color: var(--accent-fg);
   border: 0;
   border-radius: 8px;
   font: inherit;
@@ -422,7 +430,9 @@ body {
   font-size: 11px;
   color: var(--muted);
 }
-.repair-reset {
+/* Two classes: .link-btn comes later with `font: inherit`, which reset this to 13px and made
+   Undo the loudest line in the panel. */
+.repair-reset.link-btn {
   display: block;
   margin-top: 8px;
   padding: 0;
@@ -534,6 +544,21 @@ body.allowlisted .site {
 }
 .pick-hint[hidden] {
   display: none;
+}
+
+/* A failed or refused action. Notes that only describe the current state stay muted. */
+.pick-hint.warn,
+.repair-hint.warn,
+.group-foot.warn,
+.dark-hint.warn,
+.pause-note.warn {
+  color: var(--danger);
+  font-weight: 600;
+}
+.pause-note {
+  margin: 0 2px 6px;
+  font-size: 11px;
+  color: var(--muted);
 }
 
 /* Primary actions, side by side. Equal weight because neither is the obvious default —
@@ -675,4 +700,10 @@ body.allowlisted .site {
 .site-note.warn {
   color: var(--danger);
   font-weight: 600;
+}
+/* Sits under the switch's own note, so it does not repeat the divider. */
+.incognito-note {
+  margin-top: 4px;
+  padding-top: 0;
+  border-top: 0;
 }

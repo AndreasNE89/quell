@@ -42,12 +42,28 @@ export function looksGenerated(token: string): boolean {
   return false;
 }
 
+/** `\hex ` escape for a character CSS does not allow escaped with a bare backslash. */
+function hexEscape(c: string): string {
+  return `\\${c.codePointAt(0)!.toString(16)} `;
+}
+
 /** CSS-escape an identifier for use in a selector. */
 function escapeIdent(value: string): string {
   // CSS.escape exists in every browser we target; the manual path is for the test DOM.
   const g = globalThis as { CSS?: { escape?: (s: string) => string } };
   if (typeof g.CSS?.escape === 'function') return g.CSS.escape(value);
-  return value.replace(/[^a-zA-Z0-9_-]/g, (c) => `\\${c}`);
+  return value.replace(/[^a-zA-Z0-9_\u00a0-\uffff-]/g, (c) =>
+    /[\x00-\x1f\x7f]/.test(c) ? hexEscape(c) : `\\${c}`,
+  ).replace(/^(-?)(\d)/, (_m, dash: string, d: string) => `${dash}${hexEscape(d)}`);
+}
+
+/**
+ * A double-quoted CSS string. A backslash or a newline copied from an attribute verbatim ends
+ * the string early or escapes the closing quote, and the selector then swallows the rest of the
+ * stylesheet it lands in.
+ */
+export function cssString(value: string): string {
+  return `"${value.replace(/[\\"]/g, (c) => `\\${c}`).replace(/[\x00-\x1f\x7f]/g, hexEscape)}"`;
 }
 
 interface PickTarget {
@@ -67,27 +83,75 @@ export function stableClasses(classList: readonly string[] | undefined, max = 2)
   return (classList ?? []).filter((c) => c && !looksGenerated(c)).slice(0, max);
 }
 
-/** One selector step for a single element: tag, plus whatever stable hooks it has. */
-export function stepFor(el: PickTarget): string {
+/**
+ * One selector step for a single element: tag, plus whatever stable hooks it has. `positional`
+ * also pins the element among same-tag siblings when it has hooks, for picks that must narrow
+ * down to one element of a repeated class.
+ */
+export function stepFor(el: PickTarget, positional = false, generated = false): string {
   const tag = el.tagName.toLowerCase();
-  if (el.id && !looksGenerated(el.id)) return `#${escapeIdent(el.id)}`;
+  if (el.id && (generated || !looksGenerated(el.id))) return `#${escapeIdent(el.id)}`;
+  const nth =
+    el.countOfType != null && el.countOfType > 1 && el.indexOfType != null
+      ? `:nth-of-type(${el.indexOfType + 1})`
+      : '';
 
-  const classes = stableClasses(el.classList);
-  if (classes.length) return tag + classes.map((c) => `.${escapeIdent(c)}`).join('');
+  const classes = generated
+    ? (el.classList ?? []).filter(Boolean).slice(0, 2)
+    : stableClasses(el.classList);
+  if (classes.length) return tag + classes.map((c) => `.${escapeIdent(c)}`).join('') + (positional ? nth : '');
 
   // Attribute hooks a site actually uses for semantics survive redesigns better than position.
   for (const name of ['data-testid', 'data-test', 'data-qa', 'aria-label', 'role', 'name']) {
     const v = el.attrs?.[name];
     if (v && v.length <= 40 && !looksGenerated(v)) {
-      return `${tag}[${name}="${v.replace(/"/g, '\\"')}"]`;
+      return `${tag}[${name}=${cssString(v)}]${positional ? nth : ''}`;
     }
   }
 
   // Nothing stable: fall back to position, but only when it disambiguates.
-  if (el.countOfType != null && el.countOfType > 1 && el.indexOfType != null) {
-    return `${tag}:nth-of-type(${el.indexOfType + 1})`;
+  return tag + nth;
+}
+
+/**
+ * True when every step is a bare tag name (`div > div > div`): such a selector says nothing
+ * about the element and matches whatever shares the page's nesting — one saved pick hid all 12
+ * stories on a news page.
+ */
+export function isBareTagSelector(selector: string): boolean {
+  const steps = selector.split(/\s*[>+~\s]\s*/).filter(Boolean);
+  return steps.length > 0 && steps.every((s) => /^[a-z][a-z0-9-]*$/i.test(s));
+}
+
+/**
+ * Selectors for `el`, most durable first: the stable-hook path at each depth, then the same
+ * paths pinned by position, then paths through build-generated classes. The picker takes the
+ * first that matches only the picked element.
+ *
+ * Generated classes come last but before giving up: after the site's next deploy such a
+ * selector matches nothing and the ad comes back, which is harmless. A chain of bare tags fails
+ * the other way, by matching whatever takes the ad's place in the layout.
+ */
+export function selectorCandidates(el: PickTarget, maxDepth = 8): string[] {
+  const out: string[] = [];
+  for (const [positional, generated] of [
+    [false, false],
+    [true, false],
+    [false, true],
+    [true, true],
+  ]) {
+    const steps: string[] = [];
+    let node: PickTarget | null | undefined = el;
+    for (let depth = 0; node && depth < maxDepth && isPickable(node.tagName); depth++) {
+      const step = stepFor(node, positional, generated);
+      steps.unshift(step);
+      const sel = steps.join(' > ');
+      if (!out.includes(sel)) out.push(sel);
+      if (step.startsWith('#')) break; // nothing above an id narrows it further
+      node = node.parent;
+    }
   }
-  return tag;
+  return out;
 }
 
 /**

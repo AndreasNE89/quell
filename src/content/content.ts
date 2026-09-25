@@ -13,40 +13,89 @@ import type {
   Settings,
 } from '../shared/types.js';
 import { STORAGE_KEY } from '../shared/constants.js';
-import { queryProcedural, proceduralMutationObserverInit } from '../engine/procedural.js';
 import { injectSpecificCss } from './specific-css.js';
+import { ProceduralRunner, type ProceduralRuleInput } from './procedural-runner.js';
 import {
   applyYoutubeFeatures,
   watchYoutubeSpa,
   youtubeOptsFromSettings,
   isYoutubeHost,
+  stopYoutubeFeatures,
 } from './youtube-ui.js';
-import { refreshSponsorBlock, startSponsorBlock } from './sponsorblock.js';
+import { refreshSponsorBlock, startSponsorBlock, stopSponsorBlock } from './sponsorblock.js';
 import type { SponsorSegment } from '../shared/sponsorblock.js';
-import { startDarkModeSmart } from './dark-mode-smart.js';
+import { startDarkModeSmart, stopDarkModeSmart } from './dark-mode-smart.js';
 import { frameScope } from '../shared/frame-scope.js';
 
-if (location.protocol === 'http:' || location.protocol === 'https:' || location.protocol === 'about:') {
-  void start();
+/** Marks this extension context's copy in the frame (content scripts share one world per context). */
+const INSTANCE_KEY = '__stampstackContent';
+/** Sent by a copy that starts, so a copy left behind by an update stands down. */
+const TAKEOVER_EVENT = 'stampstack:takeover';
+
+/** Undo everything this copy put on the page (orphanTeardown). */
+const teardowns: (() => void)[] = [];
+
+/** Cut off from the worker: the extension was updated, reloaded or removed since this copy ran. */
+function orphaned(): boolean {
+  try {
+    return !chrome.runtime?.id;
+  } catch {
+    return true;
+  }
 }
 
-// Paid dark mode: already-dark detect + smart CSS (independent of pause/allowlist).
-if (location.protocol === 'http:' || location.protocol === 'https:') {
-  startDarkModeSmart();
+function orphanTeardown(): void {
+  for (const undo of teardowns.splice(0)) {
+    try {
+      undo();
+    } catch {
+      /* keep undoing the rest */
+    }
+  }
+}
+
+/**
+ * One live copy per frame (REVIEW_2026-09-24 M2). After an install or update the worker runs
+ * content.js again in every open tab, so a frame can hold two copies:
+ *   - the manifest's and the worker's, both of this version, when a page loaded just then. They
+ *     share an isolated world, so the second sees the first's marker and does not start;
+ *   - the old version's and the new one's. An update gives the new copy a world of its own
+ *     (checked in Chromium 131), and the old one, whose chrome.runtime.id is gone, can no longer
+ *     reach the worker but still holds its sheets, observers and timers. The new copy announces
+ *     itself with a DOM event, which crosses worlds, and the old one takes all of it down. A page
+ *     can send the same event, so a copy only acts on it when it is itself orphaned.
+ */
+function claimFrame(): boolean {
+  const g = globalThis as { [INSTANCE_KEY]?: boolean };
+  if (g[INSTANCE_KEY]) return false;
+  g[INSTANCE_KEY] = true;
+  document.dispatchEvent(new CustomEvent(TAKEOVER_EVENT));
+  const onTakeover = (): void => {
+    if (orphaned()) orphanTeardown();
+  };
+  document.addEventListener(TAKEOVER_EVENT, onTakeover);
+  teardowns.push(() => document.removeEventListener(TAKEOVER_EVENT, onTakeover));
+  return true;
 }
 
 let youtubeOpts: YoutubeOptionsData | null = null;
 
 function onYoutubeStorageChanged(host: string): void {
-  chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'local' || !changes[STORAGE_KEY]) return;
-    void refreshYoutubeOpts(host);
-  });
+  try {
+    const onChanged = (changes: Record<string, chrome.storage.StorageChange>, area: string): void => {
+      if (area !== 'local' || !changes[STORAGE_KEY]) return;
+      void refreshYoutubeOpts(host);
+    };
+    chrome.storage.onChanged.addListener(onChanged);
+    teardowns.push(() => chrome.storage.onChanged.removeListener(onChanged));
+  } catch {
+    /* storage closed to content scripts: youtube:refresh from the worker covers it */
+  }
 }
 
 async function refreshYoutubeOpts(host: string): Promise<void> {
   try {
-    const raw = await send({ type: 'youtube:getOptions', hostname: host });
+    const raw = await send({ type: 'youtube:getOptions', hostname: host, topHost: frameScope().top });
     youtubeOpts = raw as YoutubeOptionsData | null;
     if (youtubeOpts) applyYoutubeFeatures(youtubeOpts);
     refreshSponsorBlock();
@@ -89,19 +138,30 @@ function bootstrapYoutube(host: string): void {
     getOpts: () => youtubeOpts,
     fetchSegments: fetchSponsorSegments,
   });
+  teardowns.push(stopYoutubeFeatures, stopSponsorBlock);
   onYoutubeStorageChanged(host);
-  void chrome.storage.local.get(STORAGE_KEY).then((stored) => {
-    const partial = stored[STORAGE_KEY] as Partial<Settings> | undefined;
-    if (!partial) return;
-    youtubeOpts = youtubeOptsFromSettings(partial, pageHost());
-    applyYoutubeFeatures(youtubeOpts);
-    refreshSponsorBlock();
-  });
+  try {
+    void chrome.storage.local
+      .get(STORAGE_KEY)
+      .then((stored) => {
+        const partial = stored[STORAGE_KEY] as Partial<Settings> | undefined;
+        if (!partial) return;
+        youtubeOpts = youtubeOptsFromSettings(partial, pageHost());
+        applyYoutubeFeatures(youtubeOpts);
+        refreshSponsorBlock();
+      })
+      .catch(() => {});
+  } catch {
+    /* storage closed to content scripts: youtube:getOptions below answers instead */
+  }
   void refreshYoutubeOpts(host);
 }
 
 async function start(): Promise<void> {
   const host = location.hostname;
+  // The manifest's copy runs while the document is still loading; the worker's, after an update,
+  // into a page that may still hold sheets the previous version's worker inserted.
+  const late = document.readyState !== 'loading';
 
   bootstrapYoutube(host);
 
@@ -123,29 +183,28 @@ async function start(): Promise<void> {
       })
     : Promise.resolve(null);
 
-  const ytOptsP = refreshYoutubeOpts(host);
+  // A back/forward-cache restore brings back a document that missed every cosmetic:refresh sent
+  // while it was cached (an allowlist change, a repair step, an edited filter).
+  const onPageShow = (e: PageTransitionEvent): void => {
+    if (e.persisted) void reapplyCosmetics();
+  };
+  window.addEventListener('pageshow', onPageShow);
+  // So does a prerendered page when it is shown: the worker's refreshes reach only tabs on
+  // screen, and until now it was matched against the top host it reported (B27).
+  const onActivated = (): void => {
+    void reapplyCosmetics();
+    if (isYoutubeHost(host)) void refreshYoutubeOpts(host);
+  };
+  document.addEventListener('prerenderingchange', onActivated, { once: true });
+  teardowns.push(() => {
+    window.removeEventListener('pageshow', onPageShow);
+    document.removeEventListener('prerenderingchange', onActivated);
+  });
 
-  const resp = await sendWithRetry<CosmeticResponse>({ type: 'cosmetic:get', hostname: host });
-  const allowlisted = !!resp?.allowlisted;
+  const resp = await fetchCosmetics(late);
+  if (resp && !orphaned()) applyCosmetics(resp);
 
-  if (!allowlisted && resp) {
-    injectSpecificCss(resp.hide, resp.unhide);
-    // After injection so the count reflects the selectors that actually shipped. Deferred to
-    // DOMContentLoaded because at document_start almost nothing exists to match yet.
-    const countHides = (): void => countSpecificHides(resp.hide);
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', countHides, { once: true });
-    } else {
-      countHides();
-    }
-    if (resp.procedural.length) {
-      const exprs = resp.procedural.map((p) => p.expr);
-      runProcedural(exprs);
-      observe(() => runProcedural(exprs), proceduralMutationObserverInit(exprs));
-    }
-  }
-
-  await Promise.all([scriptletsP.catch(() => {}), ytOptsP.catch(() => {})]);
+  await scriptletsP.catch(() => {});
 }
 
 async function sendWithRetry<T>(msg: Message, attempts = 5): Promise<T | null> {
@@ -171,20 +230,67 @@ function send(msg: Message): Promise<unknown> {
   return chrome.runtime.sendMessage(msg);
 }
 
-/** Re-fetch and re-apply cosmetics for this page (used after the user's filters change). */
-async function reapplyCosmetics(): Promise<void> {
-  const resp = await sendWithRetry<CosmeticResponse>({
+// ---------------------------------------------------------------------------
+// Cosmetics
+// ---------------------------------------------------------------------------
+
+let runner: ProceduralRunner | null = null;
+/** The specific hide selectors now in the sheet, for the page report's count. */
+let currentHide: string[] = [];
+
+teardowns.push(() => {
+  runner?.stop();
+  runner = null;
+  currentHide = [];
+  injectSpecificCss([], []);
+});
+
+/**
+ * Ask for this frame's cosmetics. about:blank, srcdoc and document.write frames have no host of
+ * their own: they are the page that made them (its origin), so they get that page's rules —
+ * friendly-iframe ads are written into exactly such frames. `refetch` tells the worker the
+ * document may already hold sheets it inserted, in case it has slept since and forgotten them.
+ */
+function fetchCosmetics(refetch: boolean): Promise<CosmeticResponse | null> {
+  const scope = frameScope();
+  return sendWithRetry<CosmeticResponse>({
     type: 'cosmetic:get',
-    hostname: location.hostname,
+    hostname: scope.host || location.hostname,
+    topHost: scope.top,
+    isTop: scope.isTop,
+    ...(refetch ? { refetch: true } : {}),
   });
-  if (!resp || resp.allowlisted) {
-    injectSpecificCss([], []);
-    return;
-  }
-  injectSpecificCss(resp.hide, resp.unhide);
 }
 
-const hidden = new WeakSet<Element>();
+function applyCosmetics(resp: CosmeticResponse): void {
+  if (resp.allowlisted) {
+    currentHide = [];
+    injectSpecificCss([], []);
+    runner?.stop();
+    return;
+  }
+  currentHide = Array.isArray(resp.hide) ? resp.hide : [];
+  injectSpecificCss(currentHide, Array.isArray(resp.unhide) ? resp.unhide : []);
+
+  const rules: ProceduralRuleInput[] = [];
+  for (const p of resp.procedural ?? []) rules.push(p);
+  for (const a of resp.actions ?? []) {
+    if (a && typeof a.selector === 'string') rules.push({ expr: a.selector, action: a.action, arg: a.arg });
+  }
+  if (!rules.length && !runner) return;
+  runner ??= new ProceduralRunner();
+  runner.setRules(rules);
+  runner.start();
+}
+
+/** Re-fetch and re-apply cosmetics for this page (after the user's filters or site switches change). */
+async function reapplyCosmetics(): Promise<void> {
+  if (orphaned()) return;
+  const resp = await fetchCosmetics(true);
+  // No answer (worker restarting, handler error) is not "nothing to hide": keep what is applied.
+  // Only an explicit allowlisted answer clears it.
+  if (resp && !orphaned()) applyCosmetics(resp);
+}
 
 // ---------------------------------------------------------------------------
 // Page report
@@ -197,7 +303,8 @@ const hidden = new WeakSet<Element>();
 /** Third-party hosts this document referenced. Bounded so a busy SPA can't grow it forever. */
 const seenHosts = new Set<string>();
 const MAX_SEEN_HOSTS = 400;
-let hiddenCount = 0;
+/** Counting stops here: past it the number is a floor, and the popup must stay responsive. */
+const MAX_COUNTED = 5000;
 
 function noteUrl(raw: string | null | undefined): void {
   if (!raw || seenHosts.size >= MAX_SEEN_HOSTS) return;
@@ -227,6 +334,46 @@ function collectPageHosts(): void {
   }
 }
 
+/**
+ * Ad slots our site-specific and procedural rules hide right now: distinct elements that really
+ * compute to display:none (a page `!important` can win), counted once per slot (a hidden
+ * container's hidden child is the same slot), plus elements `:remove()` took out. Computed when
+ * asked, so it follows SPA updates and refreshes. Generic hides are not counted: their selectors
+ * live in the browser-injected sheet, which this script cannot read.
+ */
+function countHidden(): number {
+  const found = new Set<Element>();
+  const consider = (el: Element): void => {
+    if (found.size >= MAX_COUNTED || found.has(el)) return;
+    try {
+      if (getComputedStyle(el).display === 'none') found.add(el);
+    } catch {
+      /* detached or exotic node */
+    }
+  };
+  const fromRunner = runner?.hiddenElements();
+  for (const sel of [...currentHide, ...(fromRunner?.plainSelectors ?? [])]) {
+    try {
+      for (const el of Array.from(document.querySelectorAll(sel))) consider(el);
+    } catch {
+      /* selector the sheet dropped as invalid */
+    }
+  }
+  for (const el of fromRunner?.elements ?? []) consider(el);
+  let slots = 0;
+  for (const el of found) {
+    let nested = false;
+    for (let p = el.parentElement; p; p = p.parentElement) {
+      if (found.has(p)) {
+        nested = true;
+        break;
+      }
+    }
+    if (!nested) slots++;
+  }
+  return slots + (fromRunner?.removed ?? 0);
+}
+
 function startPageReport(): void {
   collectPageHosts();
   // Re-scan a few times over the first seconds: most trackers are injected after load.
@@ -235,6 +382,7 @@ function startPageReport(): void {
     collectPageHosts();
     if (++scans >= 6) clearInterval(timer);
   }, 1500);
+  teardowns.push(() => clearInterval(timer));
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     const type = (msg as { type?: string })?.type;
@@ -242,7 +390,7 @@ function startPageReport(): void {
       collectPageHosts();
       sendResponse({
         hosts: [...seenHosts],
-        hiddenCount,
+        hiddenCount: countHidden(),
         truncated: seenHosts.size >= MAX_SEEN_HOSTS,
       });
       return undefined;
@@ -254,55 +402,29 @@ function startPageReport(): void {
       sendResponse({ ok: true });
       return undefined;
     }
+    if (type === 'youtube:refresh') {
+      if (isYoutubeHost(location.hostname)) void refreshYoutubeOpts(location.hostname);
+      sendResponse({ ok: true });
+      return undefined;
+    }
     return undefined;
   });
 }
 
-/** Count what the site-specific stylesheet actually matched, for the page report. */
-function countSpecificHides(selectors: string[]): void {
-  for (const sel of selectors) {
-    try {
-      hiddenCount += document.querySelectorAll(sel).length;
-    } catch {
-      /* invalid selector — already filtered, but never let counting throw */
-    }
-  }
-}
+// ---------------------------------------------------------------------------
+// Start
+// ---------------------------------------------------------------------------
+// Last, after every module-level declaration above: start() reaches the page report's state
+// (seenHosts) synchronously. At document_start the DOM is still empty, but the copy the worker
+// injects into a loaded tab after an update (M2) scans a full one at once, and would stop at the
+// first <img src> before asking for cosmetics.
 
-function runProcedural(exprs: string[]): void {
-  for (const expr of exprs) {
-    let els: Element[];
-    try {
-      els = queryProcedural(expr);
-    } catch {
-      continue;
-    }
-    for (const el of els) {
-      if (hidden.has(el)) continue;
-      hidden.add(el);
-      hiddenCount++;
-      // `:remove()` ops already detach nodes; others get display:none.
-      if (el.isConnected) {
-        (el as HTMLElement).style?.setProperty?.('display', 'none', 'important');
-      }
-    }
+const webPage = location.protocol === 'http:' || location.protocol === 'https:';
+if ((webPage || location.protocol === 'about:') && claimFrame()) {
+  void start();
+  // Paid dark mode: already-dark detect + smart CSS (independent of pause/allowlist).
+  if (webPage) {
+    startDarkModeSmart();
+    teardowns.push(stopDarkModeSmart);
   }
-}
-
-/** Re-run procedural matching as the page mutates, throttled to once per frame. */
-function observe(run: () => void, init: MutationObserverInit): void {
-  let scheduled = false;
-  const schedule = (): void => {
-    if (scheduled) return;
-    scheduled = true;
-    requestAnimationFrame(() => {
-      scheduled = false;
-      run();
-    });
-  };
-  const obs = new MutationObserver(schedule);
-  const attach = (): void => obs.observe(document.documentElement, init);
-  if (document.documentElement) attach();
-  else document.addEventListener('DOMContentLoaded', attach, { once: true });
-  document.addEventListener('DOMContentLoaded', run, { once: true });
 }

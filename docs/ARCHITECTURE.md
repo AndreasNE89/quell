@@ -13,12 +13,14 @@ scripts/compile-filters.mjs
         ├─► src/generated/scriptlets.json          (all scriptlet rules; tests and tooling)
         ├─► src/generated/scriptlets/*.js          (the same rules as MAIN-world files, by host)
         ├─► src/generated/scriptlet-shards.json    (host index the SW registers them from)
-        ├─► src/generated/generic-cosmetic.css
+        ├─► src/generated/generic-cosmetic/<id>.css, <id>.x-<other>.css   (+ a .revert.css twin each)
+        ├─► src/generated/trackers.json            (page-report naming index)
         └─► src/generated/meta.json
         │
         ▼
 scripts/build.mjs (esbuild + copy)
         │
+        ├─► dist/generated/cosmetic/core.json, list.<id>.json   (cosmetic.json split for the SW)
         └─► dist/   ← load unpacked
 ```
 
@@ -35,7 +37,15 @@ On wake / settings change it:
 3. Registers generic cosmetic CSS, the YouTube MAIN hooks and the list scriptlets via `chrome.scripting` (excludes allowlisted hosts and page-scoped `$generichide` paths; YouTube top frames and embeds are separate registrations; see [Scriptlets](#scriptlets))
 4. Handles `Message` RPC from content / popup / options
 
-The allowlist and breakage fixes belong to the tab's top-level page, as in uBO: subframe requests for cosmetics, scriptlets and YouTube options are decided by `sender.tab.url` (`policyHost`), while rules still match the frame's own host. Registered `excludeMatches` are tested against each frame's own URL, so the generic sheet cannot follow the top page; the scriptlet runtime works around it by acting only where the frame's host is the top page's.
+The allowlist and breakage fixes belong to the tab's top-level page, as in uBO: subframe requests for cosmetics, scriptlets and YouTube options are decided by `sender.tab.url` (`policyHost`), while rules still match the frame's own host. Registered `excludeMatches` are tested against each frame's own URL, so the generic sheet cannot follow the top page by itself. `handleCosmetic` corrects it per frame: a frame on a switched-off page gets the sheet's revert files where the sheet reached it (not on hosts or pages the lists keep out of generic hiding), and a frame from a switched-off host on a page that is on gets the sheet. The scriptlet runtime acts only where the frame's host is the top page's.
+
+Cosmetic data is not part of `background.js`. The build splits `cosmetic.json` into `generated/cosmetic/core.json` (exceptions and the generic-sheet plan) and one `list.<id>.json` per list; a wake reads the core only (enough to register the generic sheet), and the first `cosmetic:get` reads the enabled lists' files. Each file is fetched once per worker lifetime.
+
+Trust boundaries:
+
+- A content script runs in a web page's renderer, so it may only send `cosmetic:get`, `scriptlets:get`, `youtube:getOptions`, `sponsorblock:getSegments`, `darkmode:get` (answered with the decision only) and `customfilters:add` (a hide rule for the sender's own site). Every other message is answered only for the extension's own pages (popup, Options).
+- `chrome.storage.local` is set to `TRUSTED_CONTEXTS` on every wake, so content scripts cannot read or write settings directly (Chromium 151; older versions lack the call on `local`). YouTube pages learn about changes through `youtube:refresh`.
+- Settings are one set for normal and Incognito windows, as in uBO: a switch set in an Incognito window applies everywhere. The popup says so in Incognito.
 
 ### Network blocking
 
@@ -45,9 +55,13 @@ Chrome evaluates static DNR rulesets. StampStack does **not** reimplement a full
 
 | Kind | Mechanism |
 |------|-----------|
-| Generic hide | `generated/generic-cosmetic.css` registered as content CSS |
-| Specific hide / unhide | Content script injects `<style data-StampStack>` |
-| Procedural | `src/engine/procedural.ts` + MutationObserver |
+| Generic hide | Per-list sheets under `generated/generic-cosmetic/` registered as content CSS (author origin, first paint), plus the same files inserted at USER origin into top-level documents, so a page `!important` cannot unhide them (as in uBO). Sheets of selectors another list excepts (`<id>.x-<other>.css`) are registered only while that list is off. |
+| Generic exceptions | An exception for a host a match pattern can name excludes the registration. An entity exception (`www.google.*` search pages) gets the registered sheets' `.revert.css` twins by `insertCSS`. A `#@#` for one site is a `display: revert` rule in the content script's sheet, for selectors the registered sheet really hides. No USER-origin copy goes where something must be reverted or restyled. The SW remembers per document what it inserted, and forgets it when it sleeps; a document that asks again (`refetch`: a refresh, or a copy of the content script injected after an update) first has every file that origin could hold removed, so nothing stays behind and nothing is doubled (Chrome removes one copy per `removeCSS`). |
+| Specific hide | Content script injects `<style data-StampStack>`, validated and chunked (256 selectors a rule) |
+| Procedural | `src/engine/procedural.ts` + `src/content/procedural-runner.ts` (marker attributes, MutationObserver) |
+| Actions (`:style()`, `:remove-attr()`, `:remove-class()`) | Compiled to `actions`, carried out by the procedural runner; never turned into hides |
+
+The content script keeps one live copy per frame. After an update the worker runs `content.js` again in open tabs; the new copy announces itself with a DOM event, and a copy whose extension context is gone (`chrome.runtime.id` undefined) takes its sheets, marks, observers and timers down.
 
 ### Scriptlets
 

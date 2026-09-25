@@ -37,9 +37,6 @@ export const DARK_MODE_SCRIPT_ID = 'quell-dark-mode';
 /** Force-on hosts when global dark mode is off. */
 export const DARK_MODE_FORCE_ON_SCRIPT_ID = 'quell-dark-mode-force';
 
-/** Path (relative to extension root) of the combined generic cosmetic stylesheet. */
-export const GENERIC_CSS_PATH = 'generated/generic-cosmetic.css';
-
 /** Path of the invert dark-mode stylesheet (copied to dist root). */
 export const DARK_MODE_CSS_PATH = 'dark-mode.css';
 

@@ -6,7 +6,8 @@
 //          src/generated/scriptlets.json        per-list scriptlet rules (tests and tooling)
 //          src/generated/scriptlets/*.js        the same rules as MAIN-world files keyed by host
 //          src/generated/scriptlet-shards.json  host index the service worker registers them from
-//          src/generated/generic-cosmetic/<id>.css
+//          src/generated/generic-cosmetic/*.css  generic hiding per list (+ cross-list-excepted
+//                                                and revert sheets; cosmetic.json `genericCss`)
 //          src/generated/meta.json              list metadata for runtime + manifest
 //
 // Run via `npm run compile-filters`. Prints a coverage report so we can see what
@@ -23,7 +24,18 @@ import {
 } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseLine, cosmeticExceptionScope, preprocessFilterText } from './lib/parse-filter.mjs';
+import { parseLine, preprocessFilterText } from './lib/parse-filter.mjs';
+import {
+  emptyCosmeticBucket,
+  applyCosmeticRule,
+  scriptletDomains,
+  serializeBucket,
+  planGenericCss,
+  genericCssText,
+  applyNetworkCosmeticException,
+  isDocumentException,
+  applyDocumentCosmeticException,
+} from './lib/cosmetic-compile.mjs';
 import {
   toDnrRule,
   ruleKey,
@@ -72,18 +84,6 @@ function loadRegistry() {
   return registry;
 }
 
-function emptyCosmeticBucket() {
-  return {
-    hideGeneric: new Set(),
-    unhideGeneric: new Set(),
-    hideSpecific: {},
-    unhideSpecific: {},
-    procedural: [],
-    scriptlets: [],
-    scriptletExceptions: [],
-  };
-}
-
 /**
  * `!#include` target → its text, or null. uBO resolves includes against the including list's
  * URL; update-lists does not fetch sub-lists, so only a plain file name already committed under
@@ -98,14 +98,6 @@ function resolveListInclude(name) {
 /** A list's lines after `!#if` / `!#include` preprocessing (see preprocessFilterText). */
 function preprocessList(text) {
   return preprocessFilterText(text, { resolveInclude: resolveListInclude });
-}
-
-/** Reject selectors that could break out of a CSS rule (e.g. `a{}body{display:none}`). */
-function isSafeSelector(sel) {
-  if (!sel || typeof sel !== 'string') return false;
-  if (/[{}]/.test(sel)) return false;
-  if (sel.length > 2048) return false;
-  return true;
 }
 
 /** Compile one list's lines into DNR rules + cosmetic/scriptlet contributions. */
@@ -148,8 +140,15 @@ function compileList(list, text, ctx) {
       continue;
     }
     if (out.cosmeticException) {
-      applyNetworkCosmeticException(out, parsed, ctx.networkCosmeticExceptions, list.id);
-      continue;
+      applyNetworkCosmeticException(out.cosmeticException, parsed, ctx.networkCosmeticExceptions, list.id);
+      // The network types it also lists (to-dnr.mjs toDnrRule) are an allow rule of their own.
+      if (out.networkSkip) skips[out.networkSkip] = (skips[out.networkSkip] || 0) + 1;
+      if (!out.rule && !out.rules) continue;
+    }
+    // The element-hiding half of `@@…$document`; its network half is the allowAllRequests
+    // rule below.
+    if (isDocumentException(parsed) && !out.skip) {
+      applyDocumentCosmeticException(parsed, ctx.networkCosmeticExceptions, list.id);
     }
     if (out.skip) {
       skips[out.skip] = (skips[out.skip] || 0) + 1;
@@ -194,49 +193,6 @@ function compileList(list, text, ctx) {
   return { dnrRules, documentRules, stats };
 }
 
-/**
- * `bag` is ctx.networkCosmeticExceptions; its `skips` is ctx.skips, so a dropped exception is
- * counted in the coverage report without widening this function's call site.
- */
-function applyNetworkCosmeticException(out, parsed, bag, listId) {
-  if (!parsed.isException) return; // only @@…$generichide etc.
-  const kind = out.cosmeticException;
-  const byList = bag[kind];
-  if (!byList) return;
-  const count = (reason) => {
-    if (bag.skips) bag.skips[reason] = (bag.skips[reason] || 0) + 1;
-  };
-  // Runtime keys these exceptions by page host, plus a path for the ones EasyList limits to a
-  // page (the Google, Bing, DuckDuckGo and Yandex results pages). A pattern it can't express
-  // (a regex, a `^` in the path, `192.168.*.1`, `://10.0.0.`) is dropped whole — including its
-  // $domain hosts, which would otherwise widen it to every page on those sites.
-  const scope = cosmeticExceptionScope(parsed.pattern, parsed.isRegex);
-  if (scope.skip) {
-    count(`cosmetic-exception-${scope.skip}`);
-    return;
-  }
-  if (scope.path !== null) {
-    // `domain=` on a page-scoped exception narrows it further; never widen it to those hosts.
-    const o = parsed.options || {};
-    if (o.initiatorDomains?.length || o.requestDomains?.length) {
-      count('cosmetic-exception-path-scoped');
-      return;
-    }
-    const set = (bag.pathScoped[kind][listId] ||= new Set());
-    for (const h of scope.hosts) set.add(`${h}${scope.path}`);
-    return;
-  }
-  // Page hosts for cosmetic exceptions come from the URL pattern, $domain/$from,
-  // and $to (destination) — e.g. @@||asd.$generichide,to=asd.homes|asd.ink.
-  const hosts = [
-    ...scope.hosts,
-    ...(parsed.options?.initiatorDomains || []),
-    ...(parsed.options?.requestDomains || []),
-  ];
-  const set = (byList[listId] ||= new Set());
-  for (const h of hosts) if (h) set.add(h);
-}
-
 function serializeExceptionBag(byList) {
   const out = {};
   for (const [id, set] of Object.entries(byList)) out[id] = [...set];
@@ -251,8 +207,14 @@ function exceptionHostCount(byList) {
 
 function applyCosmetic(c, cos, stats, skips) {
   if (c.kind === 'scriptlet') {
-    // Scriptlets must be domain-scoped (injecting into every page is unsafe).
-    if (!c.domains.include.length) return;
+    // Scriptlets must be domain-scoped (injecting into every page is unsafe), and their
+    // registrations can only key concrete hosts and entities (see scriptletDomains).
+    const scoped = scriptletDomains(c.domains);
+    if (scoped.skip) {
+      skips[scoped.skip] = (skips[scoped.skip] || 0) + 1;
+      return;
+    }
+    c = { ...c, domains: scoped.domains };
     // CWS rejects `atob("…")` / long base64 in the package as "obfuscated code".
     if (scriptletLooksObfuscated(c.scriptlet)) {
       skips['scriptlet-obfuscated'] = (skips['scriptlet-obfuscated'] || 0) + 1;
@@ -284,78 +246,41 @@ function applyCosmetic(c, cos, stats, skips) {
     stats.scriptlet++;
     return;
   }
-  if (c.kind === 'ignored') {
-    if (c.unsupported) {
-      const reason = `cosmetic-unsupported:${c.unsupported}`;
-      skips[reason] = (skips[reason] || 0) + 1;
-    }
-    return;
-  }
-
-  if (c.kind === 'procedural') {
-    if (!c.domains.include.length) return; // procedural generics are too risky/slow
-    cos.procedural.push({ domains: c.domains, expr: c.selector });
-    stats.cosmetic++;
-    return;
-  }
-
-  const isUnhide = c.kind === 'unhide';
-  const selector = c.selector;
-  if (!selector || !isSafeSelector(selector)) return;
-
-  const { include, exclude } = c.domains;
-  if (include.length) {
-    // Domain-scoped rule: hide/unhide on named domains, honoring ~excludes.
-    const target = isUnhide ? cos.unhideSpecific : cos.hideSpecific;
-    for (const d of include) {
-      if (exclude.some((ex) => d === ex || d.endsWith('.' + ex))) continue;
-      (target[d] ||= new Set()).add(selector);
-    }
-    // Explicit excludes under an include parent: cancel via the opposite map so
-    // suffix matching on the parent cannot re-apply the selector.
-    if (exclude.length) {
-      const cancel = isUnhide ? cos.hideSpecific : cos.unhideSpecific;
-      for (const ex of exclude) (cancel[ex] ||= new Set()).add(selector);
-    }
-  } else if (exclude.length) {
-    // Domain-excluded generic (`~a.com##.ad`): generic everywhere, except the excluded
-    // domains, which we express as per-domain unhide exceptions.
-    (isUnhide ? cos.unhideGeneric : cos.hideGeneric).add(selector);
-    const excTarget = isUnhide ? cos.hideSpecific : cos.unhideSpecific;
-    for (const ex of exclude) (excTarget[ex] ||= new Set()).add(selector);
-  } else {
-    // Pure generic (applies everywhere).
-    (isUnhide ? cos.unhideGeneric : cos.hideGeneric).add(selector);
-  }
-  stats.cosmetic++;
+  applyCosmeticRule(c, cos, stats, skips);
 }
 
-function setMapToObj(m) {
-  const o = {};
-  for (const [k, v] of Object.entries(m)) o[k] = [...v];
-  return o;
-}
-
-function serializeBucket(cos) {
-  return {
-    hideGeneric: [...cos.hideGeneric],
-    unhideGeneric: [...cos.unhideGeneric],
-    hideSpecific: setMapToObj(cos.hideSpecific),
-    unhideSpecific: setMapToObj(cos.unhideSpecific),
-    procedural: cos.procedural,
-  };
-}
-
-function writeGenericCss(listId, bucket) {
-  const generic = bucket.hideGeneric.filter((s) => !bucket.unhideGeneric.includes(s) && isSafeSelector(s));
-  const CHUNK = 500;
-  let css = `/* StampStack generic element-hiding for list "${listId}" — generated, do not edit. */\n`;
-  for (let i = 0; i < generic.length; i += CHUNK) {
-    const group = generic.slice(i, i + CHUNK).join(',\n');
-    if (group) css += `${group} { display: none !important; }\n`;
+/**
+ * Write every list's generic stylesheets (planGenericCss) and their reverts; returns
+ * cosmetic.json's `genericCss`: per list, the sheets to register while none of `unless` is
+ * enabled (src/engine/cosmetic-match.ts genericCssFiles). Fills in metaLists' counts.
+ */
+function writeGenericCss(cosmeticByList, metaLists) {
+  const plan = planGenericCss(
+    cosmeticByList,
+    metaLists.map((l) => l.id),
+  );
+  const out = {};
+  let split = 0;
+  for (const meta of metaLists) {
+    out[meta.id] = (plan[meta.id] ?? []).map((sheet) => {
+      const file = `generic-cosmetic/${sheet.name}.css`;
+      const revert = `generic-cosmetic/${sheet.name}.revert.css`;
+      writeFileSync(join(OUT_DIR, file), genericCssText(sheet.name, sheet.selectors));
+      writeFileSync(join(OUT_DIR, revert), genericCssText(sheet.name, sheet.selectors, true));
+      meta.genericHideCount += sheet.selectors.length;
+      if (sheet.unless.length) split += sheet.selectors.length;
+      return {
+        file,
+        revert,
+        count: sheet.selectors.length,
+        ...(sheet.unless.length ? { unless: sheet.unless } : {}),
+      };
+    });
   }
-  writeFileSync(join(GENERIC_CSS_DIR, `${listId}.css`), css);
-  return generic.length;
+  console.log(
+    `  generic exceptions: ${split} selectors registered only while the list excepting them is off`,
+  );
+  return out;
 }
 
 /**
@@ -444,31 +369,55 @@ function assertNoAccidentalDocumentRules(listId, documentRules) {
  */
 function buildTrackerIndex(rulesetsByList) {
   const blockedHosts = new Set();
-  for (const rules of Object.values(rulesetsByList)) {
+  // Per list: hosts it blocks outright, and hosts it blocks only on some paths or pages
+  // (`||host/ads/`, or `initiatorDomains`). The worker names a tracker blocked only while one of
+  // the first kind is loaded (REVIEW_2026-09-24 B39): OneTrust was "blocked" with the cookie
+  // list off.
+  const wholeByList = new Map();
+  const partialByList = new Map();
+  for (const [listId, rules] of Object.entries(rulesetsByList)) {
+    const whole = new Set();
+    const partial = new Set();
     for (const r of rules) {
       if (r.action?.type !== 'block') continue;
       const uf = r.condition?.urlFilter;
       if (!uf) continue;
-      const m = /^\|\|([a-z0-9.-]+)\^?/i.exec(uf);
-      if (m) blockedHosts.add(m[1].toLowerCase().replace(/\.$/, ''));
+      const m = /^\|\|([a-z0-9.-]+)(.*)$/i.exec(uf);
+      if (!m) continue;
+      const host = m[1].toLowerCase().replace(/\.$/, '');
+      blockedHosts.add(host);
+      const hostWide = /^(?:\^\*?)?$/.test(m[2]) && !r.condition.initiatorDomains?.length;
+      (hostWide ? whole : partial).add(host);
     }
+    wholeByList.set(listId, whole);
+    partialByList.set(listId, partial);
   }
-  /** A curated domain counts as blocked if it, or any subdomain of it, has a rule. */
-  const hasRule = (domain) => {
-    if (blockedHosts.has(domain)) return true;
-    for (const h of blockedHosts) if (h.endsWith(`.${domain}`)) return true;
+  /** `domain` or one of its subdomains is in `hosts`. */
+  const covers = (hosts, domain) => {
+    if (hosts.has(domain)) return true;
+    for (const h of hosts) if (h.endsWith(`.${domain}`)) return true;
     return false;
   };
 
   const domains = {};
   let covered = 0;
+  let outright = 0;
   for (const [domain, label] of Object.entries(trackerDomainMap())) {
-    const blocked = hasRule(domain);
+    // The compile-time answer for every list, any rule for the domain: kept for a worker that
+    // reads an index without `lists`.
+    const blocked = covers(blockedHosts, domain);
+    const lists = [...wholeByList].filter(([, hosts]) => covers(hosts, domain)).map(([id]) => id);
+    const partial = [...partialByList]
+      .filter(([id, hosts]) => !lists.includes(id) && covers(hosts, domain))
+      .map(([id]) => id);
     if (blocked) covered++;
-    domains[domain] = { label, blocked };
+    if (lists.length) outright++;
+    domains[domain] = { label, blocked, lists, ...(partial.length ? { partial } : {}) };
   }
   const total = Object.keys(domains).length;
-  console.log(`  tracker index: ${total} named domains, ${covered} with a shipped block rule`);
+  console.log(
+    `  tracker index: ${total} named domains, ${covered} with a shipped block rule (${outright} blocked outright)`,
+  );
   return { domains };
 }
 
@@ -643,9 +592,6 @@ async function main() {
     const enabled = list.enabledByDefault !== false;
     if (enabled) totalEnabledRules += dnrRules.length;
 
-    const bucket = serializeBucket(ctx.byList[list.id]);
-    const genericCount = writeGenericCss(list.id, bucket);
-
     metaLists.push({
       id: list.id,
       title: list.title,
@@ -654,7 +600,8 @@ async function main() {
       ruleCount: dnrRules.length,
       rulesetFile: `rulesets/${list.id}.json`,
       genericCssFile: `generic-cosmetic/${list.id}.css`,
-      genericHideCount: genericCount,
+      // Set once every list is compiled: another list's generic exceptions split this one's sheet.
+      genericHideCount: 0,
     });
 
     console.log(
@@ -684,8 +631,11 @@ async function main() {
     };
   }
 
+  const genericCss = writeGenericCss(cosmeticByList, metaLists);
+
   const cosmeticOut = {
     byList: cosmeticByList,
+    genericCss,
     networkExceptions: {
       generichide: serializeExceptionBag(ctx.networkCosmeticExceptions.generichide),
       elemhide: serializeExceptionBag(ctx.networkCosmeticExceptions.elemhide),
@@ -712,13 +662,8 @@ async function main() {
     await loadRuntimeModule('engine', 'scriptlet-shards.ts'),
   );
 
-  // Legacy combined sheet kept for older loaders / docs; runtime prefers per-list files.
-  let combinedCss = '/* StampStack combined generic element-hiding — generated, do not edit. */\n';
-  for (const list of metaLists) {
-    const p = join(GENERIC_CSS_DIR, `${list.id}.css`);
-    if (existsSync(p)) combinedCss += readFileSync(p, 'utf8') + '\n';
-  }
-  writeFileSync(join(OUT_DIR, 'generic-cosmetic.css'), combinedCss);
+  // The combined sheet older builds wrote was never registered or shipped (build.mjs skips it).
+  rmSync(join(OUT_DIR, 'generic-cosmetic.css'), { force: true });
 
   writeFileSync(
     join(OUT_DIR, 'meta.json'),

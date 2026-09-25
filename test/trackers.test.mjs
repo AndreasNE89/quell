@@ -106,6 +106,42 @@ test('compiled index marks blocked only where a rule exists', { skip: !hasIndex 
   }
 });
 
+test('compiled index names the lists that block each domain outright (B39)', { skip: !hasIndex }, () => {
+  // The worker calls a tracker blocked only while one of `lists` is loaded; `partial` lists
+  // block it on some paths or pages only.
+  const index = JSON.parse(readFileSync(INDEX_PATH, 'utf8'));
+  const dir = join(ROOT, 'src', 'generated', 'rulesets');
+  const whole = new Map();
+  const some = new Map();
+  for (const f of readdirSync(dir)) {
+    const id = f.replace(/\.json$/, '');
+    whole.set(id, new Set());
+    some.set(id, new Set());
+    for (const r of JSON.parse(readFileSync(join(dir, f), 'utf8'))) {
+      const m = r.action?.type === 'block' && /^\|\|([a-z0-9.-]+)(.*)$/i.exec(r.condition?.urlFilter ?? '');
+      if (!m) continue;
+      const outright = (m[2] === '' || m[2] === '^' || m[2] === '^*') && !r.condition.initiatorDomains;
+      (outright ? whole : some).get(id).add(m[1].toLowerCase().replace(/\.$/, ''));
+    }
+  }
+  const covers = (hosts, d) => hosts.has(d) || [...hosts].some((h) => h.endsWith(`.${d}`));
+  let outright = 0;
+  for (const [domain, entry] of Object.entries(index.domains)) {
+    assert.ok(Array.isArray(entry.lists), `${domain} has no lists`);
+    const want = [...whole].filter(([, h]) => covers(h, domain)).map(([id]) => id).sort();
+    assert.deepEqual([...entry.lists].sort(), want, `${domain} lists`);
+    const wantPartial = [...some]
+      .filter(([id, h]) => !want.includes(id) && covers(h, domain))
+      .map(([id]) => id)
+      .sort();
+    assert.deepEqual([...(entry.partial ?? [])].sort(), wantPartial, `${domain} partial`);
+    assert.equal(entry.blocked, entry.lists.length + (entry.partial?.length ?? 0) > 0, domain);
+    if (entry.lists.length) outright++;
+  }
+  // Most named trackers are blocked outright by some list; an index of only partials is broken.
+  assert.ok(outright > 100, `only ${outright} domains blocked outright`);
+});
+
 test('compiled index stays small enough to inline in the worker', { skip: !hasIndex }, () => {
   // The whole reason this is curated rather than derived: 101k raw hostnames would be 2.2 MB.
   const bytes = readFileSync(INDEX_PATH).length;

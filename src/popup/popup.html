@@ -25,7 +25,7 @@
         />
         <span class="name" aria-hidden="true" data-i18n="popup_stampstack">StampStack</span>
       </div>
-      <button class="icon-btn" id="optionsBtn" title="Settings" data-i18n-attr="title:popup_settings" aria-label="Settings">⚙</button>
+      <button class="icon-btn" id="optionsBtn" title="Settings" aria-label="Settings" data-i18n-attr="title:popup_settings,aria-label:popup_settings">⚙</button>
     </header>
 
     <!-- Site status and its toggle in ONE block. They were two stacked blocks saying
@@ -34,37 +34,45 @@
       <div class="site-main">
         <div class="site-text">
           <div class="site-host" id="host">—</div>
-          <div class="site-sub" id="siteSub" data-i18n="popup_blocking_on_this_site">Blocking on this site</div>
+          <!-- Empty until the worker answers: a default of "Blocking on this site" stayed on screen
+               beside an unchecked switch whenever popup:get failed. -->
+          <div class="site-sub" id="siteSub"></div>
         </div>
         <!-- A label, like every other switch in this popup. This one was a bare <span> and so
              had no way to receive a click at all. -->
         <label class="switch">
-          <input type="checkbox" id="siteToggle" aria-label="Block on this site" data-i18n-attr="aria-label:popup_block_on_this_site" />
+          <input type="checkbox" id="siteToggle" disabled aria-label="Block on this site" data-i18n-attr="aria-label:popup_block_on_this_site" />
           <span class="slider"></span>
         </label>
       </div>
-      <div class="site-note" id="siteToggleLabel" data-i18n="popup_block_on_this_site">Block on this site</div>
+      <!-- role=status: a refused switch or a host StampStack cannot key is reported here, and
+           a screen-reader user who just flipped the switch needs to hear it. -->
+      <div class="site-note" id="siteToggleLabel" role="status" data-i18n="popup_block_on_this_site">Block on this site</div>
+      <!-- Settings are shared with Incognito windows, as in uBO: say so before a switch is set. -->
+      <p class="site-note incognito-note" id="incognitoNote" data-i18n="popup_incognito_note" hidden>A switch you set in this Incognito window is saved and applies in normal windows too.</p>
     </section>
 
     <div class="actions">
-      <button type="button" class="action" id="pickBtn">
-        <span class="action-icon" aria-hidden="true">✛</span> Hide an element
+      <!-- The icon stays outside the translated span: data-i18n replaces the element's text. -->
+      <button type="button" class="action" id="pickBtn" disabled>
+        <span class="action-icon" aria-hidden="true">✛</span>
+        <span data-i18n="popup_hide_an_element">Hide an element</span>
       </button>
-      <button type="button" class="action" id="repairOpen" aria-expanded="false">
-        <span class="action-icon" aria-hidden="true">✱</span> Site broken?
+      <button type="button" class="action" id="repairOpen" aria-expanded="false" aria-controls="repairPanel" disabled>
+        <span class="action-icon" aria-hidden="true">✱</span>
+        <span data-i18n="popup_site_broken">Site broken?</span>
       </button>
     </div>
-    <p class="pick-hint" id="pickHint" hidden></p>
-    <p class="shortcut-hint">
-      Tip: <kbd data-i18n="popup_alt">Alt</kbd>+<kbd data-i18n="popup_shift">Shift</kbd>+<kbd>X</kbd> starts the picker without opening this
-      panel.
-    </p>
+    <p class="pick-hint" id="pickHint" role="status" hidden></p>
+    <!-- Filled from chrome.commands: the suggested Alt+Shift+X is only a suggestion, and Chrome
+         leaves it unassigned when another extension holds it. -->
+    <p class="shortcut-hint" id="shortcutHint" hidden></p>
 
     <!-- Breakage repair. Most breakage is element hiding or a scriptlet, not network
          blocking, so offer the cheap fixes before handing the site back its ads. -->
     <div class="repair" id="repair">
       <div class="repair-panel" id="repairPanel" hidden>
-        <p class="repair-lead" id="repairState" data-i18n="popup_everything_is_on_for_this_site">Everything is on for this site.</p>
+        <p class="repair-lead" id="repairState" role="status" data-i18n="popup_everything_is_on_for_this_site">Everything is on for this site.</p>
         <!-- The rungs only mean anything while we are still filtering this site. Reporting
              does not, so it lives outside this wrapper. -->
         <div id="repairLadder">
@@ -81,7 +89,7 @@
           <button type="button" class="link-btn" id="reportBreakage" data-i18n="popup_still_broken_tell_the_developer">
             Still broken? Tell the developer
           </button>
-          <p class="repair-report-note" id="reportBreakageNote" data-i18n="popup_copies_a_draft_when_possible_and_opens">
+          <p class="repair-report-note" id="reportBreakageNote" role="status" data-i18n="popup_copies_a_draft_when_possible_and_opens">
             Copies a draft when possible and opens your email app if one is available. Includes
             the site name and your StampStack settings — not the page URL or its content.
           </p>
@@ -89,12 +97,13 @@
       </div>
     </div>
 
-    <p class="reload-note" id="reloadNote" hidden>
+    <p class="reload-note" id="reloadNote" role="status" hidden>
       <span data-i18n="popup_reload_the_page_to_apply_this">Reload the page to apply this.</span>
       <button type="button" id="reloadBtn" class="link-btn" data-i18n="popup_reload">Reload</button>
     </p>
 
-    <div class="stats" id="stats">
+    <!-- Hidden until the worker says the counters are real (dev builds only). -->
+    <div class="stats" id="stats" hidden>
       <div class="stat">
         <div class="stat-num" id="tabBlocked">0</div>
         <div class="stat-label" data-i18n="popup_blocked_here">blocked here</div>
@@ -114,7 +123,7 @@
     <section class="report" id="report" hidden>
       <div class="report-head">
         <span class="report-title" id="reportTitle" data-i18n="popup_on_this_page">On this page</span>
-        <button type="button" class="link-btn" id="reportToggle" data-i18n="popup_details">Details</button>
+        <button type="button" class="link-btn" id="reportToggle" aria-expanded="false" aria-controls="reportList" data-i18n="popup_details">Details</button>
       </div>
       <p class="report-summary" id="reportSummary"></p>
       <ul class="report-list" id="reportList" hidden></ul>
@@ -151,6 +160,7 @@
             <span class="slider"></span>
           </span>
         </label>
+        <p class="group-foot" id="ytSiteNote" hidden></p>
         <p class="group-foot" data-i18n="popup_pick_which_segment_types_to_skip_in">Pick which segment types to skip in Settings.</p>
       </div>
     </details>
@@ -186,11 +196,9 @@
         </label>
 
         <div class="dark-upsell" id="darkUpsell" hidden>
-          <p class="dark-upsell-text">
-            Darken any page with a smart, matte dark theme. One-time
-            <span id="darkPrice">$2</span> unlock — separate from ad blocking.
-            Reinstalling? Use Restore purchase with your receipt email.
-          </p>
+          <!-- One message with the price as a placeholder, rendered by popup.ts: the price sits
+               mid-sentence, and where it goes is the translator's call. -->
+          <p class="dark-upsell-text" id="darkUpsellText"></p>
           <button type="button" class="btn-buy" id="darkBuyBtn" data-i18n="popup_buy_dark_mode">Buy dark mode</button>
           <button type="button" class="btn-buy btn-secondary" id="darkRestoreBtn" data-i18n="popup_restore_purchase">
             Restore purchase
@@ -200,7 +208,7 @@
           </button>
         </div>
 
-        <p class="dark-hint" id="darkHint" hidden></p>
+        <p class="dark-hint" id="darkHint" role="status" hidden></p>
       </div>
     </details>
 
@@ -212,6 +220,7 @@
           <span class="slider"></span>
         </span>
       </label>
+      <p class="pause-note" id="pauseNote" role="status" hidden></p>
       <button class="link" id="openOptions" data-i18n="popup_filter_lists_amp_settings">Filter lists &amp; settings →</button>
     </footer>
 

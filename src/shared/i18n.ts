@@ -23,8 +23,30 @@ export function msg(key: string, substitutions?: string | string[]): string {
   return chrome.i18n?.getMessage?.(key, substitutions) ?? '';
 }
 
+/**
+ * BCP 47 tag of the language the page is actually shown in.
+ *
+ * Not `@@ui_locale`: that is the browser's language, and a French browser gets the English
+ * catalog (no fr folder), so tagging that text `fr` would have a screen reader read English
+ * with a French voice. Each catalog names itself in `ui_lang` instead. The browser's own tag
+ * is used only when it is the same language, because it carries the region the catalog does
+ * not (an en-GB user reads "7 Sept 2026", not "Sep 7, 2026").
+ */
+export function uiLanguage(): string {
+  const catalog = msg('ui_lang') || 'en';
+  const browser = chrome.i18n?.getUILanguage?.() ?? '';
+  const primary = (tag: string) => tag.split(/[-_]/)[0].toLowerCase();
+  if (browser && !catalog.includes('-') && primary(browser) === primary(catalog)) return browser;
+  return catalog;
+}
+
 /** Replace text and attributes on every tagged element in the document. */
 export function applyI18n(root: ParentNode = document): void {
+  // Assistive tech picks its voice, and Chrome its CJK glyph variants, from this attribute —
+  // left at the markup's "en", Traditional Chinese was read as English and drawn with
+  // Simplified shapes on systems whose default Han font is SC.
+  document.documentElement.lang = uiLanguage();
+
   for (const el of root.querySelectorAll<HTMLElement>('[data-i18n]')) {
     const key = el.dataset['i18n'];
     if (!key) continue;
@@ -39,12 +61,5 @@ export function applyI18n(root: ParentNode = document): void {
       const text = msg(key);
       if (text) el.setAttribute(attr, text);
     }
-  }
-
-  // The document title is not an element with text content the loop above can reach.
-  const titleKey = document.documentElement.dataset['i18nTitle'];
-  if (titleKey) {
-    const text = msg(titleKey);
-    if (text) document.title = text;
   }
 }

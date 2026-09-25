@@ -16,7 +16,7 @@ import type { ReportTracker, TrackerIndex } from './types.js';
 export function lookupTracker(
   host: string,
   index: TrackerIndex,
-): { label: string; blocked: boolean } | null {
+): TrackerIndex['domains'][string] | null {
   const h = host.toLowerCase().replace(/\.$/, '');
   if (!h) return null;
   const direct = index.domains[h];
@@ -39,8 +39,30 @@ export interface ClassifiedHosts {
   unnamedThirdParty: number;
 }
 
-/** Classify the hosts a page reached for into named orgs plus an unnamed count. */
-export function classifyHosts(hosts: readonly unknown[], index: TrackerIndex): ClassifiedHosts {
+/**
+ * Whether the loaded lists block a tracker entry. An index that names the blocking lists is
+ * answered from `loaded`, the lists Chrome has actually enabled; without `loaded`, or for an
+ * entry compiled before the index carried lists, the compile-time `blocked` stands.
+ */
+export function trackerBlocked(
+  entry: TrackerIndex['domains'][string],
+  loaded?: ReadonlySet<string>,
+): { blocked: boolean; partial: boolean } {
+  if (!loaded || !Array.isArray(entry.lists)) return { blocked: !!entry.blocked, partial: false };
+  const blocked = entry.lists.some((id) => loaded.has(id));
+  const partial = !blocked && (entry.partial ?? []).some((id) => loaded.has(id));
+  return { blocked, partial };
+}
+
+/**
+ * Classify the hosts a page reached for into named orgs plus an unnamed count. `loaded` is the
+ * set of lists Chrome has enabled: a list the user switched off blocks nothing.
+ */
+export function classifyHosts(
+  hosts: readonly unknown[],
+  index: TrackerIndex,
+  loaded?: ReadonlySet<string>,
+): ClassifiedHosts {
   const byLabel = new Map<string, ReportTracker>();
   let unnamed = 0;
 
@@ -53,10 +75,11 @@ export function classifyHosts(hosts: readonly unknown[], index: TrackerIndex): C
       continue;
     }
     const prev = byLabel.get(hit.label);
+    const { blocked, partial } = trackerBlocked(hit, loaded);
     // Collapse to one row per organization. When an org serves from both a blocked and an
     // unblocked host, show the unblocked one — that is the actionable half.
-    if (!prev || (prev.blocked && !hit.blocked)) {
-      byLabel.set(hit.label, { host, label: hit.label, blocked: hit.blocked });
+    if (!prev || (prev.blocked && !blocked)) {
+      byLabel.set(hit.label, { host, label: hit.label, blocked, ...(partial ? { partial } : {}) });
     }
   }
 

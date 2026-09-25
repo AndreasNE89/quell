@@ -3,7 +3,8 @@
 
 import type { Settings, YoutubeOptionsData } from '../shared/types.js';
 import { enabledSponsorCategories } from '../shared/sponsorblock.js';
-import { isAllowlistedHost } from '../shared/hostname.js';
+import { isSiteAllowlisted } from '../shared/site-rules.js';
+import { resolveSiteFix, fixDisablesCosmetics, fixDisablesScriptlets } from '../shared/site-fix.js';
 
 const STYLE_ID = 'quell-youtube-features';
 
@@ -97,14 +98,20 @@ function isValidSelector(sel: string): boolean {
   }
 }
 
-/** Build options from persisted settings (fast path before SW round-trip). */
+/**
+ * Build options from persisted settings (fast path before SW round-trip). Decides the way
+ * handleYoutubeGetOptions in the worker does: the same site rules, the same repair step.
+ */
 export function youtubeOptsFromSettings(
   settings: Partial<Settings>,
   hostname: string,
 ): YoutubeOptionsData {
+  const fix = resolveSiteFix(hostname, settings.siteFixes);
   return {
     paused: !!settings.paused,
-    allowlisted: isAllowlistedHost(hostname, settings.allowlist ?? []),
+    allowlisted: isSiteAllowlisted(hostname, settings.allowlist ?? []),
+    cosmeticsOff: fixDisablesCosmetics(fix),
+    scriptletsOff: fixDisablesScriptlets(fix),
     youtubeBlockSponsored: settings.youtubeBlockSponsored !== false,
     youtubeBlockShorts: !!settings.youtubeBlockShorts,
     youtubeSponsorBlock: settings.youtubeSponsorBlock !== false,
@@ -157,6 +164,13 @@ function isShortsPath(pathname: string = location.pathname): boolean {
 
 let leavingShorts = false;
 let clicksHooked = false;
+/** Undoes watchYoutubeSpa and hookShortsClicks (stopYoutubeFeatures). */
+const teardown: (() => void)[] = [];
+
+/** The Shorts redirect is a script patch: the repair ladder's second rung switches it off (B32). */
+function redirectsShorts(opts: YoutubeOptionsData | null): boolean {
+  return !!opts?.youtubeBlockShorts && !opts.paused && !opts.allowlisted && !opts.scriptletsOff;
+}
 
 function leaveShortsPage(): void {
   if (!isYoutubeHost(location.hostname) || !isShortsPath()) {
@@ -200,29 +214,30 @@ function hookShortsClicks(getOpts: () => YoutubeOptionsData | null): void {
   clicksHooked = true;
 
   // Clicks on Shorts links before SPA navigation.
-  document.addEventListener(
-    'click',
-    (ev) => {
-      const opts = getOpts();
-      if (!opts?.youtubeBlockShorts || opts.paused || opts.allowlisted) return;
-      const t = ev.target;
-      if (!(t instanceof Element)) return;
-      const a = t.closest('a[href*="/shorts"]');
-      if (!a) return;
-      const href = a.getAttribute('href');
-      if (!href) return;
-      if (redirectIfShortsUrl(href)) {
-        ev.preventDefault();
-        ev.stopPropagation();
-      }
-    },
-    true,
-  );
+  const onClick = (ev: MouseEvent): void => {
+    if (!redirectsShorts(getOpts())) return;
+    const t = ev.target;
+    if (!(t instanceof Element)) return;
+    const a = t.closest('a[href*="/shorts"]');
+    if (!a) return;
+    const href = a.getAttribute('href');
+    if (!href) return;
+    if (redirectIfShortsUrl(href)) {
+      ev.preventDefault();
+      ev.stopPropagation();
+    }
+  };
+  document.addEventListener('click', onClick, true);
+  teardown.push(() => {
+    document.removeEventListener('click', onClick, true);
+    clicksHooked = false;
+  });
 }
 
 /**
  * Apply YouTube sponsored/Shorts features for the current page.
- * Safe to call repeatedly; no-ops off YouTube or when allowlisted/paused.
+ * Safe to call repeatedly; no-ops off YouTube or when allowlisted/paused. The repair ladder
+ * reaches these too (B32): its first rung takes the hide CSS away, its second the redirect.
  */
 export function applyYoutubeFeatures(opts: YoutubeOptionsData): void {
   if (!isYoutubeHost(location.hostname) || opts.paused || opts.allowlisted) {
@@ -231,9 +246,9 @@ export function applyYoutubeFeatures(opts: YoutubeOptionsData): void {
     return;
   }
 
-  applyStyle(buildCss(opts));
+  applyStyle(opts.cosmeticsOff ? '' : buildCss(opts));
 
-  if (opts.youtubeBlockShorts) {
+  if (redirectsShorts(opts)) {
     leaveShortsPage();
   } else {
     leavingShorts = false;
@@ -252,10 +267,21 @@ export function watchYoutubeSpa(getOpts: () => YoutubeOptionsData | null): void 
     applyYoutubeFeatures(opts);
   };
 
-  document.addEventListener('yt-navigate-finish', run, true);
-  document.addEventListener('yt-navigate-start', run, true);
-  document.addEventListener('yt-page-data-updated', run, true);
+  const events = ['yt-navigate-finish', 'yt-navigate-start', 'yt-page-data-updated'];
+  for (const e of events) document.addEventListener(e, run, true);
   window.addEventListener('popstate', run);
   // Poll: YouTube sometimes mutates the path without custom events (embeds / partial nav).
-  setInterval(run, 800);
+  const poll = setInterval(run, 800);
+  teardown.push(() => {
+    for (const e of events) document.removeEventListener(e, run, true);
+    window.removeEventListener('popstate', run);
+    clearInterval(poll);
+  });
+}
+
+/** Stand down for good: an updated extension's content script has taken over this page. */
+export function stopYoutubeFeatures(): void {
+  for (const undo of teardown.splice(0)) undo();
+  applyStyle('');
+  leavingShorts = false;
 }

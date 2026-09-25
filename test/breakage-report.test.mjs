@@ -130,3 +130,30 @@ test('an unrecognised or absent user agent degrades to "unknown"', () => {
     assert.equal(browserLabel(ua), 'unknown');
   }
 });
+
+// --- every layer that can break a page is named (REVIEW_2026-09-24 breakage-report P3) ---
+
+test('the report names the user filters, dark mode, the YouTube switches and a refused list', () => {
+  const { body } = buildBreakageReport(
+    facts({
+      hostname: 'www.youtube.com',
+      enabledLists: ['quell-seed', 'easylist'],
+      refusedLists: ['easylist-cookie'],
+      degraded: true,
+      customRules: 3,
+      darkMode: true,
+      youtube: { sponsored: true, shorts: false, sponsorBlock: true },
+    }),
+  );
+  assert.match(body, /lists on:\s+quell-seed, easylist\n/);
+  assert.match(body, /not loaded:\s+easylist-cookie/);
+  assert.match(body, /your filters:\s+3 for this site/);
+  assert.match(body, /dark mode:\s+on here/);
+  assert.match(body, /youtube:\s+sponsored hidden, shorts shown, sponsorblock on/);
+  assert.match(buildBreakageReport(facts({ darkMode: null })).body, /dark mode:\s+not purchased/);
+  assert.match(buildBreakageReport(facts({ customRules: 0 })).body, /your filters:\s+none for this site/);
+});
+
+test('paused is reported as paused, not as everything on', () => {
+  assert.match(buildBreakageReport(facts({ paused: true })).body, /repair step:\s+paused everywhere/);
+});

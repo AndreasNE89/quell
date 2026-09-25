@@ -78,3 +78,32 @@ test('should refetch the current video when SponsorBlock categories change', asy
   await Promise.resolve();
   assert.equal(fetches, 2, 'same video must refetch after a category change');
 });
+
+test('the repair step that switches script patches off stops skipping (B32)', async () => {
+  let fetches = 0;
+  let opts = {
+    paused: false,
+    allowlisted: false,
+    scriptletsOff: true,
+    youtubeBlockSponsored: true,
+    youtubeBlockShorts: false,
+    youtubeSponsorBlock: true,
+    sponsorBlockCategories: ['sponsor', 'outro'],
+  };
+  startSponsorBlock({
+    getOpts: () => opts,
+    fetchSegments: async () => {
+      fetches++;
+      return [];
+    },
+  });
+  refreshSponsorBlock();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(fetches, 0, 'segments were fetched to skip with script patches off');
+  opts = { ...opts, scriptletsOff: false };
+  refreshSponsorBlock();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(fetches, 1);
+});

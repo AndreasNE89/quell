@@ -35,6 +35,24 @@ function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? '' : 's'}`;
 }
 
+/**
+ * The fetch date for the translated Options page, in the page's language (`uiLanguage()`).
+ *
+ * `ListAge.date` stays in the fixed English format because it also goes into the breakage
+ * email, which the developer reads; dropped into a Chinese sentence it read "（7 Sep 2026）".
+ * UTC like `date`, so both name the same day. Empty when there is no date.
+ */
+export function localizedListDate(generatedAt: string | null | undefined, locale: string): string {
+  const ms = generatedAt ? Date.parse(generatedAt) : NaN;
+  if (!Number.isFinite(ms)) return '';
+  try {
+    return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'UTC' }).format(ms);
+  } catch {
+    // A tag Intl rejects must not blank the line; the English form is still a date.
+    return formatDate(new Date(ms));
+  }
+}
+
 export function listAge(generatedAt: string | null | undefined, now: number): ListAge {
   const ms = generatedAt ? Date.parse(generatedAt) : NaN;
   if (!Number.isFinite(ms)) {

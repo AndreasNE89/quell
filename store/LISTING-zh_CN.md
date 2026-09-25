@@ -103,10 +103,10 @@ YouTube
 
 - Terms kept consistent with the zh_CN UI strings: 脚本补丁 (script patches), 元素隐藏,
   我的过滤规则, 设置, 恢复购买. 背投广告 is the established term for pop-unders.
-- The popup's "Hide an element" and "Site broken?" buttons, its Alt+Shift+X tip, and the
-  sponsor-skip notice are still English-only in the UI. The copy above describes those actions
-  rather than quoting a Chinese label that does not exist yet. Quote the labels once they are
-  localized.
+- The popup's "Hide an element" and "Site broken?" buttons are localized since the release after
+  2.3.0: 隐藏元素 and 网站出问题？. Its shortcut tip now names the key Chrome actually assigned
+  (提示：按 … 可直接启动元素选择器). The sponsor-skip notice on YouTube is still English-only, so
+  describe it rather than quoting a label.
 - Rule counts come from `src/generated/meta.json` (see "Where the claims come from" in
   `LISTING.md`). For 2.2.2: about 115,000 on by default, EasyList China 12,119, 129,482 in total.
 - Screenshots are shared across locales in the dashboard. Worth re-capturing at least the popup

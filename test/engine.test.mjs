@@ -303,10 +303,15 @@ test('page-scoped elemhide and specifichide follow the page too', () => {
 });
 
 test('page-scoped exceptions become path-limited match patterns', () => {
+  // `*.bing.com` already covers www; a list host is never www-folded (a `www.` exception is
+  // for www and below only).
   assert.deepEqual(mod.pathExceptionMatchPatterns('bing.com/search?*'), [
     '*://bing.com/search?*',
     '*://*.bing.com/search?*',
-    '*://www.bing.com/search?*',
+  ]);
+  assert.deepEqual(mod.pathExceptionMatchPatterns('www.example.com/a*'), [
+    '*://www.example.com/a*',
+    '*://*.www.example.com/a*',
   ]);
   assert.deepEqual(mod.pathExceptionMatchPatterns('google.*/search?*'), [], 'no pattern for an entity');
   assert.deepEqual(mod.pathExceptionMatchPatterns('bing.com'), [], 'a whole-host entry has no path');

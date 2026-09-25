@@ -61,3 +61,25 @@ test('should treat allowlisted host as allowlisted', () => {
   );
   assert.equal(opts.allowlisted, true);
 });
+
+test('the repair ladder reaches the YouTube features, as the worker decides it (B32)', () => {
+  const at = (siteFixes) =>
+    youtubeOptsFromSettings({ paused: false, allowlist: [], siteFixes }, 'www.youtube.com');
+  assert.deepEqual(
+    [at({}).cosmeticsOff, at({}).scriptletsOff],
+    [false, false],
+  );
+  const cosmetics = at({ 'youtube.com': 'cosmetics' });
+  assert.deepEqual([cosmetics.cosmeticsOff, cosmetics.scriptletsOff], [true, false]);
+  const injection = at({ 'youtube.com': 'injection' });
+  assert.deepEqual([injection.cosmeticsOff, injection.scriptletsOff], [true, true]);
+  // A fix for another site does not reach YouTube.
+  assert.equal(at({ 'example.com': 'injection' }).scriptletsOff, false);
+});
+
+test('an exact site rule counts on its own host only, as in the worker (B28)', () => {
+  const opts = (allowlist, host) => youtubeOptsFromSettings({ paused: false, allowlist }, host);
+  // github.io is a tenant platform: its entry means github.io itself, never every tenant.
+  assert.equal(opts(['github.io'], 'someone.github.io').allowlisted, false);
+  assert.equal(opts(['github.io'], 'github.io').allowlisted, true);
+});

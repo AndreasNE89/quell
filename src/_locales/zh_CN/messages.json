@@ -11,6 +11,9 @@
   "options_add_a_site": {
     "message": "添加站点"
   },
+  "options_attributions": {
+    "message": "致谢与许可"
+  },
   "options_auto_skip_sponsors_intros_outros_self_promo": {
     "message": "自动跳过赞助片段。可在下方选择更多要跳过的类别。"
   },
@@ -35,8 +38,14 @@
   "options_checking_license": {
     "message": "正在检查授权…"
   },
+  "options_checkout_unavailable": {
+    "message": "无法打开结账页面。请检查网络连接后重试。"
+  },
   "options_clear": {
     "message": "清除"
+  },
+  "options_custom_changed_elsewhere": {
+    "message": "你的过滤规则已在别处被修改（例如通过元素选择器）。保存时会同时保留两边的更改。"
   },
   "options_custom_filters_intro": {
     "message": "你自己的元素隐藏规则，每行一条。弹窗中的元素选择器会写入这里。格式：example.com##.selector —— 一个主机名，然后是 ##，再是 CSS 选择器。"
@@ -59,6 +68,12 @@
       }
     }
   },
+  "options_custom_load_failed": {
+    "message": "无法加载你的过滤规则。请重新加载此页面后重试。"
+  },
+  "options_custom_merged": {
+    "message": "期间在别处所做的更改已合并进来。"
+  },
   "options_custom_rules_active_one": {
     "message": "$COUNT$ 条规则生效",
     "placeholders": {
@@ -76,6 +91,27 @@
         "example": "12"
       }
     }
+  },
+  "options_custom_rules_paused_one": {
+    "message": "已保存 $COUNT$ 条规则 — StampStack 暂停期间不会生效",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "options_custom_rules_paused_other": {
+    "message": "已保存 $COUNT$ 条规则 — StampStack 暂停期间不会生效",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "12"
+      }
+    }
+  },
+  "options_custom_save_failed": {
+    "message": "无法保存你的过滤规则。你输入的内容仍在这里，请重试。"
   },
   "options_custom_saved_one": {
     "message": "已保存 — $COUNT$ 条规则生效。",
@@ -95,8 +131,32 @@
       }
     }
   },
+  "options_custom_saved_paused_one": {
+    "message": "已保存 — $COUNT$ 条规则。StampStack 暂停期间不会生效。",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "options_custom_saved_paused_other": {
+    "message": "已保存 — $COUNT$ 条规则。StampStack 暂停期间不会生效。",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "12"
+      }
+    }
+  },
+  "options_custom_truncated": {
+    "message": "内容过长，最后几行未保存。"
+  },
   "options_dark_mode_paid": {
     "message": "深色模式（付费）"
+  },
+  "options_dark_override_host": {
+    "message": "深色模式覆盖设置的主机名"
   },
   "options_dev_unlock_applied": {
     "message": "已应用开发解锁（仅限未打包版本）。"
@@ -189,6 +249,9 @@
   "options_import_failed": {
     "message": "导入失败。"
   },
+  "options_import_filters_truncated": {
+    "message": "你的过滤规则超出了 StampStack 的长度上限，最后几行未导入。"
+  },
   "options_import_settings": {
     "message": "导入设置…"
   },
@@ -225,8 +288,14 @@
       }
     }
   },
+  "options_license_refresh_failed": {
+    "message": "无法刷新授权。请重试。"
+  },
   "options_license_refresh_hint": {
     "message": "联网时授权会从 ExtensionPay 刷新。离线宽限期最长 14 天。"
+  },
+  "options_license_refresh_unreachable": {
+    "message": "无法连接 ExtensionPay，这里显示的是已保存的授权。请联网后重试。"
   },
   "options_license_unavailable_hint": {
     "message": "此版本无法购买 — 请从 Chrome 应用商店更新 StampStack。"
@@ -300,6 +369,15 @@
       }
     }
   },
+  "options_list_paused": {
+    "message": "$COUNT$ 条网络规则 · 已暂停 — StampStack 恢复后会重新加载",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "54,522"
+      }
+    }
+  },
   "options_list_rule_count": {
     "message": "$COUNT$ 条网络规则 · 元素隐藏跟随此开关",
     "placeholders": {
@@ -308,6 +386,18 @@
         "example": "120,377"
       }
     }
+  },
+  "options_list_toggle_failed": {
+    "message": "无法更改“$TITLE$”。请重试。",
+    "placeholders": {
+      "title": {
+        "content": "$1",
+        "example": "EasyList"
+      }
+    }
+  },
+  "options_load_failed": {
+    "message": "无法加载。请重新加载页面后重试。"
   },
   "options_loading": {
     "message": "加载中…"
@@ -336,8 +426,14 @@
   "options_paid_sponsored_feed_tiles_and_in_player": {
     "message": "推广/“赞助”信息流卡片和播放器内广告界面"
   },
+  "options_paused_banner": {
+    "message": "StampStack 已全局暂停，目前不拦截任何内容。可通过工具栏按钮重新开启。"
+  },
   "options_per_site_overrides": {
     "message": "按站点覆盖设置"
+  },
+  "options_privacy": {
+    "message": "隐私"
   },
   "options_refresh_license": {
     "message": "刷新授权"
@@ -348,8 +444,20 @@
   "options_remove": {
     "message": "移除"
   },
+  "options_remove_site_rule": {
+    "message": "移除 $HOST$ 的规则",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
+  },
   "options_requests_blocked": {
     "message": "已拦截请求"
+  },
+  "options_restore_unavailable": {
+    "message": "无法打开恢复购买页面。请检查网络连接后重试。"
   },
   "options_rule": {
     "message": "规则"
@@ -360,8 +468,44 @@
   "options_save_filters": {
     "message": "保存过滤规则"
   },
+  "options_setting_not_saved": {
+    "message": "此更改未保存。请重试。"
+  },
   "options_settings_imported": {
     "message": "设置已导入。"
+  },
+  "options_settings_imported_ignored": {
+    "message": "设置已导入。以下项目因文件中的值类型不正确而保持不变：$FIELDS$。",
+    "placeholders": {
+      "fields": {
+        "content": "$1",
+        "example": "allowlist, siteFixes"
+      }
+    }
+  },
+  "options_site_rule_add_failed": {
+    "message": "“$HOST$”未保存。请重试。",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
+  },
+  "options_site_rule_covered_by": {
+    "message": "同时受 $HOST$ 的规则影响",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
+  },
+  "options_site_rule_exact_scope": {
+    "message": "仅此地址"
+  },
+  "options_site_rule_host": {
+    "message": "站点主机名"
   },
   "options_site_rule_invalid": {
     "message": "无法为“$HOST$”添加站点规则。请输入网站名称（如 example.com）或完整的 IP 地址（如 192.168.1.1）。",
@@ -374,6 +518,15 @@
   },
   "options_site_rule_not_applied": {
     "message": "Chrome 未接受此更改，“$HOST$”仍在拦截。未保存任何内容，请重试。",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
+  },
+  "options_site_rule_remove_failed": {
+    "message": "无法移除“$HOST$”的规则。请重试。",
     "placeholders": {
       "host": {
         "content": "$1",
@@ -474,8 +627,44 @@
   "options_youtube_intro": {
     "message": "YouTube 的额外控制。隐藏推广视频会移除信息流中的付费卡片并清除播放器广告数据。拦截 Shorts 会隐藏 Shorts 版块并离开 /shorts/ 页面。SponsorBlock 使用 sponsor.ajay.app 的社区数据库跳过视频中的赞助片段。"
   },
-  "popup_alt": {
-    "message": "Alt"
+  "picker_click_to_close": {
+    "message": "点击或按 Esc 关闭。"
+  },
+  "picker_hiding_off": {
+    "message": "此站点的元素隐藏已关闭（已暂停、已加入白名单或处于修复步骤），选中的元素不会被隐藏。"
+  },
+  "picker_hint_cancel": {
+    "message": "取消"
+  },
+  "picker_hint_click": {
+    "message": "点击即可隐藏"
+  },
+  "picker_hint_widen": {
+    "message": "扩大或缩小范围"
+  },
+  "picker_host_refused": {
+    "message": "无法为此地址保存过滤规则。"
+  },
+  "picker_match_many": {
+    "message": "$COUNT$ 个匹配",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "3"
+      }
+    }
+  },
+  "picker_match_one": {
+    "message": "1 个匹配"
+  },
+  "picker_refuse_structural": {
+    "message": "这里没有可以可靠定位的内容 — 按 ↑ 选择外面的方框。"
+  },
+  "picker_save_failed": {
+    "message": "未保存："
+  },
+  "picker_saving": {
+    "message": "正在保存…"
   },
   "popup_block_on_this_site": {
     "message": "在此站点拦截"
@@ -503,6 +692,12 @@
         "example": "example.com"
       }
     }
+  },
+  "popup_blocking_on_fix_cosmetics": {
+    "message": "拦截已开启 · 此处元素隐藏已关闭"
+  },
+  "popup_blocking_on_fix_injection": {
+    "message": "拦截已开启 · 此处元素隐藏和脚本补丁已关闭"
   },
   "popup_blocking_on_this_site": {
     "message": "此站点拦截已开启"
@@ -563,7 +758,7 @@
     "message": "无法结账。请试试恢复购买，或打开设置。"
   },
   "popup_checkout_unavailable_unpacked": {
-    "message": "无法结账 — 请用开发解锁，或在设置中填写 ExtensionPay id。"
+    "message": "无法结账 — 请用开发解锁，或在 extpay-config.local.ts 中设置 ExtensionPay id 后重新构建。"
   },
   "popup_copies_a_draft_when_possible_and_opens": {
     "message": "会尽量复制草稿，并在有邮件应用时打开。包含站点名称和你的 StampStack 设置 — 不含页面网址或内容。"
@@ -610,6 +805,15 @@
   "popup_dark_summary_unavailable": {
     "message": "此处不可用"
   },
+  "popup_dark_upsell": {
+    "message": "用智能的哑光深色主题把任何页面变暗。一次性 $PRICE$ 解锁 — 与广告拦截分开。重新安装了？请用收据里的邮箱“恢复购买”。",
+    "placeholders": {
+      "price": {
+        "content": "$1",
+        "example": "$2"
+      }
+    }
+  },
   "popup_details": {
     "message": "详情"
   },
@@ -625,6 +829,21 @@
   "popup_enable_on_all_sites": {
     "message": "在所有站点启用"
   },
+  "popup_error_network": {
+    "message": "无法连接支付服务。请检查网络连接后重试。"
+  },
+  "popup_error_not_export": {
+    "message": "该文件不是 StampStack 的设置导出文件。"
+  },
+  "popup_error_not_json": {
+    "message": "该文件不是有效的 JSON。"
+  },
+  "popup_error_provider": {
+    "message": "支付服务返回了错误。请稍后重试。"
+  },
+  "popup_error_unconfigured": {
+    "message": "此版本无法购买。"
+  },
   "popup_everything_is_on_for_this_site": {
     "message": "此站点的所有功能都已开启。"
   },
@@ -634,8 +853,17 @@
   "popup_hide": {
     "message": "隐藏"
   },
+  "popup_hide_an_element": {
+    "message": "隐藏元素"
+  },
   "popup_hide_promoted_videos": {
     "message": "隐藏推广视频"
+  },
+  "popup_incognito_note": {
+    "message": "在此无痕窗口中设置的开关会被保存，并同样适用于普通窗口。"
+  },
+  "popup_load_failed": {
+    "message": "无法连接 StampStack。请关闭此面板后重新打开。"
   },
   "popup_not_available_on_this_page": {
     "message": "此页面不可用"
@@ -646,6 +874,9 @@
   "popup_pause_everywhere": {
     "message": "全局暂停"
   },
+  "popup_pause_failed": {
+    "message": "无法更改暂停状态。请重试。"
+  },
   "popup_pause_stampstack_everywhere": {
     "message": "在所有站点暂停 StampStack"
   },
@@ -654,6 +885,18 @@
   },
   "popup_paused_no_rules_active": {
     "message": "已暂停 — 没有规则生效"
+  },
+  "popup_pick_unavailable_allowlisted": {
+    "message": "此站点的拦截已关闭，被隐藏的元素会重新出现。"
+  },
+  "popup_pick_unavailable_fix": {
+    "message": "此处元素隐藏已关闭，选中的元素在下次加载时会重新出现。撤销修复步骤后才能使用选择器。"
+  },
+  "popup_pick_unavailable_host": {
+    "message": "元素选择器无法为此地址保存规则。"
+  },
+  "popup_pick_unavailable_paused": {
+    "message": "StampStack 已暂停，被隐藏的元素会重新出现。"
   },
   "popup_pick_which_segment_types_to_skip_in": {
     "message": "在设置中选择要跳过的片段类型。"
@@ -667,6 +910,9 @@
   "popup_reload_the_page_to_apply_this": {
     "message": "重新加载页面以应用。"
   },
+  "popup_repair_failed": {
+    "message": "操作未成功。请重试。"
+  },
   "popup_repair_hint_allowlist": {
     "message": "最后手段 — 此站点的广告和跟踪器会回来。"
   },
@@ -675,6 +921,15 @@
   },
   "popup_repair_hint_injection": {
     "message": "修复被脚本补丁弄坏的播放器和登录。"
+  },
+  "popup_repair_inherited": {
+    "message": "此设置来自 $HOST$ 的规则。",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
   },
   "popup_repair_next_allowlist": {
     "message": "关闭此站点的拦截"
@@ -685,6 +940,9 @@
   "popup_repair_next_injection": {
     "message": "同时停止在此运行脚本补丁"
   },
+  "popup_repair_no_effect": {
+    "message": "此站点没有任何变化。请重试，或在下方告诉开发者。"
+  },
   "popup_repair_state_allowlisted": {
     "message": "此站点的拦截已关闭 — 此处不做任何过滤。"
   },
@@ -692,10 +950,22 @@
     "message": "此处元素隐藏已关闭。广告拦截和脚本补丁仍在生效。"
   },
   "popup_repair_state_injection": {
-    "message": "此处元素隐藏和脚本补丁已关闭。广告仍会被拦截。"
+    "message": "此处元素隐藏和脚本补丁已关闭。网络拦截仍在生效。"
+  },
+  "popup_repair_state_injection_youtube": {
+    "message": "此处元素隐藏和脚本补丁已关闭，YouTube 视频广告防护也随之关闭。其他网络拦截仍在生效。"
+  },
+  "popup_repair_state_unsupported_host": {
+    "message": "无法为 $HOST$ 保存修复步骤。你仍然可以告诉开发者。",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
   },
   "popup_report_ad_slot_one": {
-    "message": "已隐藏 $COUNT$ 个广告位。",
+    "message": "此站点的专用规则已隐藏 $COUNT$ 个广告位。",
     "placeholders": {
       "count": {
         "content": "$1",
@@ -704,7 +974,7 @@
     }
   },
   "popup_report_ad_slots_many": {
-    "message": "已隐藏 $COUNT$ 个广告位。",
+    "message": "此站点的专用规则已隐藏 $COUNT$ 个广告位。",
     "placeholders": {
       "count": {
         "content": "$1",
@@ -744,6 +1014,9 @@
   },
   "popup_report_state_blocked": {
     "message": "已拦截"
+  },
+  "popup_report_state_partial": {
+    "message": "部分拦截"
   },
   "popup_report_state_unlisted": {
     "message": "不在我们的列表中"
@@ -801,6 +1074,9 @@
   "popup_restore_unavailable": {
     "message": "无法恢复。请打开设置 → 恢复购买。"
   },
+  "popup_restricted_page": {
+    "message": "Chrome 不允许扩展在 Chrome 应用商店页面上运行。"
+  },
   "popup_rules_active": {
     "message": "$COUNT$ 条拦截规则生效",
     "placeholders": {
@@ -819,20 +1095,50 @@
       }
     }
   },
+  "popup_setting_not_saved": {
+    "message": "此更改未保存。请重试。"
+  },
   "popup_settings": {
     "message": "设置"
   },
-  "popup_shift": {
-    "message": "Shift"
+  "popup_shortcut_tip": {
+    "message": "提示：按 $SHORTCUT$ 可直接启动元素选择器，无需打开此面板。",
+    "placeholders": {
+      "shortcut": {
+        "content": "$1",
+        "example": "Alt+Shift+X"
+      }
+    }
+  },
+  "popup_site_broken": {
+    "message": "网站出问题？"
   },
   "popup_site_toggle_failed": {
-    "message": "无法更改此站点 — 见设置"
+    "message": "无法更改此站点。请重试。"
   },
   "popup_site_toggle_not_applied_off": {
     "message": "Chrome 未接受此更改 — 仍在拦截"
   },
   "popup_site_toggle_not_applied_on": {
     "message": "Chrome 未接受此更改 — 拦截仍处于关闭状态"
+  },
+  "popup_site_toggle_unchanged_off": {
+    "message": "没有变化 — 此处拦截仍处于关闭状态。"
+  },
+  "popup_site_toggle_unchanged_on": {
+    "message": "没有变化 — 此处仍在拦截。"
+  },
+  "popup_site_unsupported_host": {
+    "message": "StampStack 无法为 $HOST$ 保存站点设置。如需在此停止拦截，请使用“全局暂停”。",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
+  },
+  "popup_site_unsupported_ipv6": {
+    "message": "站点设置不适用于 IPv6 地址。如需在此停止拦截，请使用“全局暂停”。"
   },
   "popup_skip_sponsor_segments": {
     "message": "跳过赞助片段"
@@ -852,11 +1158,26 @@
   "popup_this_page": {
     "message": "此页面"
   },
+  "popup_undo_for_host": {
+    "message": "撤销 — 为整个 $HOST$ 重新开启过滤",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
+  },
   "popup_undo_turn_filtering_back_on": {
     "message": "撤销 — 重新开启过滤"
   },
   "popup_youtube": {
     "message": "YouTube"
+  },
+  "popup_youtube_off_here_note": {
+    "message": "此站点的拦截已关闭，这些功能在此都不会运行。"
+  },
+  "popup_youtube_summary_off_here": {
+    "message": "此站点已关闭"
   },
   "popup_youtube_summary_on": {
     "message": "$COUNT$/3 已开启",
@@ -866,5 +1187,8 @@
         "example": "2"
       }
     }
+  },
+  "ui_lang": {
+    "message": "zh-CN"
   }
 }

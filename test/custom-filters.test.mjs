@@ -127,8 +127,90 @@ test('a global rule applies everywhere', () => {
 
 test('an exception cancels the user own hide for that host only', () => {
   const text = ['a.com,b.com##.ad', 'a.com#@#.ad'].join('\n');
-  assert.deepEqual(mod.customCosmeticsFor(text, 'a.com'), { hide: [], unhide: ['.ad'] });
-  assert.deepEqual(mod.customCosmeticsFor(text, 'b.com'), { hide: ['.ad'], unhide: [] });
+  assert.deepEqual(mod.customCosmeticsFor(text, 'a.com'), { hide: [], unhide: ['.ad'], procedural: [] });
+  assert.deepEqual(mod.customCosmeticsFor(text, 'b.com'), { hide: ['.ad'], unhide: [], procedural: [] });
+});
+
+test('a selector with an unclosed quote, bracket or paren, or a trailing backslash, is an error', () => {
+  // Each of these passes querySelector (it closes them at end of input) and, joined into the
+  // page's stylesheet, swallowed every hide after it.
+  for (const sel of ['div[title="Sponsored', 'a[href*="promo"', 'div:not(.foo', '.keep\\', 'a[x]]', 'div)']) {
+    const { filters, errors } = mod.parseCustomFilters(`example.com##${sel}`);
+    assert.equal(filters.length, 0, sel);
+    assert.equal(errors.length, 1, sel);
+  }
+  // Escapes and quoted brackets are fine.
+  const ok = mod.parseCustomFilters('example.com##a[title="x ] ("]\nexample.com##.a\\:b');
+  assert.deepEqual(ok.errors, []);
+  assert.equal(ok.filters.length, 2);
+});
+
+test('procedural and action rules are routed to the procedural engine, not counted as dead CSS', () => {
+  const text = [
+    'example.com##.post:has-text(Sponsored)',
+    'example.com#?#div:has-text(Ad)',
+    'example.com##.hero:style(margin-top: 0 !important)',
+    'example.com##.x:has(.y:has-text(z))',
+    'example.com##.gone:remove()',
+  ].join('\n');
+  const { filters, errors } = mod.parseCustomFilters(text);
+  assert.deepEqual(errors, []);
+  assert.deepEqual(filters.map((f) => !!f.procedural), [true, true, true, true, true]);
+  const out = mod.customCosmeticsFor(text, 'www.example.com');
+  assert.deepEqual(out.hide, []);
+  assert.deepEqual(
+    out.procedural.map((p) => p.expr),
+    [
+      '.post:has-text(Sponsored)',
+      'div:has-text(Ad)',
+      '.hero:style(margin-top: 0 !important)',
+      '.x:has(.y:has-text(z))',
+      '.gone:remove()',
+    ],
+  );
+  // A plain :has() is CSS the browser applies itself.
+  assert.deepEqual(mod.customCosmeticsFor('example.com##.x:has(> .y)', 'example.com').hide, ['.x:has(> .y)']);
+  // A procedural exception cancels the identical procedural hide.
+  const cancelled = mod.customCosmeticsFor(
+    'example.com##.post:has-text(Sponsored)\nexample.com#@#.post:has-text(Sponsored)',
+    'example.com',
+  );
+  assert.deepEqual(cancelled.procedural, []);
+});
+
+test('rules that can never apply are errors with a reason', () => {
+  const cases = [
+    ['example.com##+js(set, foo, 1)', /\+js/],
+    ['example.com##^script:has-text(ad)', /HTML/],
+    ['example.com##.x:style(background: url(https://t.test/p.gif))', /resources/],
+    ['example.com##.x:style(nonsense)', /declaration/],
+    ['example.com##.x:others()', /not support/],
+    ['example.com##.x:remove-class()', /needs a name/],
+    ['example.com##.x:style(color: red):has-text(y)', /last/],
+    ['example.com#$#body { color: red }', /AdGuard/],
+    ['example.com,~a.example.com##.x', /~/],
+  ];
+  for (const [line, reason] of cases) {
+    const { filters, errors } = mod.parseCustomFilters(line);
+    assert.equal(filters.length, 0, line);
+    assert.match(errors[0]?.reason ?? '', reason, line);
+  }
+});
+
+test('entity, single-label, IPv6 and Unicode hosts are accepted and match', () => {
+  const { filters, errors } = mod.parseCustomFilters(
+    ['google.*##.ad', 'localhost##.ad', 'intranet##.ad', '[::1]##.ad', 'bücher.de##.ad'].join('\n'),
+  );
+  assert.deepEqual(errors, []);
+  assert.deepEqual(
+    filters.map((f) => f.domains[0]),
+    ['google.*', 'localhost', 'intranet', '[::1]', 'xn--bcher-kva.de'],
+  );
+  assert.deepEqual(mod.customCosmeticsFor('google.*##.ad', 'www.google.co.uk').hide, ['.ad']);
+  assert.deepEqual(mod.customCosmeticsFor('google.*##.ad', 'google.de').hide, ['.ad']);
+  assert.deepEqual(mod.customCosmeticsFor('google.*##.ad', 'notgoogle.com').hide, []);
+  assert.deepEqual(mod.customCosmeticsFor('localhost##.ad', 'localhost').hide, ['.ad']);
+  assert.deepEqual(mod.customCosmeticsFor('bücher.de##.ad', 'xn--bcher-kva.de').hide, ['.ad']);
 });
 
 test('cosmetics are deduped and scoped per host', () => {
@@ -151,4 +233,26 @@ test('appendFilterLine adds, skips exact duplicates, and keeps a trailing newlin
 test('appendFilterLine does not lose the user comments', () => {
   const text = mod.appendFilterLine('! my rules\nexample.com##.a\n', 'example.com##.b');
   assert.equal(text, '! my rules\nexample.com##.a\nexample.com##.b\n');
+});
+
+test('the text is parsed once, not on every page that asks (P3)', () => {
+  // Every frame of every page asks the worker for its cosmetics; the text changes only on edits.
+  const lines = [];
+  for (let i = 0; i < 1500; i++) {
+    lines.push(`site${i}.example##.ad-${i}`, `site${i}.example##.card-${i}:has-text(Sponsored ${i})`);
+  }
+  const text = lines.join('\n');
+  const time = (fn) => {
+    const t0 = performance.now();
+    fn();
+    return performance.now() - t0;
+  };
+  const cold = time(() => mod.customCosmeticsFor(`${text}\n! first`, 'site7.example'));
+  const warm = time(() => {
+    for (let i = 0; i < 40; i++) mod.customCosmeticsFor(`${text}\n! first`, `site${i}.example`);
+  });
+  assert.ok(warm < cold * 8, `40 lookups took ${warm.toFixed(1)} ms, one parse ${cold.toFixed(1)} ms`);
+  // An edit is seen at once.
+  assert.deepEqual(mod.customCosmeticsFor(`${text}\nsite7.example##.new`, 'site7.example').hide, ['.ad-7', '.new']);
+  assert.deepEqual(mod.customCosmeticsFor(text, 'site7.example').hide, ['.ad-7']);
 });

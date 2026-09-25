@@ -207,7 +207,7 @@ function splitPathException(entry: string): { host: string; path: string } | nul
 export function pathExceptionMatchPatterns(entry: string): string[] {
   const parts = splitPathException(entry);
   if (!parts) return [];
-  return allowlistMatchPatterns(parts.host).map((p) => `${p.slice(0, -2)}${parts.path}`);
+  return exceptionHostMatchPatterns(parts.host).map((p) => `${p.slice(0, -2)}${parts.path}`);
 }
 
 /** Does a page-scoped exception entry cover this host and path+query (`/search?q=x`)? */
@@ -217,7 +217,7 @@ export function pathExceptionMatches(
   pathAndQuery: string,
 ): boolean {
   const parts = splitPathException(entry);
-  if (!parts || !hostMatchesDomain(hostname, parts.host)) return false;
+  if (!parts || !filterDomainMatches(hostname, parts.host)) return false;
   const body = parts.path
     .split('*')
     .map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
@@ -236,6 +236,21 @@ export function exactHostMatchPatterns(host: string): string[] {
   return [`*://${h}/*`, `*://www.${h}/*`];
 }
 
+/**
+ * Match patterns for a host named by a filter-list exception (`@@||www.youtube.com^$generichide`):
+ * the host and its subdomains, as the filter says. Unlike allowlistMatchPatterns the host is
+ * kept verbatim: uBO scopes a `www.` exception to www and below, and folding it into the
+ * registrable domain switched generic hiding off on m., music. and studio.youtube.com too.
+ */
+export function exceptionHostMatchPatterns(host: string): string[] {
+  const h = host.trim().toLowerCase();
+  if (!isValidMatchPatternHost(h)) return [];
+  if (isIPv4Host(h)) return [`*://${h}/*`];
+  if (h === 'localhost') return [`*://${h}/*`, `*://*.${h}/*`];
+  if (isPublicSuffixHost(h)) return [];
+  return [`*://${h}/*`, `*://*.${h}/*`];
+}
+
 /** Return the hostname and each of its parent domains, most specific first. */
 export function domainSuffixes(hostname: string): string[] {
   const host = normalizeHostname(hostname);
@@ -251,57 +266,116 @@ export function domainSuffixes(hostname: string): string[] {
   return out;
 }
 
-/**
- * Entity domain `example.*` — match when the registrable name (hostname minus a
- * 1-label TLD, or a known 2-label suffix like `co.uk`) equals the entity label.
- */
-function hostMatchesEntityDomain(hostname: string, entity: string): boolean {
-  if (!entity || entity.includes('*') || entity.includes('.')) return false;
-  const parts = hostname.split('.').filter(Boolean);
-  if (parts.length < 2) return false;
-  // example.com / www.example.org — entity is the label before a single-label TLD.
-  if (parts[parts.length - 2] === entity) return true;
-  // example.co.uk — entity before a known multi-part public suffix.
-  if (
-    parts.length >= 3 &&
-    MULTI_TLD_SECONDS.has(parts[parts.length - 2]) &&
-    parts[parts.length - 3] === entity
-  ) {
-    return true;
-  }
-  return false;
+/** A uBO regex hostname in a filter's domain list (`/^www\.site\d+\.xyz$/`), kept verbatim. */
+export function isRegexDomain(domain: string): boolean {
+  return domain.length > 2 && domain.startsWith('/') && domain.endsWith('/');
 }
 
-/** Entity keys (`example.*`) that could apply to this hostname for hideSpecific lookup. */
-export function entityDomainKeys(hostname: string): string[] {
-  const parts = normalizeHostname(hostname).split('.').filter(Boolean);
-  const keys: string[] = [];
-  if (parts.length >= 2) keys.push(`${parts[parts.length - 2]}.*`);
-  if (parts.length >= 3 && MULTI_TLD_SECONDS.has(parts[parts.length - 2])) {
-    keys.push(`${parts[parts.length - 3]}.*`);
+const regexDomainCache = new Map<string, RegExp | null>();
+
+/** uBO tests a regex hostname against the whole hostname, unanchored unless the regex is. */
+function regexDomainMatches(host: string, domain: string): boolean {
+  let re = regexDomainCache.get(domain);
+  if (re === undefined) {
+    try {
+      re = new RegExp(domain.slice(1, -1));
+    } catch {
+      re = null;
+    }
+    // Filter domains are a fixed, small set; the bound only guards against a runaway caller.
+    if (regexDomainCache.size > 512) regexDomainCache.clear();
+    regexDomainCache.set(domain, re);
   }
+  return re !== null && re.test(host);
+}
+
+// Matching one page against many rules asks for the same host's keys over and over. The
+// returned array is shared: callers must not mutate it.
+let lastEntityHost = '';
+let lastEntityKeys: string[] = [];
+
+/**
+ * Entity keys (`example.*`, `www.example.*`) a filter for this hostname can be filed under: each
+ * label suffix of the hostname once its public suffix is removed, as uBO derives them, so
+ * EasyList's `www.google.*` and `read.amazon.*` rules reach their pages. Without a PSL both
+ * readings of an `x.co.uk`-style ending are tried. A `www.` is never stripped: `www.google.*`
+ * is not `google.*` (News, Mail and Maps are other sites). IP addresses have no entity.
+ */
+export function entityDomainKeys(hostname: string): string[] {
+  const host = hostname.trim().toLowerCase();
+  if (host === lastEntityHost) return lastEntityKeys;
+  const parts = host.split('.').filter(Boolean);
+  const keys: string[] = [];
+  const addLabelsBefore = (end: number): void => {
+    for (let i = 0; i < end; i++) {
+      const key = `${parts.slice(i, end).join('.')}.*`;
+      if (!keys.includes(key)) keys.push(key);
+    }
+  };
+  if (!isIPv4Host(host)) {
+    if (parts.length >= 3 && MULTI_TLD_SECONDS.has(parts[parts.length - 2])) {
+      addLabelsBefore(parts.length - 2);
+    }
+    if (parts.length >= 2) addLabelsBefore(parts.length - 1);
+  }
+  lastEntityHost = host;
+  lastEntityKeys = keys;
   return keys;
 }
 
-/** Does `hostname` fall under `domain` (equal or a subdomain of it)? */
-export function hostMatchesDomain(hostname: string, domain: string): boolean {
-  const host = normalizeHostname(hostname);
-  const dom = normalizeHostname(domain);
-  if (dom.endsWith('.*')) {
-    return hostMatchesEntityDomain(host, dom.slice(0, -2));
-  }
+/**
+ * Every key a filter domain can take that matches this hostname: the hostname and each parent
+ * domain down to the TLD (uBO's `pl#@#…` targets a whole ccTLD), then the entity keys.
+ * `filterDomainMatches(host, d)` holds for a non-regex `d` exactly when `d` is in this list,
+ * so a rule index keyed by domain can be probed with it instead of testing every rule.
+ */
+export function hostLookupKeys(hostname: string): string[] {
+  const host = hostname.trim().toLowerCase();
+  const parts = host.split('.').filter(Boolean);
+  const keys: string[] = [];
+  for (let i = 0; i < parts.length; i++) keys.push(parts.slice(i).join('.'));
+  return [...keys, ...entityDomainKeys(host)];
+}
+
+/**
+ * Does `hostname` fall under a domain a filter list names (equal or a subdomain of it, an
+ * entity `name.*` / `sub.name.*`, or a `/regex/` hostname)?
+ *
+ * The filter's domain is compared as written, as uBO does: `www.yahoo.com##+js(…)` is for
+ * www.yahoo.com and its subdomains, not mail.yahoo.com, and a `www.wp.pl` exception does not
+ * cancel rules on sportowefakty.wp.pl. Folding `www.` is for the user's own entries only
+ * (hostMatchesDomain).
+ */
+export function filterDomainMatches(hostname: string, domain: string): boolean {
+  const host = hostname.trim().toLowerCase();
+  if (isRegexDomain(domain)) return regexDomainMatches(host, domain);
+  const dom = domain.trim().toLowerCase();
+  if (!dom || !host) return false;
+  if (dom.endsWith('.*')) return entityDomainKeys(host).includes(dom);
   if (host === dom) return true;
   return host.endsWith('.' + dom);
 }
 
-/** True if hostname is covered by an include/exclude domain spec (uBO semantics). */
+/**
+ * Does `hostname` fall under a host the user named (allowlist, repair ladder): equal or a
+ * subdomain of it, both sides www-folded, so an entry saved from www.example.com covers the site.
+ */
+export function hostMatchesDomain(hostname: string, domain: string): boolean {
+  const host = normalizeHostname(hostname);
+  const dom = normalizeHostname(domain);
+  if (dom.endsWith('.*')) return filterDomainMatches(host, dom);
+  if (host === dom) return true;
+  return host.endsWith('.' + dom);
+}
+
+/** True if hostname is covered by a filter's include/exclude domain spec (uBO semantics). */
 export function domainSpecMatches(
   hostname: string,
   spec: { include: string[]; exclude: string[] },
 ): boolean {
-  if (spec.exclude.some((d) => hostMatchesDomain(hostname, d))) return false;
+  if (spec.exclude.some((d) => filterDomainMatches(hostname, d))) return false;
   if (spec.include.length === 0) return true; // generic
-  return spec.include.some((d) => hostMatchesDomain(hostname, d));
+  return spec.include.some((d) => filterDomainMatches(hostname, d));
 }
 
 /** Is this hostname on the user allowlist (exact or subdomain of an entry)? */
@@ -313,7 +387,7 @@ export function isAllowlistedHost(hostname: string, allowlist: string[]): boolea
   });
 }
 
-/** True if any exception host matches this page hostname. */
+/** True if any filter-list exception host (`@@||host^$generichide`) matches this page hostname. */
 export function matchesExceptionHost(hostname: string, hosts: string[]): boolean {
-  return hosts.some((h) => hostMatchesDomain(hostname, h));
+  return hosts.some((h) => filterDomainMatches(hostname, h));
 }

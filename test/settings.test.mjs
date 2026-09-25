@@ -178,3 +178,12 @@ test('should apply empty custom filters when the export contains them', () => {
   const next = mod.applyImportedSettings(current, { customFilters: '' });
   assert.equal(next.customFilters, '');
 });
+
+test('over-long stored filters are cut at a whole line, never mid-rule', () => {
+  const line = 'news.example##.ad-slot-with-a-long-class-name\n';
+  const text = line.repeat(Math.ceil(100_000 / line.length) + 5);
+  const s = mod.mergeSettings({ customFilters: text });
+  assert.ok(s.customFilters.length <= 100_000);
+  assert.ok(s.customFilters.endsWith('\n'));
+  assert.ok(s.customFilters.split('\n').slice(0, -1).every((l) => l === line.trim()), 'a rule was cut in half');
+});

@@ -42,6 +42,15 @@ for (const page of ['popup', 'options']) {
     assert.deepEqual(missing, [], `${page}.ts reads ids absent from ${page}.html`);
   });
 
+  test(`${page}: aria-controls names an element that exists`, () => {
+    // A dangling aria-controls is silent too: the disclosure still works for a mouse, and a
+    // screen reader just loses the link to what it opens.
+    const html = readFileSync(join(ROOT, 'src', page, `${page}.html`), 'utf8');
+    const have = definedIds(html);
+    const targets = [...html.matchAll(/\baria-controls="([^"]+)"/g)].flatMap((m) => m[1].split(/\s+/));
+    assert.deepEqual(targets.filter((id) => !have.has(id)), []);
+  });
+
   test(`${page}: markup has no ids the script never reads`, () => {
     // Not a correctness bug, but a dangling id is almost always a half-finished rename or a
     // control that lost its handler — both worth seeing.

@@ -11,308 +11,16 @@
 // cosmetic excludes — none of which had coverage before. It is also a standing reminder that a
 // green service-worker suite says nothing about whether the UI can reach it.
 //
-// The chrome.scripting fake follows Chrome where it matters (REVIEW_2026-09-24 B3/B4): it
-// honors `{ids}`, rejects a whole call over one unknown id or one pattern Chrome cannot parse,
-// and treats updateContentScripts as a patch of a live id. A lenient fake is why an invalid
-// exclude pattern taking down generic hiding for every zh-* install went unnoticed.
+// The fake chrome and the worker loader are shared: test/helpers/sw-harness.mjs.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { build } from 'esbuild';
-import { mkdtempSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
-
-// license.ts imports extpay, which does not resolve on platform:'neutral'.
-const stubDir = mkdtempSync(join(tmpdir(), 'stampstack-extpay-'));
-const extpayStub = join(stubDir, 'extpay.js');
-writeFileSync(
-  extpayStub,
-  'export default function ExtPay(){return{getUser:async()=>({paid:false}),' +
-    'onPaid:{addListener(){}},openPaymentPage(){},openLoginPage(){},startBackground(){}};}\n',
-);
-
-const bundle = (
-  await build({
-    entryPoints: ['src/background/service-worker.ts'],
-    bundle: true,
-    format: 'esm',
-    write: false,
-    platform: 'neutral',
-    alias: { extpay: extpayStub },
-    logLevel: 'silent',
-  })
-).outputFiles[0].text;
-
-let moduleSeq = 0;
-
-const noopEvent = () => ({ addListener() {}, removeListener() {} });
-
-/**
- * The part of Chrome's match-pattern parser (extensions/common/url_pattern.cc) that decides
- * whether a host is acceptable. Host canonicalization is the WHATWG URL parser's, which applies
- * Chrome's rule that a host ending in a number is IPv4: `www.10.0.0` fails, and so does the
- * whole registerContentScripts call that carries it. test/hostname-patterns.test.mjs holds the
- * full model and checks it against what a real Chromium accepted.
- */
-function patternIsValid(pattern) {
-  if (pattern === '<all_urls>') return true;
-  const m = /^(\*|https?|file|ftp):\/\/([^/]*)\//.exec(pattern);
-  if (!m) return false;
-  let host = m[2].replace(/:(\*|\d+)$/, '');
-  if (host === '*') return true;
-  if (host.startsWith('*.')) host = host.slice(2);
-  if (!host || host.includes('*') || /[\u0000-\u0020#%/:<>?@\\^|\u007f]/.test(host)) return false;
-  try {
-    return !!new URL(`http://${host}/`).hostname;
-  } catch {
-    return false;
-  }
-}
-
-function assertScriptsValid(scripts) {
-  for (const s of scripts) {
-    for (const key of ['matches', 'excludeMatches']) {
-      (s[key] ?? []).forEach((p, i) => {
-        if (!patternIsValid(p)) {
-          const field = key === 'matches' ? 'matches' : 'exclude_matches';
-          throw new Error(
-            `Script with ID '${s.id}' has invalid value for ${field}[${i}]: Invalid host.`,
-          );
-        }
-      });
-    }
-  }
-}
-
-/** What Chrome said when a long Windows profile path broke updateDynamicRules (diagnosis C11). */
-const DNR_INTERNAL_ERROR = 'Internal error while updating dynamic rules.';
-
-/**
- * Load a fresh service worker against a fake chrome.
- * `failRegistration` simulates chrome.scripting rejecting every payload; the returned
- * `failNext(ids)` rejects only the next payload for each listed script id.
- * `refuseDynamicRules` makes every updateDynamicRules call reject, as Chrome does, without
- * changing anything; the returned `refuseDynamicRules(bool)` switches that later.
- * `settings`, `dynamicRules` and `registered` seed state left behind by an earlier build.
- */
-async function bootServiceWorker({
-  host,
-  failRegistration = false,
-  refuseDynamicRules = false,
-  settings,
-  license,
-  dynamicRules: seedRules = [],
-  registered: seedScripts = [],
-  session: seedSession = {},
-}) {
-  const store = {};
-  const sessionStore = structuredClone(seedSession);
-  let fullReads = 0;
-  if (settings) store['stampstack.settings'] = settings;
-  if (license) store['stampstack.license'] = license;
-  let dynamicRules = seedRules.map((r) => structuredClone(r));
-  let registered = seedScripts.map((r) => structuredClone(r));
-  let enabledRulesets = [];
-  let listener = null;
-  const executed = [];
-  const registerLog = [];
-  let rejectNext = new Set();
-  let refuseDynamic = refuseDynamicRules;
-  // Every fake chrome call bumps this, so settle() can tell when the worker has gone quiet.
-  let activity = 0;
-  const rejectPayload = (scripts) => {
-    if (failRegistration) throw new Error('simulated: pattern batch rejected');
-    const hit = scripts.find((s) => rejectNext.has(s.id));
-    if (hit) {
-      rejectNext.delete(hit.id);
-      throw new Error(`simulated: Chrome rejected '${hit.id}'`);
-    }
-    assertScriptsValid(scripts);
-  };
-
-  const chrome = {
-    runtime: {
-      getManifest: () => ({ version: '0.0.0-test' }),
-      onMessage: { addListener: (fn) => (listener = fn) },
-      onInstalled: noopEvent(),
-      onStartup: noopEvent(),
-      id: 'test',
-    },
-    storage: {
-      local: {
-        get: async (k) => {
-          if (k == null) return { ...store };
-          const out = {};
-          for (const key of Array.isArray(k) ? k : [k]) if (key in store) out[key] = store[key];
-          return out;
-        },
-        set: async (o) => Object.assign(store, o),
-        remove: async (k) => {
-          for (const key of Array.isArray(k) ? k : [k]) delete store[key];
-        },
-      },
-      session: {
-        get: async (k) => {
-          activity++;
-          const out = {};
-          for (const key of Array.isArray(k) ? k : [k]) if (key in sessionStore) out[key] = structuredClone(sessionStore[key]);
-          return out;
-        },
-        set: async (o) => {
-          activity++;
-          Object.assign(sessionStore, structuredClone(o));
-        },
-        remove: async (k) => {
-          activity++;
-          for (const key of Array.isArray(k) ? k : [k]) delete sessionStore[key];
-        },
-      },
-      onChanged: noopEvent(),
-    },
-    declarativeNetRequest: {
-      DYNAMIC: 'dynamic',
-      SESSION: 'session',
-      getDynamicRules: async () => {
-        activity++;
-        return dynamicRules.map((r) => structuredClone(r));
-      },
-      updateDynamicRules: async ({ removeRuleIds = [], addRules = [] }) => {
-        activity++;
-        // Chrome applies an update whole or not at all.
-        if (refuseDynamic) throw new Error(DNR_INTERNAL_ERROR);
-        dynamicRules = dynamicRules.filter((r) => !removeRuleIds.includes(r.id)).concat(addRules);
-      },
-      getEnabledRulesets: async () => enabledRulesets.slice(),
-      updateEnabledRulesets: async ({ enableRulesetIds = [], disableRulesetIds = [] }) => {
-        enabledRulesets = enabledRulesets
-          .filter((id) => !disableRulesetIds.includes(id))
-          .concat(enableRulesetIds.filter((id) => !enabledRulesets.includes(id)));
-      },
-    },
-    scripting: {
-      getRegisteredContentScripts: async ({ ids } = {}) => {
-        activity++;
-        if (!ids) fullReads++;
-        return registered
-          .filter((r) => !ids || ids.includes(r.id))
-          .map((r) => structuredClone(r));
-      },
-      registerContentScripts: async (s) => {
-        activity++;
-        registerLog.push(...s.map((n) => n.id));
-        rejectPayload(s);
-        for (const n of s) {
-          if (registered.some((r) => r.id === n.id)) {
-            throw new Error(`Duplicate script ID '${n.id}'`);
-          }
-        }
-        registered.push(...s.map((n) => structuredClone(n)));
-      },
-      unregisterContentScripts: async ({ ids } = {}) => {
-        activity++;
-        // All or nothing: one id that is not registered fails the whole call.
-        for (const id of ids ?? []) {
-          if (!registered.some((r) => r.id === id)) throw new Error(`Nonexistent script ID '${id}'`);
-        }
-        registered = ids ? registered.filter((r) => !ids.includes(r.id)) : [];
-      },
-      updateContentScripts: async (s) => {
-        activity++;
-        for (const n of s) {
-          if (!registered.some((r) => r.id === n.id)) {
-            throw new Error(`Script with ID '${n.id}' does not exist or is not fully registered`);
-          }
-        }
-        rejectPayload(s);
-        for (const n of s) {
-          const i = registered.findIndex((r) => r.id === n.id);
-          registered[i] = { ...registered[i], ...structuredClone(n) };
-        }
-      },
-      executeScript: async (details) => {
-        activity++;
-        executed.push(structuredClone(details));
-        return [];
-      },
-    },
-    tabs: {
-      query: async () => [{ id: 1, url: `https://${host}/a/page` }],
-      sendMessage: async () => null,
-      onRemoved: noopEvent(),
-      onUpdated: noopEvent(),
-    },
-    action: { setBadgeText: async () => {}, setBadgeBackgroundColor: async () => {} },
-    management: { getSelf: async () => ({ installType: 'normal' }) },
-    commands: { onCommand: noopEvent() },
-    webNavigation: { onBeforeNavigate: noopEvent() },
-  };
-
-  globalThis.chrome = chrome;
-  // Import from a real file, not a data: URL. These tests deliberately make the service worker
-  // log an error, and with a data: URL every frame of that stack trace embeds the whole ~4 MB
-  // base64 bundle. Locally that is merely ugly; on a CI runner the log writer stalls for half
-  // an hour on the multi-megabyte lines. A temp file keeps stack frames to a path.
-  // The unique filename is also what gives each test its own module instance.
-  const file = join(stubDir, `sw-${moduleSeq++}.mjs`);
-  writeFileSync(file, bundle);
-  await import(pathToFileURL(file).href);
-
-  assert.ok(listener, 'service worker registered no onMessage listener');
-  // The handlers read chrome.* when they run, not at import, so the fake has to be the live
-  // global for the whole call — not just while the module was loading.
-  const send = (msg, sender = {}) => {
-    globalThis.chrome = chrome;
-    return new Promise((resolve) => {
-      if (listener(msg, sender, resolve) !== true) resolve(undefined);
-    });
-  };
-
-  /** Wait until the worker has made no chrome call for several macrotask turns. */
-  const settle = async () => {
-    let seen = -1;
-    let quiet = 0;
-    for (let turns = 0; quiet < 10 && turns < 1000; turns++) {
-      globalThis.chrome = chrome;
-      await new Promise((r) => setTimeout(r, 0));
-      if (activity === seen) {
-        quiet++;
-      } else {
-        quiet = 0;
-        seen = activity;
-      }
-    }
-    assert.equal(quiet, 10, 'the service worker never went quiet');
-  };
-
-  return {
-    send,
-    settle,
-    settings: () => store['stampstack.settings'],
-    rules: () => dynamicRules,
-    script: (id) => registered.find((r) => r.id === id),
-    scripts: () => registered,
-    executed: () => executed,
-    registerLog: () => registerLog,
-    session: () => sessionStore,
-    fullReads: () => fullReads,
-    failNext: (ids) => (rejectNext = new Set(ids)),
-    refuseDynamicRules: (on) => (refuseDynamic = on),
-  };
-}
-
-/** Run `fn` with console.error captured; returns what was logged, one string per call. */
-async function capturingErrors(fn) {
-  const logged = [];
-  const origError = console.error;
-  console.error = (...args) => logged.push(args.map(String).join(' '));
-  try {
-    await fn();
-  } finally {
-    console.error = origError;
-  }
-  return logged;
-}
+import { readFileSync } from 'node:fs';
+import {
+  bootServiceWorker,
+  capturingErrors,
+  patternIsValid,
+  DNR_INTERNAL_ERROR,
+} from './helpers/sw-harness.mjs';
 
 const HOST = 'www.theguardian.com';
 
@@ -511,8 +219,8 @@ test('Options refuses a partial IP like 10.0.0, and generic hiding survives the 
   }
   await sw.settle();
 
-  assert.deepEqual(sw.settings().allowlist, []);
-  assert.deepEqual(sw.settings().siteFixes ?? {}, {});
+  assert.deepEqual(sw.settings()?.allowlist ?? [], []);
+  assert.deepEqual(sw.settings()?.siteFixes ?? {}, {});
   assert.equal(sw.rules().filter((r) => r.action?.type === 'allowAllRequests').length, 0);
   assert.ok(sw.script('quell-generic-cosmetic'), 'generic cosmetic registration was lost');
   assert.ok(sw.script('quell-scriptlets-youtube'), 'YouTube hooks registration was lost');
@@ -631,19 +339,30 @@ test('EasyList search-page exceptions exclude the results page, not the whole si
   assert.equal(excluded('https://yandex.com/maps/'), false);
   assert.deepEqual(excl.filter((p) => !patternIsValid(p)), []);
 
-  // google.* has no match pattern; the results page reverts generic hiding per page instead.
-  const frame = (url) => ({ frameId: 0, url, tab: { id: 1, url } });
+  // google.* has no match pattern; the results page reverts generic hiding per page instead,
+  // with the registered sheets' packaged revert twins rather than ~14,000 selectors.
+  const frame = (url, documentId) => ({ frameId: 0, url, documentId, tab: { id: 1, url } });
   const serp = await sw.send(
     { type: 'cosmetic:get', hostname: 'www.google.de' },
-    frame('https://www.google.de/search?q=schuhe'),
+    frame('https://www.google.de/search?q=schuhe', 'SERP'),
   );
   assert.equal(serp.disableGeneric, true);
-  assert.ok(serp.unhide.length > 1000, 'the generic set is reverted on the results page');
+  assert.deepEqual(serp.unhide, []);
+  await sw.settle();
+  const reverts = sw.script('quell-generic-cosmetic').css.map((f) => f.replace(/\.css$/, '.revert.css'));
+  assert.ok(reverts.length > 0);
+  assert.deepEqual(
+    sw.cssCalls().filter((c) => c.origin === 'AUTHOR'),
+    [{ op: 'insert', target: { tabId: 1, documentIds: ['SERP'] }, files: reverts, origin: 'AUTHOR' }],
+    'the generic set is reverted on the results page',
+  );
   const maps = await sw.send(
     { type: 'cosmetic:get', hostname: 'www.google.de' },
-    frame('https://www.google.de/maps'),
+    frame('https://www.google.de/maps', 'MAPS'),
   );
   assert.equal(maps.disableGeneric, false);
+  await sw.settle();
+  assert.equal(sw.cssCalls().filter((c) => c.target.documentIds[0] === 'MAPS' && c.origin === 'AUTHOR').length, 0);
 });
 
 test('a frame follows the switch of the page it is on, not its own host (B7)', async () => {
@@ -780,6 +499,15 @@ const partsOf = (s) =>
 /** The registration that carries worldfreeware.com, whose `aopr, require` the review tested. */
 const worldfreeware = (sw) =>
   shardScripts(sw).find((s) => s.matches.includes('*://*.worldfreeware.com/*'));
+
+test('generic hiding also reaches the about:blank and srcdoc frames a page writes ads into (B25)', async () => {
+  const sw = await bootServiceWorker({ host: HOST });
+  await sw.settle();
+  const generic = sw.script('quell-generic-cosmetic');
+  assert.equal(generic.matchOriginAsFallback, true);
+  assert.equal(generic.allFrames, true);
+  assert.deepEqual(generic.matches, ['<all_urls>']);
+});
 
 test('list scriptlets are registered to run at document start, before the page (B2)', async () => {
   // They used to be fetched by message and injected with executeScript once the page had
@@ -977,4 +705,3 @@ test('a host without scriptlet rules costs no injection', async () => {
   assert.equal(sw.executed().length, 0);
 });
 
-test.after(() => rmSync(stubDir, { recursive: true, force: true }));

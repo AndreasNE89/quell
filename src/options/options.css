@@ -1,9 +1,15 @@
+/* color-scheme: without it the UA drew light form controls and scrollbars on the dark theme.
+   --danger and --accent-fg mirror the popup; --danger was undefined here, so warnings fell back
+   to the light theme's red at 3.3:1 on the dark background. */
 :root {
+  color-scheme: light dark;
   --bg: #ffffff;
   --fg: #1a1d1b;
   --muted: #6b7280;
   --line: #e5e7eb;
   --accent: #2f6f4f;
+  --accent-fg: #ffffff;
+  --danger: #b4443a;
   --card: #f6f8f7;
 }
 @media (prefers-color-scheme: dark) {
@@ -13,6 +19,8 @@
     --muted: #9aa2a0;
     --line: #2c322f;
     --accent: #4f9d76;
+    --accent-fg: #0d100f;
+    --danger: #d9756b;
     --card: #1c211f;
   }
 }
@@ -60,6 +68,14 @@ body {
 .tagline {
   color: var(--muted);
   margin: 4px 0 24px;
+}
+.paused-banner {
+  margin: -8px 0 20px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--muted);
+  border-radius: 10px;
+  background: var(--card);
 }
 
 .cards {
@@ -123,13 +139,19 @@ code {
 .list-info {
   min-width: 0;
 }
+/* A long hostname is one unbreakable word; without this it ran under the Remove button. */
 .list-title {
   font-weight: 600;
+  overflow-wrap: anywhere;
 }
 .list-meta {
   color: var(--muted);
   font-size: 12px;
   margin-top: 1px;
+}
+/* A toggle in flight. Not `disabled`: that drops keyboard focus to <body>. */
+.list-item[aria-busy='true'] .slider {
+  opacity: 0.7;
 }
 .badge {
   display: inline-block;
@@ -205,7 +227,7 @@ code {
   border-radius: 8px;
   padding: 8px 12px;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-fg);
   font: inherit;
   font-weight: 600;
   cursor: pointer;
@@ -300,7 +322,7 @@ code {
 }
 .filter-error {
   padding: 4px 0;
-  color: var(--danger, #b4443a);
+  color: var(--danger);
   font-size: 12px;
 }
 .filter-error:empty {
@@ -308,7 +330,7 @@ code {
 }
 
 .list-warn {
-  color: var(--danger, #b4443a);
+  color: var(--danger);
 }
 /* Sits directly above the list toggles and qualifies all of them, so it reads tighter to
    the block it describes than the paragraph of hint text above it. */

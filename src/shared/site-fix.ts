@@ -10,7 +10,8 @@
 // Only the last rung is the existing allowlist; the first two keep network blocking on.
 
 import type { SiteFixLevel } from './types.js';
-import { normalizeHostname, isAllowlistedHost } from './hostname.js';
+import { normalizeHostname } from './hostname.js';
+import { siteRuleCovers } from './site-rules.js';
 
 /** Ladder order, cheapest repair first. `null` is the top (nothing disabled). */
 export const SITE_FIX_ORDER: readonly (SiteFixLevel | null)[] = [null, 'cosmetics', 'injection'];
@@ -19,24 +20,46 @@ export const SITE_FIX_ORDER: readonly (SiteFixLevel | null)[] = [null, 'cosmetic
  * The fix that applies to `hostname`, or null.
  *
  * Matching mirrors the allowlist (`example.com` covers `www.example.com` and other
- * subdomains) so a fix applied from the popup on `www.shop.example.com` behaves the way the
- * user expects when they navigate within the site.
+ * subdomains; a host the suffix heuristics refuse, like go.dev, only itself: site-rules.ts) so a
+ * fix applied from the popup on `www.shop.example.com` behaves the way the user expects when
+ * they navigate within the site.
  */
 export function resolveSiteFix(
   hostname: string | null | undefined,
   fixes: Record<string, SiteFixLevel> | undefined,
 ): SiteFixLevel | null {
+  return resolveSiteFixEntry(hostname, fixes)?.level ?? null;
+}
+
+/**
+ * The fix that applies to `hostname` and the key it is stored under, which is a parent domain
+ * when the fix is inherited (forum.example.com under example.com). The popup says so, since
+ * stepping back from an inherited fix also restores every other host under that parent.
+ */
+export function resolveSiteFixEntry(
+  hostname: string | null | undefined,
+  fixes: Record<string, SiteFixLevel> | undefined,
+): { level: SiteFixLevel; entry: string } | null {
   if (!hostname || !fixes) return null;
   const host = normalizeHostname(hostname);
   if (!host) return null;
 
-  let best: SiteFixLevel | null = null;
+  let best: { level: SiteFixLevel; entry: string } | null = null;
   for (const [entry, level] of Object.entries(fixes)) {
-    if (!isAllowlistedHost(host, [entry])) continue;
-    // Several entries can cover one host (example.com and www.example.com). Take the most
-    // permissive, or the user would apply a fix and still see the page broken.
-    if (level === 'injection') return 'injection';
-    best = best ?? level;
+    if (level !== 'cosmetics' && level !== 'injection') continue;
+    if (!siteRuleCovers(entry, host)) continue;
+    const key = normalizeHostname(entry);
+    // Several entries can cover one host (example.com and shop.example.com). Take the most
+    // permissive, or the user would apply a fix and still see the page broken; between equals,
+    // the host's own entry, then the nearest parent, names the source.
+    const rank = (l: SiteFixLevel): number => (l === 'injection' ? 2 : 1);
+    if (
+      !best ||
+      rank(level) > rank(best.level) ||
+      (rank(level) === rank(best.level) && key.length > best.entry.length)
+    ) {
+      best = { level, entry: key };
+    }
   }
   return best;
 }

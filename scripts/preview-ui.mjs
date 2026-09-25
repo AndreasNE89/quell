@@ -112,14 +112,20 @@ if (!existsSync(join(DIST, `${page}.html`))) {
 
 /** The stub is injected as a classic script so it runs before the module entry point. */
 function chromeStub() {
+  const host = state.popup.hostname;
+  // What the worker says about the host (site-rules.ts): an IPv6 literal cannot carry a rule.
+  const ipv6 = !!host && host.startsWith('[');
   const popup = {
-    url: state.popup.hostname ? `https://${state.popup.hostname}/` : 'chrome://extensions/',
+    url: host ? `https://${host}/` : 'chrome://extensions/',
     tabBlocked: 0,
     blockedTotal: 0,
     // Store builds have no onRuleMatchedDebug, so this is the branch users actually see.
     statsReliable: false,
     activeRuleCount: state.popup.degraded ? 64625 : 120377,
     coveredBy: null,
+    siteActionable: !!host && !ipv6,
+    siteRefusal: ipv6 ? 'ipv6' : null,
+    siteFixHost: state.popup.siteFix ? host : null,
     degraded: false,
     youtubeBlockSponsored: true,
     youtubeBlockShorts: false,
@@ -158,12 +164,26 @@ function chromeStub() {
       { host: 'scorecardresearch.com', label: 'Comscore', blocked: true },
     ],
   };
+  // Rows as the worker sends them: `active` is what Chrome loaded, `refused` an enabled list it
+  // could not (never while paused).
+  const paused = !!state.popup.paused;
+  const row = (id, title, group, ruleCount, refused = false) => ({
+    id,
+    title,
+    group,
+    enabled: true,
+    ruleCount,
+    active: !paused && !refused,
+    refused: !paused && refused,
+  });
   const lists = {
     lists: [
-      { id: 'quell-seed', title: 'StampStack Seed (built-in)', group: 'ads', enabled: true, ruleCount: 103 },
-      { id: 'easylist', title: 'EasyList', group: 'ads', enabled: true, ruleCount: 54522 },
-      { id: 'easyprivacy', title: 'EasyPrivacy', group: 'privacy', enabled: true, ruleCount: 55525 },
+      row('quell-seed', 'StampStack Seed (built-in)', 'ads', 103),
+      row('easylist', 'EasyList', 'ads', 50191),
+      row('easyprivacy', 'EasyPrivacy', 'privacy', 55998, !!state.popup.degraded),
     ],
+    degraded: !!state.popup.degraded,
+    paused,
   };
   const sponsor = {
     categories: [
@@ -185,8 +205,9 @@ function chromeStub() {
       blockedTotal: 0,
       paused: popup.paused,
       lists: lists.lists,
-      regexRulesUsed: 209,
+      regexRulesUsed: 228,
       statsReliable: false,
+      degraded: lists.degraded,
       listsGeneratedAt: new Date(Date.now() - (state.listAgeDays ?? 3) * 86_400_000).toISOString(),
     },
     'sitefix:list': { allowlist: ['video.example'], siteFixes: { 'shop.example': 'injection' } },
@@ -212,6 +233,7 @@ window.chrome = Object.assign(window.chrome || {}, {
     )} }),
   },
   storage: { onChanged: { addListener: () => {} } },
+  commands: { getAll: () => Promise.resolve([{ name: 'pick-element', shortcut: 'Alt+Shift+X' }]) },
   tabs: {
     query: () => Promise.resolve([{ id: 1, url: ${JSON.stringify(popup.url)} }]),
     reload: () => {},

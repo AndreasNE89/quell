@@ -14,7 +14,8 @@ import { normalizeAbpSelector } from '../scripts/lib/procedural-ops.mjs';
 
 test(':-abp-has() is rewritten to :has() (EasyList China)', () => {
   const p = parseLine('bilibili.com#?#.is-rcmd:-abp-has(>div:not(div:-abp-has(div)))');
-  assert.equal(p.kind, 'procedural');
+  // Native `:has()` is plain CSS: it ships in the stylesheet, where exceptions reach it.
+  assert.equal(p.kind, 'hide');
   assert.equal(p.selector, '.is-rcmd:has(>div:not(div:has(div)))');
   assert.equal(parseLine('neets.cc#?#div[class]:-abp-has(> div > .home_p)').selector, 'div[class]:has(> div > .home_p)');
 });
@@ -126,7 +127,8 @@ test('host-only patterns are accepted in every spelling', () => {
     '||Example.COM^': ['example.com'],
     'example.com^': ['example.com'],
     '||pahe.*^': ['pahe.*'],
-    '||www.pahe.*^': ['pahe.*'],
+    // uBO keeps the `www.`: www.pahe.<tld> and below, not every pahe.* host.
+    '||www.pahe.*^': ['www.pahe.*'],
     '||stream4free.': ['stream4free.*'],
     '||519.*^': ['519.*'],
     '||1.2.3.4^': ['1.2.3.4'],
@@ -156,7 +158,7 @@ test('a host-anchored path keeps its scope as a match-pattern path', () => {
   const cases = {
     '||bing.com/search?': { hosts: ['bing.com'], path: '/search?*' },
     '||duckduckgo.com/?q=': { hosts: ['duckduckgo.com'], path: '/?q=*' },
-    '||www.google.*/search?': { hosts: ['google.*'], path: '/search?*' },
+    '||www.google.*/search?': { hosts: ['www.google.*'], path: '/search?*' },
     '||yandex.com/search/?': { hosts: ['yandex.com'], path: '/search/?*' },
     '||weibo.com/share/share.php': { hosts: ['weibo.com'], path: '/share/share.php*' },
     '||googleapiscdn.com/player/*animevietsub.': {

@@ -7,9 +7,8 @@
 //     index into content-script registrations and executeScript fallbacks.
 
 import {
-  normalizeHostname,
   entityDomainKeys,
-  hostMatchesDomain,
+  filterDomainMatches,
   domainSpecMatches,
   isIPv4Host,
 } from '../shared/hostname.js';
@@ -81,9 +80,9 @@ function splitKeys(keys: string): string[] {
   return keys ? keys.split('|') : [];
 }
 
-/** Every dotted suffix of the www-stripped host, the TLD included, most specific first. */
+/** Every dotted suffix of the host, the TLD included, most specific first. */
 export function hostSuffixes(hostname: string): string[] {
-  const host = normalizeHostname(hostname);
+  const host = hostname.trim().toLowerCase();
   if (!host) return [];
   const parts = host.split('.');
   const out: string[] = [];
@@ -144,7 +143,7 @@ export function matchShards(
           continue;
         }
         const [ai, ...exclude] = entry;
-        if (!exclude.some((d) => hostMatchesDomain(hostname, d))) hits.push(ai);
+        if (!exclude.some((d) => filterDomainMatches(hostname, d))) hits.push(ai);
       }
     }
     // Args indexes follow rule order, so this keeps the list's own order.

@@ -197,7 +197,14 @@ function validateDist() {
     console.error('No DNR rulesets in manifest — run update-lists + compile-filters.');
     process.exit(1);
   }
-  for (const req of ['icons/icon-128.png', 'background.js', 'content.js', 'privacy.html']) {
+  for (const req of [
+    'icons/icon-128.png',
+    'background.js',
+    'content.js',
+    'privacy.html',
+    // The worker fetches cosmetic data at run time; without it nothing is hidden (B35).
+    'generated/cosmetic/core.json',
+  ]) {
     if (!existsSync(join(DIST, req))) {
       console.error(`Missing required package file: ${req}`);
       process.exit(1);

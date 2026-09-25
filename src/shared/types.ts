@@ -3,6 +3,7 @@
 // compiler catches a mismatched handler.
 
 import type { SponsorSegment } from './sponsorblock.js';
+import type { SiteRuleRefusal } from './site-rules.js';
 
 export type ListGroup = 'ads' | 'privacy' | 'security' | 'annoyances';
 
@@ -82,8 +83,13 @@ export interface ReportTracker {
   host: string;
   /** Organization a user would recognize, e.g. "Google Analytics". */
   label: string;
-  /** True when a shipped block rule matches this domain. False = seen but not blocked. */
+  /**
+   * True when a list Chrome has loaded right now blocks this domain outright. False = seen but
+   * not blocked (or blocked only on some paths or pages: see `partial`).
+   */
   blocked: boolean;
+  /** Only some of this domain's requests are blocked (path- or page-scoped rules). */
+  partial?: boolean;
 }
 
 /**
@@ -114,6 +120,11 @@ export interface CustomFiltersData {
   /** How many rules actually parsed. */
   count: number;
   errors: { line: number; text: string; reason: string }[];
+  /**
+   * The text was longer than CUSTOM_FILTERS_MAX_CHARS and was cut at the last whole line that
+   * fits; the lines after it were not saved.
+   */
+  truncated?: boolean;
 }
 
 /** SponsorBlock category rows for the Options page. */
@@ -145,13 +156,56 @@ export interface ProceduralRule {
   expr: string;
 }
 
-/** Per-list compiled cosmetic slice. */
+type DomainSpec = { include: string[]; exclude: string[] };
+
+/** A uBO action filter (`sel:style(…)`, `sel:remove-attr(…)`, `sel:remove-class(…)`). */
+export interface CosmeticActionRule {
+  domains: DomainSpec;
+  /** The filter body as the list wrote it; a `#@#` exception matches on this. */
+  expr: string;
+  /** What the action applies to: plain CSS, or a procedural expression when `procedural`. */
+  selector: string;
+  procedural: boolean;
+  action: 'style' | 'remove-attr' | 'remove-class';
+  /** Declarations for `style` (validated when compiled), else the attribute or class name. */
+  arg: string;
+}
+
+/** A domain-scoped hide or exception that carries `~domain` exclusions. */
+export interface ScopedSelector {
+  domains: DomainSpec;
+  selector: string;
+}
+
+/** `~a.com##.ad`: a generic hide its list withdraws on the hosts of each `exclude` set. */
+export interface GenericExcept {
+  selector: string;
+  exclude: string[][];
+}
+
+/** One generic stylesheet of a list, with its revert twin (paths relative to `generated/`). */
+export interface GenericCssSheet {
+  file: string;
+  revert: string;
+  count: number;
+  /** Registered only while none of these lists is enabled: they except its selectors. */
+  unless?: string[];
+}
+
+/**
+ * Per-list compiled cosmetic slice. The optional fields were added later (REVIEW_2026-09-24
+ * B11, B12, P3), so data compiled before them still loads.
+ */
 export interface CosmeticListData {
   hideGeneric: string[];
   unhideGeneric: string[];
   hideSpecific: Record<string, string[]>;
   unhideSpecific: Record<string, string[]>;
   procedural: ProceduralRule[];
+  actions?: CosmeticActionRule[];
+  hideScoped?: ScopedSelector[];
+  unhideScoped?: ScopedSelector[];
+  genericExcept?: GenericExcept[];
 }
 
 /** Compiled cosmetic dataset held by the service worker (list-scoped). */
@@ -176,6 +230,11 @@ export interface CosmeticData {
     elemhide: Record<string, string[]>;
     specifichide: Record<string, string[]>;
   };
+  /**
+   * Each list's generic stylesheets (compile-filters planGenericCss): its base sheet, plus sheets
+   * of selectors other lists except, registered only while those lists are off.
+   */
+  genericCss?: Record<string, GenericCssSheet[]>;
 }
 
 /** A scriptlet invocation targeted at some domains. */
@@ -199,7 +258,19 @@ export interface ScriptletData {
 // ---------------------------------------------------------------------------
 
 export type Message =
-  | { type: 'cosmetic:get'; hostname: string }
+  /**
+   * Content script, every frame. `topHost` and `isTop` are the frame's own view of its page
+   * (frame-scope.ts); the worker only needs them for a prerendered page, whose tab still shows
+   * the page before it. `refetch`: this document asked before, or its copy of the script came in
+   * after it loaded, so it may hold sheets a worker inserted and has since forgotten.
+   */
+  | {
+      type: 'cosmetic:get';
+      hostname: string;
+      topHost?: string | null;
+      isTop?: boolean;
+      refetch?: boolean;
+    }
   /**
    * Content script, every frame: list scriptlets for this document. `registered` and `topHost`
    * are the frame's own view (src/shared/frame-scope.ts): registered frames already got theirs
@@ -222,7 +293,15 @@ export type Message =
   | { type: 'sponsorblock:setCategory'; category: string; enabled: boolean }
   /** SW → content script: hand back what this page has observed. */
   | { type: 'page:collect' }
+  /**
+   * Popup ladder. A level applies to this host and its subdomains and leaves a parent's fix for
+   * its other hosts; `null` steps back to full blocking, removing every entry that covers the host.
+   */
   | { type: 'sitefix:set'; hostname: string; level: SiteFixLevel | null }
+  /** Options: remove exactly this stored entry, never a parent or child. Answered with SiteRulesData. */
+  | { type: 'sitefix:remove'; hostname: string }
+  /** Options: remove exactly this allowlist entry. Answered with SiteRulesData & { applied }. */
+  | { type: 'allowlist:remove'; hostname: string }
   | { type: 'sitefix:list' }
   | { type: 'settings:export' }
   | { type: 'settings:import'; json: string }
@@ -232,12 +311,17 @@ export type Message =
       youtubeBlockShorts: boolean;
       youtubeSponsorBlock: boolean;
     }
-  | { type: 'youtube:getOptions'; hostname: string }
+  | { type: 'youtube:getOptions'; hostname: string; topHost?: string | null }
   | { type: 'sponsorblock:getSegments'; videoId: string }
   | { type: 'lists:get' }
   | { type: 'lists:setEnabled'; id: string; enabled: boolean }
   | { type: 'stats:get' }
-  | { type: 'darkmode:get'; hostname?: string | null }
+  /**
+   * Content scripts get DarkModePageData, resolved against the top page: from the tab, or from
+   * `topHost` for a prerendered page. Extension pages get DarkModeData for `hostname` (or the
+   * active tab).
+   */
+  | { type: 'darkmode:get'; hostname?: string | null; topHost?: string | null }
   | { type: 'darkmode:setEnabled'; enabled: boolean }
   | {
       type: 'darkmode:setSiteOverride';
@@ -249,6 +333,12 @@ export type Message =
   | { type: 'darkmode:refresh' }
   /** SW → content: re-fetch cosmetics after the user's own filters changed. */
   | { type: 'cosmetic:refresh' }
+  /**
+   * SW → content on YouTube pages: re-fetch youtube:getOptions. Sent whenever something it
+   * answers from changes (the YouTube switches, pause, the allowlist, repair steps, an import),
+   * so a content script does not need chrome.storage to follow them.
+   */
+  | { type: 'youtube:refresh' }
   | { type: 'license:get' }
   | { type: 'license:openCheckout' }
   | { type: 'license:openRestore' }
@@ -267,7 +357,12 @@ export interface CosmeticResponse {
   disableGeneric: boolean;
   /** When true, no specific cosmetic hides apply. */
   disableSpecific: boolean;
+  /** uBO action filters for this page (`sel:style(…)`, `:remove-attr(…)`, `:remove-class(…)`). */
+  actions?: CosmeticActionData[];
 }
+
+/** One action filter as the content script receives it. */
+export type CosmeticActionData = Omit<CosmeticActionRule, 'domains'>;
 
 export interface ScriptletsResponse {
   allowlisted: boolean;
@@ -291,6 +386,23 @@ export interface PopupData {
   coveredBy: string | null;
   /** Active breakage-repair rung for this host, if any. */
   siteFix: SiteFixLevel | null;
+  /**
+   * The siteFixes key `siteFix` comes from: the host's own, or a parent's when inherited. Stepping
+   * back from an inherited fix restores the parent, and with it every other host under it.
+   */
+  siteFixHost: string | null;
+  /**
+   * The allowlist and the repair ladder can hold this host (site-rules.ts). False on IPv6
+   * literals, Web Store pages and non-web tabs, where a switch would do nothing.
+   */
+  siteActionable: boolean;
+  /** Why `siteActionable` is false for a web page; null otherwise. */
+  siteRefusal: SiteRuleRefusal | null;
+  /**
+   * The active tab is in an Incognito window. Site switches set here are saved like any other
+   * (as uBO does) and apply in normal windows too; the popup says so before the user sets one.
+   */
+  incognito?: boolean;
   /** A list the user enabled could not be loaded — protection is lower than requested. */
   degraded: boolean;
   youtubeBlockSponsored: boolean;
@@ -310,6 +422,17 @@ export interface SiteToggleData extends PopupData {
 export interface YoutubeOptionsData {
   allowlisted: boolean;
   paused: boolean;
+  /**
+   * The page's repair step switches element hiding off (either rung): YouTube's own hide CSS
+   * and the Shorts shelf hiding must stand down too. Optional: the storage fast path in
+   * youtube-ui.ts does not compute it.
+   */
+  cosmeticsOff?: boolean;
+  /**
+   * The page's repair step switches script patches off (the second rung): the sponsored scrub,
+   * the Shorts redirect and SponsorBlock skipping must stand down too.
+   */
+  scriptletsOff?: boolean;
   youtubeBlockSponsored: boolean;
   youtubeBlockShorts: boolean;
   youtubeSponsorBlock: boolean;
@@ -329,12 +452,22 @@ export interface SponsorBlockSegmentsData {
  * ruleset to keep the rest working, and without this distinction the UI went on reporting full
  * protection the user did not have.
  */
-export type ListRow = ListMeta & { enabled: boolean; active: boolean };
+export type ListRow = ListMeta & {
+  enabled: boolean;
+  active: boolean;
+  /**
+   * Enabled, not paused, and Chrome did not load it (the shared static-rule pool is full).
+   * While paused no list is loaded, by design, and none is refused.
+   */
+  refused: boolean;
+};
 
 export interface ListsData {
   lists: ListRow[];
   /** True when at least one list the user enabled could not be loaded. */
   degraded: boolean;
+  /** Paused everywhere: every row reads `active: false` and none is `refused`. */
+  paused: boolean;
 }
 
 export interface StatsData {
@@ -360,6 +493,8 @@ export interface LicenseData {
   /** Unpacked install — `license:devUnlock` available. */
   unpacked: boolean;
   priceLabel: string;
+  /** Answer to license:refresh only: ExtensionPay could not be reached, so this is the cache. */
+  unreachable?: boolean;
 }
 
 export interface DarkModeData {
@@ -375,7 +510,32 @@ export interface DarkModeData {
   license: LicenseData;
 }
 
+/**
+ * darkmode:get as a content script sees it. Every frame of every site asks, so the answer
+ * carries only the decision: not the purchase email, not the list of overridden sites.
+ */
+export interface DarkModePageData {
+  paid: boolean;
+  apply: boolean;
+}
+
+/** Answer to settings:import. `ignored` names the fields left as they were (wrong type). */
+export interface SettingsImportResult {
+  ok: boolean;
+  error?: string;
+  /** Why it failed, for the page to translate (popup_error_<code>). */
+  code?: 'not_json' | 'not_export';
+  ignored?: string[];
+  /** The file's custom filters were over the size cap and were cut at a whole line. */
+  truncated?: boolean;
+}
+
 /** Compiled tracker-naming index (`src/generated/trackers.json`). */
 export interface TrackerIndex {
-  domains: Record<string, { label: string; blocked: boolean }>;
+  /**
+   * `lists`: the lists with a rule blocking the whole domain; the worker marks it blocked only
+   * when one of them is loaded. `partial`: lists whose rules block only some paths or pages of
+   * it. `blocked` is the compile-time answer for every list, kept for an index without `lists`.
+   */
+  domains: Record<string, { label: string; blocked: boolean; lists?: string[]; partial?: string[] }>;
 }

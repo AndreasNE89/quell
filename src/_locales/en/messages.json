@@ -11,6 +11,9 @@
   "options_add_a_site": {
     "message": "Add a site"
   },
+  "options_attributions": {
+    "message": "Attributions"
+  },
   "options_auto_skip_sponsors_intros_outros_self_promo": {
     "message": "Auto-skip sponsor segments. Pick more categories to skip below."
   },
@@ -35,8 +38,14 @@
   "options_checking_license": {
     "message": "Checking license…"
   },
+  "options_checkout_unavailable": {
+    "message": "Checkout could not open. Check your connection and try again."
+  },
   "options_clear": {
     "message": "Clear"
+  },
+  "options_custom_changed_elsewhere": {
+    "message": "Your filters were changed elsewhere, for example by the element picker. Saving keeps both."
   },
   "options_custom_filters_intro": {
     "message": "Your own element-hiding rules, one per line. The popup's element picker writes here. Format: example.com##.selector — one hostname, then ##, then a CSS selector."
@@ -59,6 +68,12 @@
       }
     }
   },
+  "options_custom_load_failed": {
+    "message": "Could not load your filters. Reload this page to try again."
+  },
+  "options_custom_merged": {
+    "message": "Changes made elsewhere in the meantime were merged in."
+  },
   "options_custom_rules_active_one": {
     "message": "$COUNT$ rule active",
     "placeholders": {
@@ -76,6 +91,27 @@
         "example": "12"
       }
     }
+  },
+  "options_custom_rules_paused_one": {
+    "message": "$COUNT$ rule saved — not applied while StampStack is paused",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "options_custom_rules_paused_other": {
+    "message": "$COUNT$ rules saved — not applied while StampStack is paused",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "12"
+      }
+    }
+  },
+  "options_custom_save_failed": {
+    "message": "Could not save your filters. Your text is still here — try again."
   },
   "options_custom_saved_one": {
     "message": "Saved — $COUNT$ rule active.",
@@ -95,8 +131,32 @@
       }
     }
   },
+  "options_custom_saved_paused_one": {
+    "message": "Saved — $COUNT$ rule. Not applied while StampStack is paused.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "options_custom_saved_paused_other": {
+    "message": "Saved — $COUNT$ rules. Not applied while StampStack is paused.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "12"
+      }
+    }
+  },
+  "options_custom_truncated": {
+    "message": "The text was too long, so the last lines were not saved."
+  },
   "options_dark_mode_paid": {
     "message": "Dark mode (paid)"
+  },
+  "options_dark_override_host": {
+    "message": "Hostname for dark mode override"
   },
   "options_dev_unlock_applied": {
     "message": "Dev unlock applied (unpacked only)."
@@ -189,6 +249,9 @@
   "options_import_failed": {
     "message": "Import failed."
   },
+  "options_import_filters_truncated": {
+    "message": "Your filters were longer than StampStack keeps, so the last lines were left out."
+  },
   "options_import_settings": {
     "message": "Import settings…"
   },
@@ -225,8 +288,14 @@
       }
     }
   },
+  "options_license_refresh_failed": {
+    "message": "Could not refresh the license. Try again."
+  },
   "options_license_refresh_hint": {
     "message": "License refreshes from ExtensionPay when online. Offline grace lasts up to 14 days."
+  },
+  "options_license_refresh_unreachable": {
+    "message": "Could not reach ExtensionPay, so this is the saved license. Try again when you are online."
   },
   "options_license_unavailable_hint": {
     "message": "Purchases unavailable in this build — update StampStack from the Chrome Web Store."
@@ -300,6 +369,15 @@
       }
     }
   },
+  "options_list_paused": {
+    "message": "$COUNT$ network rules · paused — they load again when StampStack resumes",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "54,522"
+      }
+    }
+  },
   "options_list_rule_count": {
     "message": "$COUNT$ network rules · element hiding follows this toggle",
     "placeholders": {
@@ -308,6 +386,18 @@
         "example": "120,377"
       }
     }
+  },
+  "options_list_toggle_failed": {
+    "message": "Could not change “$TITLE$”. Try again.",
+    "placeholders": {
+      "title": {
+        "content": "$1",
+        "example": "EasyList"
+      }
+    }
+  },
+  "options_load_failed": {
+    "message": "Could not load this. Reload the page to try again."
   },
   "options_loading": {
     "message": "Loading…"
@@ -336,8 +426,14 @@
   "options_paid_sponsored_feed_tiles_and_in_player": {
     "message": "Paid / “Sponsored” feed tiles and in-player ad UI"
   },
+  "options_paused_banner": {
+    "message": "StampStack is paused everywhere, so nothing is blocked. Turn it back on from the toolbar button."
+  },
   "options_per_site_overrides": {
     "message": "Per-site overrides"
+  },
+  "options_privacy": {
+    "message": "Privacy"
   },
   "options_refresh_license": {
     "message": "Refresh license"
@@ -348,8 +444,20 @@
   "options_remove": {
     "message": "Remove"
   },
+  "options_remove_site_rule": {
+    "message": "Remove the rule for $HOST$",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
+  },
   "options_requests_blocked": {
     "message": "requests blocked"
+  },
+  "options_restore_unavailable": {
+    "message": "Restore purchase could not open. Check your connection and try again."
   },
   "options_rule": {
     "message": "Rule"
@@ -360,8 +468,44 @@
   "options_save_filters": {
     "message": "Save filters"
   },
+  "options_setting_not_saved": {
+    "message": "That change was not saved. Try again."
+  },
   "options_settings_imported": {
     "message": "Settings imported."
+  },
+  "options_settings_imported_ignored": {
+    "message": "Settings imported. These were left as they were because the file had the wrong kind of value for them: $FIELDS$.",
+    "placeholders": {
+      "fields": {
+        "content": "$1",
+        "example": "allowlist, siteFixes"
+      }
+    }
+  },
+  "options_site_rule_add_failed": {
+    "message": "“$HOST$” was not saved. Try again.",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
+  },
+  "options_site_rule_covered_by": {
+    "message": "also covered by $HOST$",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
+  },
+  "options_site_rule_exact_scope": {
+    "message": "this address only"
+  },
+  "options_site_rule_host": {
+    "message": "Site hostname"
   },
   "options_site_rule_invalid": {
     "message": "“$HOST$” cannot be used for a site rule. Enter a site name such as example.com, or a full IP address such as 192.168.1.1.",
@@ -374,6 +518,15 @@
   },
   "options_site_rule_not_applied": {
     "message": "Chrome did not accept the change, so blocking is still on for “$HOST$”. Nothing was saved. Try again.",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
+  },
+  "options_site_rule_remove_failed": {
+    "message": "Could not remove the rule for “$HOST$”. Try again.",
     "placeholders": {
       "host": {
         "content": "$1",
@@ -474,8 +627,44 @@
   "options_youtube_intro": {
     "message": "Extra controls for YouTube. Promoted-video hiding removes paid feed tiles and scrubs player ad payloads. Shorts blocking hides Shorts shelves and leaves /shorts/ pages. SponsorBlock skips mid-video sponsor segments using the community database at sponsor.ajay.app."
   },
-  "popup_alt": {
-    "message": "Alt"
+  "picker_click_to_close": {
+    "message": "Click or press Esc to close."
+  },
+  "picker_hiding_off": {
+    "message": "Element hiding is off on this site (paused, allowed, or a repair step), so a pick would not apply."
+  },
+  "picker_hint_cancel": {
+    "message": "cancel"
+  },
+  "picker_hint_click": {
+    "message": "Click to hide"
+  },
+  "picker_hint_widen": {
+    "message": "widen or narrow"
+  },
+  "picker_host_refused": {
+    "message": "Filters cannot be saved for this address."
+  },
+  "picker_match_many": {
+    "message": "$COUNT$ matches",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "3"
+      }
+    }
+  },
+  "picker_match_one": {
+    "message": "1 match"
+  },
+  "picker_refuse_structural": {
+    "message": "Nothing here to target reliably — press ↑ to pick the box around it."
+  },
+  "picker_save_failed": {
+    "message": "Not saved:"
+  },
+  "picker_saving": {
+    "message": "Saving…"
   },
   "popup_block_on_this_site": {
     "message": "Block on this site"
@@ -503,6 +692,12 @@
         "example": "example.com"
       }
     }
+  },
+  "popup_blocking_on_fix_cosmetics": {
+    "message": "Blocking on · element hiding off here"
+  },
+  "popup_blocking_on_fix_injection": {
+    "message": "Blocking on · element hiding and script patches off here"
   },
   "popup_blocking_on_this_site": {
     "message": "Blocking on this site"
@@ -563,7 +758,7 @@
     "message": "Checkout unavailable. Try Restore purchase, or open Options."
   },
   "popup_checkout_unavailable_unpacked": {
-    "message": "Checkout unavailable — use Dev unlock or set ExtensionPay id in Options."
+    "message": "Checkout unavailable — use Dev unlock, or set the ExtensionPay id in extpay-config.local.ts and rebuild."
   },
   "popup_copies_a_draft_when_possible_and_opens": {
     "message": "Copies a draft when possible and opens your email app if one is available. Includes the site name and your StampStack settings — not the page URL or its content."
@@ -610,6 +805,15 @@
   "popup_dark_summary_unavailable": {
     "message": "not available here"
   },
+  "popup_dark_upsell": {
+    "message": "Darken any page with a smart, matte dark theme. One-time $PRICE$ unlock — separate from ad blocking. Reinstalling? Use Restore purchase with your receipt email.",
+    "placeholders": {
+      "price": {
+        "content": "$1",
+        "example": "$2"
+      }
+    }
+  },
   "popup_details": {
     "message": "Details"
   },
@@ -625,6 +829,21 @@
   "popup_enable_on_all_sites": {
     "message": "Enable on all sites"
   },
+  "popup_error_network": {
+    "message": "Could not reach the payment service. Check your connection and try again."
+  },
+  "popup_error_not_export": {
+    "message": "That file is not a StampStack settings export."
+  },
+  "popup_error_not_json": {
+    "message": "That file is not valid JSON."
+  },
+  "popup_error_provider": {
+    "message": "The payment service returned an error. Try again later."
+  },
+  "popup_error_unconfigured": {
+    "message": "Purchases are not available in this build."
+  },
   "popup_everything_is_on_for_this_site": {
     "message": "Everything is on for this site."
   },
@@ -634,8 +853,17 @@
   "popup_hide": {
     "message": "Hide"
   },
+  "popup_hide_an_element": {
+    "message": "Hide an element"
+  },
   "popup_hide_promoted_videos": {
     "message": "Hide promoted videos"
+  },
+  "popup_incognito_note": {
+    "message": "A switch you set in this Incognito window is saved and applies in normal windows too."
+  },
+  "popup_load_failed": {
+    "message": "Could not reach StampStack. Close this panel and open it again."
   },
   "popup_not_available_on_this_page": {
     "message": "Not available on this page"
@@ -646,6 +874,9 @@
   "popup_pause_everywhere": {
     "message": "Pause everywhere"
   },
+  "popup_pause_failed": {
+    "message": "Could not change pause. Try again."
+  },
   "popup_pause_stampstack_everywhere": {
     "message": "Pause StampStack everywhere"
   },
@@ -654,6 +885,18 @@
   },
   "popup_paused_no_rules_active": {
     "message": "Paused — no rules active"
+  },
+  "popup_pick_unavailable_allowlisted": {
+    "message": "Blocking is off on this site, so a hidden element would come back."
+  },
+  "popup_pick_unavailable_fix": {
+    "message": "Element hiding is off here, so a picked element would come back on the next load. Undo the repair step to use the picker."
+  },
+  "popup_pick_unavailable_host": {
+    "message": "The picker can't save rules for this address."
+  },
+  "popup_pick_unavailable_paused": {
+    "message": "StampStack is paused, so a hidden element would come back."
   },
   "popup_pick_which_segment_types_to_skip_in": {
     "message": "Pick which segment types to skip in Settings."
@@ -667,6 +910,9 @@
   "popup_reload_the_page_to_apply_this": {
     "message": "Reload the page to apply this."
   },
+  "popup_repair_failed": {
+    "message": "That did not go through. Try again."
+  },
   "popup_repair_hint_allowlist": {
     "message": "Last resort — this site gets its ads and trackers back."
   },
@@ -675,6 +921,15 @@
   },
   "popup_repair_hint_injection": {
     "message": "Fixes players and logins that a script patch broke."
+  },
+  "popup_repair_inherited": {
+    "message": "This comes from the rule for $HOST$.",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
   },
   "popup_repair_next_allowlist": {
     "message": "Turn blocking off for this site"
@@ -685,6 +940,9 @@
   "popup_repair_next_injection": {
     "message": "Also stop running script patches here"
   },
+  "popup_repair_no_effect": {
+    "message": "Nothing changed for this site. Try again, or tell the developer below."
+  },
   "popup_repair_state_allowlisted": {
     "message": "Blocking is off for this site — nothing here is filtered."
   },
@@ -692,10 +950,22 @@
     "message": "Element hiding is off here. Ad blocking and script patches are still on."
   },
   "popup_repair_state_injection": {
-    "message": "Element hiding and script patches are off here. Ads are still blocked."
+    "message": "Element hiding and script patches are off here. Network blocking is still on."
+  },
+  "popup_repair_state_injection_youtube": {
+    "message": "Element hiding and script patches are off here, and so is YouTube video-ad protection. Other network blocking is still on."
+  },
+  "popup_repair_state_unsupported_host": {
+    "message": "Repair steps can't be saved for $HOST$. You can still tell the developer.",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
   },
   "popup_report_ad_slot_one": {
-    "message": "$COUNT$ ad slot hidden.",
+    "message": "$COUNT$ ad slot hidden by rules for this site.",
     "placeholders": {
       "count": {
         "content": "$1",
@@ -704,7 +974,7 @@
     }
   },
   "popup_report_ad_slots_many": {
-    "message": "$COUNT$ ad slots hidden.",
+    "message": "$COUNT$ ad slots hidden by rules for this site.",
     "placeholders": {
       "count": {
         "content": "$1",
@@ -744,6 +1014,9 @@
   },
   "popup_report_state_blocked": {
     "message": "blocked"
+  },
+  "popup_report_state_partial": {
+    "message": "partly blocked"
   },
   "popup_report_state_unlisted": {
     "message": "not in our lists"
@@ -801,6 +1074,9 @@
   "popup_restore_unavailable": {
     "message": "Restore unavailable. Open Options → Restore purchase."
   },
+  "popup_restricted_page": {
+    "message": "Chrome doesn't let extensions run on Chrome Web Store pages."
+  },
   "popup_rules_active": {
     "message": "$COUNT$ blocking rules active",
     "placeholders": {
@@ -819,20 +1095,50 @@
       }
     }
   },
+  "popup_setting_not_saved": {
+    "message": "That change was not saved. Try again."
+  },
   "popup_settings": {
     "message": "Settings"
   },
-  "popup_shift": {
-    "message": "Shift"
+  "popup_shortcut_tip": {
+    "message": "Tip: $SHORTCUT$ starts the picker without opening this panel.",
+    "placeholders": {
+      "shortcut": {
+        "content": "$1",
+        "example": "Alt+Shift+X"
+      }
+    }
+  },
+  "popup_site_broken": {
+    "message": "Site broken?"
   },
   "popup_site_toggle_failed": {
-    "message": "Could not change this site — see Settings"
+    "message": "Could not change this site. Try again."
   },
   "popup_site_toggle_not_applied_off": {
     "message": "Chrome did not accept that — blocking is still on"
   },
   "popup_site_toggle_not_applied_on": {
     "message": "Chrome did not accept that — blocking is still off"
+  },
+  "popup_site_toggle_unchanged_off": {
+    "message": "Nothing changed — blocking is still off here."
+  },
+  "popup_site_toggle_unchanged_on": {
+    "message": "Nothing changed — blocking is still on here."
+  },
+  "popup_site_unsupported_host": {
+    "message": "StampStack can't keep a setting for $HOST$. Use Pause everywhere to stop blocking here.",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
+  },
+  "popup_site_unsupported_ipv6": {
+    "message": "Per-site settings don't work on IPv6 addresses. Use Pause everywhere to stop blocking here."
   },
   "popup_skip_sponsor_segments": {
     "message": "Skip sponsor segments"
@@ -852,11 +1158,26 @@
   "popup_this_page": {
     "message": "This page"
   },
+  "popup_undo_for_host": {
+    "message": "Undo — turn filtering back on for all of $HOST$",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
+  },
   "popup_undo_turn_filtering_back_on": {
     "message": "Undo — turn filtering back on"
   },
   "popup_youtube": {
     "message": "YouTube"
+  },
+  "popup_youtube_off_here_note": {
+    "message": "Blocking is off on this site, so none of these run here."
+  },
+  "popup_youtube_summary_off_here": {
+    "message": "off on this site"
   },
   "popup_youtube_summary_on": {
     "message": "$COUNT$ of 3 on",
@@ -866,5 +1187,8 @@
         "example": "2"
       }
     }
+  },
+  "ui_lang": {
+    "message": "en"
   }
 }

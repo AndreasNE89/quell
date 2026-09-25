@@ -18,6 +18,8 @@ import type {
   PopupData,
   SiteToggleData,
   ListsData,
+  DarkModePageData,
+  SettingsImportResult,
   StatsData,
   Settings,
   CosmeticData,
@@ -71,7 +73,7 @@ import {
   defaultLicense,
   initLicense,
   loadLicense,
-  refreshLicense,
+  refreshLicenseDetailed,
   openCheckout,
   openRestore,
   devUnlock,
@@ -85,14 +87,31 @@ import {
   customCosmeticsFor,
   parseCustomFilters,
   appendFilterLine,
+  filterAppliesTo,
 } from '../shared/custom-filters.js';
 import {
   resolveSiteFix,
+  resolveSiteFixEntry,
   fixDisablesCosmetics,
   fixDisablesScriptlets,
   hostsWithCosmeticsOff,
   hostsWithScriptletsOff,
 } from '../shared/site-fix.js';
+import {
+  siteRuleScope,
+  siteRuleRefusal,
+  siteRuleKey,
+  siteRuleCovers,
+  siteRuleKeyFromInput,
+  isSiteAllowlisted,
+  siteRuleMatchPatterns,
+  siteRuleDnrConditions,
+} from '../shared/site-rules.js';
+import {
+  sanitizeImportedSettings,
+  capFilterText,
+  CUSTOM_FILTERS_MAX_CHARS,
+} from './settings-import.js';
 import { localeDefaultLists } from '../shared/locale-lists.js';
 import {
   buildBreakageReport,
@@ -106,13 +125,13 @@ import {
   hostsWithForceOff,
   hostsWithForceOn,
   isExtensionRestrictedHostname,
-  isDarkModeInjectibleUrl,
   isHttpOrHttpsUrl,
 } from '../shared/dark-mode.js';
 import {
   matchCosmetic,
-  mergeNetworkExceptions,
-  mergePathExceptions,
+  genericCssRegistration,
+  genericCssFiles,
+  genericSheetApplies,
 } from '../engine/cosmetic-match.js';
 import {
   SCRIPTLET_SHARD_ID_PREFIX,
@@ -124,20 +143,14 @@ import {
 } from '../engine/scriptlet-shards.js';
 import {
   normalizeHostname,
-  isAllowlistedHost,
-  isSafeAllowlistHost,
   isValidMatchPatternHost,
-  allowlistMatchPatterns,
   exactHostMatchPatterns,
-  pathExceptionMatchPatterns,
 } from '../shared/hostname.js';
 
-import cosmeticJson from '../generated/cosmetic.json';
 import scriptletShardJson from '../generated/scriptlet-shards.json';
 import metaJson from '../generated/meta.json';
 import trackerJson from '../generated/trackers.json';
 
-const COSMETIC = cosmeticJson as unknown as CosmeticData;
 // Only the host index: the rules themselves ship as MAIN-world files (scriptlet-shards.ts).
 const SHARDS = scriptletShardJson as ShardIndex;
 const META = metaJson as GeneratedMeta;
@@ -145,8 +158,157 @@ const TRACKERS = trackerJson as TrackerIndex;
 
 const STATS_RELIABLE = !!chrome.declarativeNetRequest.onRuleMatchedDebug;
 
+// Settings and the license live in storage.local, which Chrome opens to content scripts by
+// default: a page that compromised its renderer could rewrite them directly, past every check
+// in this worker (REVIEW_2026-09-24 P3). Content scripts ask the worker instead (youtube:getOptions,
+// youtube:refresh). Chromium 151 then answers a content script "Access to storage is not allowed
+// from this context"; Chromium 131 has setAccessLevel on storage.session only, and there the
+// area stays open. Set on every wake: it is cheap, and nothing documents it as persisted.
+void chrome.storage.local
+  .setAccessLevel?.({ accessLevel: 'TRUSTED_CONTEXTS' as chrome.storage.AccessLevel })
+  ?.catch((e: unknown) => console.warn('[StampStack] storage access level not set', e));
+
 // Per-tab blocked counters (rebuilt on SW wake; best-effort for the badge).
 const tabBlocked = new Map<number, number>();
+
+// ---------------------------------------------------------------------------
+// Compiled cosmetic data, read from the package when needed (REVIEW_2026-09-24 B35)
+// ---------------------------------------------------------------------------
+//
+// Inlined, cosmetic.json was 2.8 MB of object literal parsed and built on every wake, about
+// 80 ms before the first reply. scripts/lib/cosmetic-files.mjs splits it into core.json (all but
+// the per-list rules) and one file per list; a wake reads the core only, and the first page that
+// asks for cosmetics the enabled lists' files. Each is read once per worker lifetime.
+
+const COSMETIC_DIR = 'generated/cosmetic';
+
+async function fetchPackageJson<T>(path: string): Promise<T> {
+  const res = await fetch(chrome.runtime.getURL(path));
+  if (!res.ok) throw new Error(`${path}: HTTP ${res.status}`);
+  return (await res.json()) as T;
+}
+
+const cosmeticFiles = new Map<string, Promise<unknown>>();
+
+/** One file, fetched once; a failed read is forgotten so the next caller tries again. */
+function cosmeticFile<T>(name: string): Promise<T> {
+  let p = cosmeticFiles.get(name) as Promise<T> | undefined;
+  if (!p) {
+    p = fetchPackageJson<T>(`${COSMETIC_DIR}/${name}`);
+    cosmeticFiles.set(name, p);
+    p.catch(() => cosmeticFiles.delete(name));
+  }
+  return p;
+}
+
+/** The core with no list rules. Enough for everything but matching a page. */
+function cosmeticCore(): Promise<CosmeticData> {
+  return cosmeticFile<CosmeticData>('core.json');
+}
+
+/**
+ * The dataset for these lists. The same object for the same lists, so matchCosmetic's merged
+ * view (memoized on it, one entry) survives from one page to the next. The promise is what is
+ * kept: every frame of a page asks at once after a wake, and each assembling its own object
+ * rebuilt the merged view once per frame (about 40 ms each in Chromium).
+ */
+let cosmeticAssembled: { key: string; data: Promise<CosmeticData> } | null = null;
+
+function cosmeticData(ids: string[]): Promise<CosmeticData> {
+  const key = ids.join('\0');
+  if (cosmeticAssembled?.key === key) return cosmeticAssembled.data;
+  const entry = {
+    key,
+    data: (async (): Promise<CosmeticData> => {
+      const [core, ...lists] = await Promise.all([
+        cosmeticCore(),
+        ...ids.map((id) => cosmeticFile<CosmeticData['byList'][string]>(`list.${id}.json`)),
+      ]);
+      const byList: CosmeticData['byList'] = {};
+      ids.forEach((id, i) => {
+        byList[id] = lists[i];
+      });
+      return { ...core, byList };
+    })(),
+  };
+  cosmeticAssembled = entry;
+  // A failed read is forgotten, as in cosmeticFile, so the next page tries again.
+  entry.data.catch(() => {
+    if (cosmeticAssembled === entry) cosmeticAssembled = null;
+  });
+  return entry.data;
+}
+
+/** A dataset with the core only, per enabled-list key, for the registration's merged view. */
+let cosmeticCoreView: { key: string; data: CosmeticData } | null = null;
+
+/** The dataset for these lists when it is loaded or on its way, else the core-only view. */
+async function cosmeticRegistrationData(ids: string[]): Promise<CosmeticData> {
+  const key = ids.join('\0');
+  if (cosmeticAssembled?.key === key) {
+    try {
+      return await cosmeticAssembled.data;
+    } catch {
+      /* the core alone is enough for the registration */
+    }
+  }
+  if (cosmeticCoreView?.key !== key) {
+    cosmeticCoreView = { key, data: { ...(await cosmeticCore()), byList: {} } };
+  }
+  return cosmeticCoreView.data;
+}
+
+/**
+ * The generic sheet's list-driven registration: its stylesheets, and the hosts and pages the
+ * enabled lists take out of generic hiding. Both come from the core, so a wake does not read the
+ * lists. Data compiled before cosmetic.json carried `genericCss` has one sheet per list, named
+ * in meta.json.
+ */
+async function genericSheetRegistration(
+  ids: string[],
+): Promise<{ css: string[]; excludeMatches: string[] }> {
+  const reg = genericCssRegistration(await cosmeticRegistrationData(ids), ids);
+  if (reg.css.length) return reg;
+  const css = ids
+    .map((id) => META.lists.find((l) => l.id === id)?.genericCssFile)
+    .filter((p): p is string => !!p)
+    .map((p) => `generated/${p}`);
+  return { css, excludeMatches: reg.excludeMatches };
+}
+
+/**
+ * The revert twins of the generic sheets registered for these lists (paths under the root), for
+ * a frame the registered sheet reached; null where the lists keep it out (www.youtube.com,
+ * docs.google.com, a search results page). There a revert has nothing to undo, and would only
+ * override the frame's own display on every element matching one of ~29k selectors.
+ */
+async function genericRevertFilesFor(
+  hostname: string,
+  ids: string[],
+  frameUrl: string | undefined,
+): Promise<string[] | null> {
+  const data = await cosmeticRegistrationData(ids);
+  if (!genericSheetApplies(hostname, data, ids, frameUrl)) return null;
+  return genericCssFiles(data, ids).map((s) => `generated/${s.revert}`);
+}
+
+/**
+ * matchCosmetic over the enabled lists for one frame. Where an entity exception switches generic
+ * hiding off (EasyList's `www.google.*` search-results generichide: every Google results page),
+ * the registered sheet is undone with its packaged revert files, not ~14,000 selectors sent to
+ * the page.
+ */
+async function cosmeticMatchFor(
+  hostname: string,
+  ids: string[],
+  pageUrl: string | undefined,
+  userUnhide: string[],
+): Promise<ReturnType<typeof matchCosmetic>> {
+  return matchCosmetic(hostname, await cosmeticData(ids), ids, pageUrl, {
+    userUnhide,
+    genericRevert: 'files',
+  });
+}
 
 function enabledListIds(settings: Settings): string[] {
   return META.lists
@@ -158,27 +320,34 @@ function enabledListIds(settings: Settings): string[] {
 // Rule / script synchronization
 // ---------------------------------------------------------------------------
 
+/** What the last ruleset sync could not load, so a wake that changes nothing logs nothing. */
+const REFUSED_LISTS_KEY = 'stampstack.refusedLists';
+
 async function syncRulesets(settings: Settings): Promise<void> {
-  const enable: string[] = [];
-  const disable: string[] = [];
-  for (const list of META.lists) {
-    const on = !settings.paused && isListEnabled(settings, list.id, list.enabledByDefault);
-    (on ? enable : disable).push(list.id);
-  }
+  const want = META.lists
+    .filter((l) => !settings.paused && isListEnabled(settings, l.id, l.enabledByDefault))
+    .map((l) => l.id);
 
   // The service worker is ephemeral, so this runs on every wake — many times a day. Enabling
   // a ruleset that is already enabled is not free: Chrome re-indexes, and with ~120k rules
   // that is the most expensive thing the worker does. Skip the call entirely when the live
   // state already matches.
+  let live: string[] | null = null;
   try {
-    const live = await chrome.declarativeNetRequest.getEnabledRulesets();
-    const want = [...enable].sort().join(',');
-    if (live.slice().sort().join(',') === want) return;
+    live = await chrome.declarativeNetRequest.getEnabledRulesets();
   } catch {
     /* fall through and do the work */
   }
+  if (live && [...live].sort().join(',') === [...want].sort().join(',')) {
+    await noteRefusedLists([]);
+    return;
+  }
+  const liveSet = new Set(live ?? []);
 
   // Disable unwanted rulesets first — always succeeds and frees global-pool budget.
+  const disable = META.lists
+    .map((l) => l.id)
+    .filter((id) => !want.includes(id) && (live == null || liveSet.has(id)));
   if (disable.length) {
     try {
       await chrome.declarativeNetRequest.updateEnabledRulesets({ disableRulesetIds: disable });
@@ -190,27 +359,76 @@ async function syncRulesets(settings: Settings): Promise<void> {
   // Enable wanted rulesets. We ship well past the 30k guaranteed minimum, so the extra rules
   // draw from a global pool shared with every other installed extension. If that pool is
   // exhausted, enabling the full set THROWS and would leave the user with zero blocking.
-  // Degrade gracefully: drop the largest ruleset and retry (the built-in seed is never
-  // dropped), so a tight pool costs coverage rather than all protection. Self-heals — every
-  // sync retries the full set, so dropped lists re-enable once the pool frees up.
+  // Degrade gracefully: leave out the largest ruleset until the rest fit (the built-in seed is
+  // never left out), so a tight pool costs coverage rather than all protection. Self-heals —
+  // every sync asks again, so a list left out comes back once the pool frees up.
+  //
+  // Only lists that are not live yet are candidates: a live list already holds its share, so
+  // leaving it out of an enable call changes nothing (the old loop "dropped" live lists and
+  // logged it every wake). Chrome says how much room is left, so a pool that cannot fit a list
+  // costs one query per wake rather than a refused call and a warning.
   const ruleCount = (id: string): number => META.lists.find((l) => l.id === id)?.ruleCount ?? 0;
-  let toEnable = [...enable];
-  while (toEnable.length) {
-    try {
-      await chrome.declarativeNetRequest.updateEnabledRulesets({ enableRulesetIds: toEnable });
-      return;
-    } catch (e) {
-      const droppable = toEnable.filter((id) => id !== 'quell-seed');
-      if (!droppable.length) {
-        console.error('[StampStack] updateEnabledRulesets failed for the minimal set', e);
-        return;
-      }
-      const largest = droppable.reduce((a, b) => (ruleCount(b) > ruleCount(a) ? b : a));
-      console.warn(
-        `[StampStack] static rule pool tight — dropping "${largest}" (${ruleCount(largest)} rules) and retrying`,
-      );
-      toEnable = toEnable.filter((id) => id !== largest);
+  let pending = want.filter((id) => !liveSet.has(id));
+  const largestDroppable = (ids: string[]): string | null => {
+    const droppable = ids.filter((id) => id !== 'quell-seed');
+    return droppable.length
+      ? droppable.reduce((a, b) => (ruleCount(b) > ruleCount(a) ? b : a))
+      : null;
+  };
+  let room: number | null = null;
+  try {
+    room = (await chrome.declarativeNetRequest.getAvailableStaticRuleCount?.()) ?? null;
+  } catch {
+    room = null;
+  }
+  if (room != null) {
+    while (pending.reduce((n, id) => n + ruleCount(id), 0) > room) {
+      const largest = largestDroppable(pending);
+      if (!largest) break;
+      pending = pending.filter((id) => id !== largest);
     }
+  }
+  while (pending.length) {
+    try {
+      await chrome.declarativeNetRequest.updateEnabledRulesets({ enableRulesetIds: pending });
+      break;
+    } catch (e) {
+      const largest = largestDroppable(pending);
+      if (!largest) {
+        console.error('[StampStack] updateEnabledRulesets failed for the minimal set', e);
+        pending = [];
+        break;
+      }
+      pending = pending.filter((id) => id !== largest);
+    }
+  }
+  const loaded = new Set([...liveSet, ...pending]);
+  await noteRefusedLists(want.filter((id) => !loaded.has(id)));
+}
+
+/** Log a refused set once per change, not on every wake that finds the pool still full. */
+async function noteRefusedLists(refused: string[]): Promise<void> {
+  const key = [...refused].sort().join(',');
+  let before = '';
+  try {
+    before = String((await chrome.storage.session?.get(REFUSED_LISTS_KEY))?.[REFUSED_LISTS_KEY] ?? '');
+  } catch {
+    /* no session storage: log every time rather than never */
+  }
+  if (before === key) return;
+  if (refused.length) {
+    console.warn(
+      `[StampStack] static rule pool full — not loaded: ${refused
+        .map((id) => `${id} (${META.lists.find((l) => l.id === id)?.ruleCount ?? 0} rules)`)
+        .join(', ')}`,
+    );
+  } else if (before) {
+    console.info('[StampStack] every enabled list is loaded again');
+  }
+  try {
+    await chrome.storage.session?.set({ [REFUSED_LISTS_KEY]: key });
+  } catch {
+    /* see above */
   }
 }
 
@@ -231,23 +449,20 @@ async function syncAllowlist(settings: Settings): Promise<void> {
     .filter((r) => r.id >= ALLOWLIST_ID_START && r.id < ALLOWLIST_ID_END)
     .map((r) => r.id);
 
-  const hosts = [
-    ...new Set(
-      settings.allowlist
-        .map(normalizeHostname)
-        .filter((h) => isSafeAllowlistHost(h)),
-    ),
-  ];
+  const entries = [...new Set(settings.allowlist.map(siteRuleKey).filter(Boolean))];
   // main_frame only. allowAllRequests on the top-level navigation already allows every request
   // in that tab's frame tree, iframes included. Adding sub_frame would also match an iframe
   // FROM the allowlisted host embedded on any other site, so allowlisting youtube.com would
   // unblock every YouTube embed everywhere. uBO keys its trusted-site switch on the top page.
-  const addRules: chrome.declarativeNetRequest.Rule[] = hosts.map((host, i) => ({
+  // An exact entry (go.dev, an intranet name: site-rules.ts) is two anchored URL rules, each
+  // also held to that host by requestDomains, which alone would cover every host under it.
+  const conditions = entries.flatMap(siteRuleDnrConditions);
+  const addRules: chrome.declarativeNetRequest.Rule[] = conditions.map((condition, i) => ({
     id: ALLOWLIST_ID_START + i,
     priority: ALLOWLIST_PRIORITY,
     action: { type: 'allowAllRequests' as chrome.declarativeNetRequest.RuleActionType },
     condition: {
-      requestDomains: [host],
+      ...condition,
       resourceTypes: ['main_frame' as chrome.declarativeNetRequest.ResourceType],
     },
   }));
@@ -258,7 +473,7 @@ async function syncAllowlist(settings: Settings): Promise<void> {
   const bandKey = (r: chrome.declarativeNetRequest.Rule): string => {
     const domains = (r.condition.requestDomains ?? []).join('|');
     const types = [...(r.condition.resourceTypes ?? [])].sort().join('|');
-    return `${r.id}:${domains}:${types}`;
+    return `${r.id}:${domains}:${r.condition.urlFilter ?? ''}:${types}`;
   };
   const liveBand = existing
     .filter((r) => r.id >= ALLOWLIST_ID_START && r.id < ALLOWLIST_ID_END)
@@ -284,56 +499,44 @@ async function syncAllowlist(settings: Settings): Promise<void> {
  * splitting top frames from embeds, and the scriptlet runtime by acting only where the frame's
  * host is the top page's (frame-scope.ts), leaving other frames to handleScriptlets. The generic
  * sheet cannot: an allowlisted page's third-party iframes still get it, and an embed from an
- * allowlisted host goes without it on other sites.
+ * allowlisted host goes without it on other sites. handleCosmetic corrects both per frame, with
+ * the sheet's revert files or the sheet itself (B24).
  */
 async function syncRegisteredScripts(settings: Settings): Promise<void> {
   const shouldExist = !settings.paused;
-  // User entries pass the same gate as isAllowlistedHost, so a legacy or imported `github.io`
-  // cannot exclude every tenant here while the network layer and popup ignore it.
-  const userCosmeticsOff = [
-    ...settings.allowlist,
-    ...hostsWithCosmeticsOff(settings.siteFixes),
-  ].filter(isSafeAllowlistHost);
-  const userScriptletsOff = [
-    ...settings.allowlist,
-    ...hostsWithScriptletsOff(settings.siteFixes),
-  ].filter(isSafeAllowlistHost);
+  // User entries cover what the popup and the network layer say they cover (site-rules.ts): a
+  // legacy or imported `github.io` excludes github.io itself here, never every tenant.
+  const userCosmeticsOff = [...settings.allowlist, ...hostsWithCosmeticsOff(settings.siteFixes)];
+  const userScriptletsOff = [...settings.allowlist, ...hostsWithScriptletsOff(settings.siteFixes)];
   // Always an array, never undefined: syncOneRegisteredScript compares against the live
   // registration, and an absent property would read as "leave whatever is there".
   // The YouTube MAIN-world hooks are scriptlets, so an `injection`-level fix must exclude
   // them too or "scriptlets off" would not actually be off on YouTube.
-  const allowlistExclude = [...new Set(userScriptletsOff.flatMap(allowlistMatchPatterns))];
+  const allowlistExclude = [...new Set(userScriptletsOff.flatMap(siteRuleMatchPatterns))];
 
   const ids = enabledListIds(settings);
-  // Only exceptions from *enabled* lists exclude the generic sheet. A disabled cookie
-  // list must not keep its @@$generichide hosts unhidden.
-  const netEx = mergeNetworkExceptions(COSMETIC, ids);
-  const pathEx = mergePathExceptions(COSMETIC, ids);
-
-  // Generic cosmetic CSS is additionally excluded on hosts with a $generichide/$elemhide
-  // network exception, so those hosts never receive the sheet (and need no per-page revert
-  // of the whole generic set). matchCosmetic mirrors this: it only emits the revert for
-  // entity-domain (example.*) exceptions, which can't be expressed as a match pattern here.
-  const cosmeticMatches = [
+  // Only exceptions from *enabled* lists exclude the generic sheet (a disabled cookie list must
+  // not keep its @@$generichide hosts unhidden), and only hosts and pages a match pattern can
+  // name: matchCosmetic reverts the sheet per page for entity exceptions (example.*), and
+  // assumes exactly these excludes when it decides a page needs that (genericCssRegistration).
+  // Unreadable data leaves the generic sheet as it is rather than taking the YouTube hooks and
+  // the scriptlets down with it.
+  let generic: { css: string[]; excludeMatches: string[] } | null = null;
+  try {
+    generic = await genericSheetRegistration(ids);
+  } catch (e) {
+    console.error('[StampStack] cosmetic data unreadable; generic sheet left as it was', e);
+  }
+  const cosmeticExclude = [
     ...new Set([
-      ...[
-        // Breakage fixes must also drop the registered generic sheet — it is injected by
-        // chrome.scripting, so suppressing the per-page payload in handleCosmetic is not
-        // enough to stop generic hiding on that host.
-        ...userCosmeticsOff,
-        ...netEx.generichide,
-        ...netEx.elemhide,
-      ].flatMap(allowlistMatchPatterns),
-      // Page-scoped exceptions keep their path: EasyList's `@@||duckduckgo.com/?q=` excludes
-      // the results page (`*://*.duckduckgo.com/?q=*`), not the whole site.
-      ...[...pathEx.generichide, ...pathEx.elemhide].flatMap(pathExceptionMatchPatterns),
+      // Breakage fixes must also drop the registered generic sheet — it is injected by
+      // chrome.scripting, so suppressing the per-page payload in handleCosmetic is not
+      // enough to stop generic hiding on that host.
+      ...userCosmeticsOff.flatMap(siteRuleMatchPatterns),
+      ...(generic?.excludeMatches ?? []),
     ]),
   ];
-  const cosmeticExclude = cosmeticMatches;
-  const cssFiles = ids
-    .map((id) => META.lists.find((l) => l.id === id)?.genericCssFile)
-    .filter((p): p is string => !!p)
-    .map((p) => `generated/${p}`);
+  const cssFiles = generic?.css ?? [];
 
   const cosmetic: chrome.scripting.RegisteredContentScript = {
     id: GENERIC_CSS_SCRIPT_ID,
@@ -342,6 +545,10 @@ async function syncRegisteredScripts(settings: Settings): Promise<void> {
     excludeMatches: cosmeticExclude,
     runAt: 'document_start',
     allFrames: true,
+    // about:blank, srcdoc and document.write frames a page makes for itself are that page (its
+    // origin): friendly-iframe ads are written into exactly those, as the content script's
+    // cosmetic:get already assumes (B25). The excludes see the creator's origin there.
+    matchOriginAsFallback: true,
     persistAcrossSessions: true,
   };
 
@@ -380,7 +587,12 @@ async function syncRegisteredScripts(settings: Settings): Promise<void> {
 
   await settleEach('syncRegisteredScripts', [
     ['legacy scriptlets cleanup', removeLegacyScriptlets()],
-    [cosmetic.id, syncOneRegisteredScript(cosmetic, shouldExist && cssFiles.length > 0)],
+    [
+      cosmetic.id,
+      generic || !shouldExist
+        ? syncOneRegisteredScript(cosmetic, shouldExist && cssFiles.length > 0)
+        : Promise.resolve(),
+    ],
     // Sponsored scrub runs only when the YouTube sponsored toggle is on.
     [youtube.id, syncOneRegisteredScript(youtube, youtubeOn)],
     [youtubeFrames.id, syncOneRegisteredScript(youtubeFrames, youtubeOn)],
@@ -567,6 +779,62 @@ async function syncDarkModeScripts(
   ]);
 }
 
+/** How long one tab gets to take a broadcast before the worker stops waiting on it. */
+const TAB_MESSAGE_TIMEOUT_MS = 1000;
+
+/** `p`, or `fallback` once `ms` have passed. The timer never outlives the race. */
+function settleWithin<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return new Promise<T>((resolve) => {
+    const timer = setTimeout(() => resolve(fallback), ms);
+    p.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      () => {
+        clearTimeout(timer);
+        resolve(fallback);
+      },
+    );
+  });
+}
+
+/**
+ * Send `msg` to every open web tab (top frames and subframes alike: each content script that
+ * listens answers for itself).
+ *
+ * Never awaited inside settingsChain (REVIEW_2026-09-24 B33). A tab answers only when its main
+ * thread is free: with an alert() open, even in a background tab, one toggle waited 13 s, and a
+ * busy page 59 s, while every queued toggle and filter write waited behind it. Each tab gets
+ * TAB_MESSAGE_TIMEOUT_MS; one that misses it picks the change up on its next navigation.
+ */
+async function broadcastToTabs(
+  msg: Message,
+  urls: string[] = ['http://*/*', 'https://*/*'],
+  perTab?: (tabId: number) => Promise<unknown>,
+): Promise<void> {
+  let tabs: chrome.tabs.Tab[] = [];
+  try {
+    tabs = await chrome.tabs.query({ url: urls });
+  } catch {
+    return;
+  }
+  await Promise.all(
+    tabs.map((tab) => {
+      // A discarded tab has no page to tell, and Chrome keeps content scripts off the Web Store.
+      if (tab.id == null || tab.discarded || isExtensionRestrictedHostname(hostOf(tab.url))) {
+        return undefined;
+      }
+      const tabId = tab.id;
+      const send = (async () => {
+        if (perTab) await perTab(tabId).catch(() => {});
+        await chrome.tabs.sendMessage(tabId, msg);
+      })();
+      return settleWithin(send, TAB_MESSAGE_TIMEOUT_MS, undefined);
+    }),
+  );
+}
+
 /**
  * Live-update open tabs after a toggle, instantly and without a reload. The content script
  * re-evaluates and applies the correct visual itself: the matte smart invert on a light page,
@@ -576,44 +844,51 @@ async function syncDarkModeScripts(
  * host resolves to "on" — including already-dark pages, which would flash to light for a frame
  * before the content script cancelled it. Letting the content script decide keeps the toggle
  * both instant and flash-free.
+ *
+ * No paid gate here: on a paid→unpaid transition we still need to reach open tabs so the
+ * content script can cancel any lingering invert (it resets itself when darkmode:get reports
+ * unpaid). The content script is the authority on what to apply. Fire-and-forget: see
+ * broadcastToTabs.
  */
-async function applyDarkModeToOpenTabs(
-  _settings: Settings,
-  _license: LicenseState,
-): Promise<void> {
-  // No paid gate here: on a paid→unpaid transition we still need to reach open tabs so the
-  // content script can cancel any lingering invert (it resets itself when darkmode:get reports
-  // unpaid). The content script is the authority on what to apply.
-  const tabs = await chrome.tabs.query({ url: ['http://*/*', 'https://*/*'] });
-  await Promise.all(
-    tabs.map(async (tab) => {
-      if (tab.id == null || !isDarkModeInjectibleUrl(tab.url)) return;
-      try {
-        // Clean up any invert sheet an older build inserted via insertCSS (harmless if none).
-        await chrome.scripting
-          .removeCSS({ target: { tabId: tab.id, allFrames: true }, files: [DARK_MODE_CSS_PATH] })
-          .catch(() => {});
-        await chrome.tabs.sendMessage(tab.id, { type: 'darkmode:refresh' } satisfies Message);
-      } catch {
-        /* Discarded tab or content script not ready — next navigation picks up registration. */
-      }
-    }),
-  );
+function refreshDarkModeInOpenTabs(): Promise<void> {
+  return broadcastToTabs({ type: 'darkmode:refresh' }, undefined, async (tabId) => {
+    // Clean up any invert sheet an older build inserted via insertCSS (harmless if none).
+    await chrome.scripting.removeCSS({
+      target: { tabId, allFrames: true },
+      files: [DARK_MODE_CSS_PATH],
+    });
+  }).catch(() => {});
 }
 
-async function syncDarkModeAndActiveTab(
-  settings: Settings,
-  license: LicenseState,
-): Promise<void> {
-  await syncDarkModeScripts(settings, license);
-  await applyDarkModeToOpenTabs(settings, license);
+/** Re-apply the user's filters and site-specific hiding on open pages, without a reload. */
+function refreshCosmeticsInOpenTabs(): Promise<void> {
+  return broadcastToTabs({ type: 'cosmetic:refresh' }).catch(() => {});
 }
 
-async function applyAll(
-  settings: Settings,
-  license?: LicenseState,
-  opts: { touchTabs?: boolean } = {},
-): Promise<void> {
+/** YouTube pages re-read their options (youtube:getOptions) after something they follow changed. */
+function refreshYoutubeInOpenTabs(): Promise<void> {
+  return broadcastToTabs({ type: 'youtube:refresh' }, [
+    '*://*.youtube.com/*',
+    '*://*.youtube-nocookie.com/*',
+    '*://*.youtubekids.com/*',
+  ]).catch(() => {});
+}
+
+/**
+ * Bring the dark-mode registrations in line with the stored settings, inside settingsChain so a
+ * quick on/off cannot leave the older sync last (the FOUC shell stayed registered with dark mode
+ * off in 9 of 60 fast toggles), then tell open tabs without waiting on them.
+ */
+async function syncDarkModeNow(license: LicenseState): Promise<void> {
+  await withSettings((s) => syncDarkModeScripts(s, license));
+  void refreshDarkModeInOpenTabs();
+}
+
+/**
+ * Every registration and ruleset from `settings`. Touches no tab: callers that changed
+ * something a page shows broadcast after leaving settingsChain (B33).
+ */
+async function applyAll(settings: Settings, license?: LicenseState): Promise<void> {
   const lic = license ?? (await loadLicense());
   await Promise.all([
     syncRulesets(settings),
@@ -624,11 +899,6 @@ async function applyAll(
     syncRegisteredScripts(settings),
     syncDarkModeScripts(settings, lic),
   ]);
-  // init()/applyAll unregisters dark CSS on paid→unpaid (grace expiry, ExtPay cancel),
-  // but already-open tabs keep the dynamic engine until told to stop. license:refresh
-  // already uses syncDarkModeAndActiveTab; cold-start must too or unpaid dark mode sticks.
-  // Callers that know nothing user-visible changed opt out — see init('wake').
-  if (opts.touchTabs !== false) await applyDarkModeToOpenTabs(settings, lic);
 }
 
 // Serialize read-modify-write of the single settings blob. Message handlers and the
@@ -695,21 +965,65 @@ async function applyLocaleDefaults(): Promise<void> {
   }
 }
 
-async function init(mode: 'full' | 'wake' = 'full'): Promise<void> {
+type InitMode = 'full' | 'wake';
+
+let initRunning: { mode: InitMode; done: Promise<void> } | null = null;
+let initFullQueued: Promise<void> | null = null;
+
+/**
+ * Single-flight. This module's own wake init and onInstalled/onStartup's full one start
+ * together on every browser start and update; run side by side they asked ExtensionPay twice
+ * and resynced everything twice. A wake is covered by any run already going; a full start
+ * waits for a running wake and then runs once.
+ */
+function init(mode: InitMode = 'full'): Promise<void> {
+  const running = initRunning;
+  if (running) {
+    if (mode === 'wake' || running.mode === 'full') return running.done;
+    initFullQueued ??= running.done.then(() => {
+      initFullQueued = null;
+      return init('full');
+    });
+    return initFullQueued;
+  }
+  const done: Promise<void> = runInit(mode)
+    .catch((e) => console.error(`[StampStack] init (${mode}) failed`, e))
+    .finally(() => {
+      if (initRunning?.done === done) initRunning = null;
+    });
+  initRunning = { mode, done };
+  return done;
+}
+
+async function runInit(mode: InitMode): Promise<void> {
   // Must run before license.unpacked / Dev unlock decisions. Module-scope state, so it is lost
   // on every wake and has to be re-probed regardless of mode.
   await probeInstallEnvironment();
 
   const cached = await loadLicense();
   const wasPaid = isLicenseEffectivelyPaid(cached);
-
-  let license =
-    mode === 'full' || !licenseIsFresh(cached) ? await refreshLicense() : cached;
-  license = await ensureUnpackedTestLicense();
+  // Someone who paid before the first-unlock marker existed has had their unlock already.
+  if (wasPaid) await markDarkModeUnlockedOnce();
 
   // One-shot migration, and already flag-guarded; onInstalled covers the upgrade case, so it
   // does not need to touch storage on every wake.
   if (mode === 'full') await clearBuggyAutoOffOverrides();
+
+  // Reconcile first, from the cached license (REVIEW_2026-09-24 B34). An update resets the
+  // rulesets to the manifest defaults and clears every registered script: until this runs, a
+  // paused user gets full blocking and a list switched off is back on. It used to wait on
+  // ExtensionPay first: 21 s with extensionpay.com slow, and for good with it hanging, since
+  // every wake then hung again.
+  await withSettings(async (settings) => {
+    await applyAll(settings, cached);
+    // Neutral grey, not brand green: a green badge melts into the green icon. White text 6:1.
+    await chrome.action.setBadgeBackgroundColor({ color: '#5f6368' });
+  });
+
+  // Then the license, bounded by LICENSE_FETCH_TIMEOUT_MS inside refreshLicense.
+  let license = cached;
+  if (mode === 'full' || !licenseIsFresh(cached)) license = await refreshLicenseShared();
+  license = await ensureUnpackedTestLicense();
 
   if (isUnpackedInstall() && isLicenseEffectivelyPaid(license)) {
     // One-shot on first unpacked run. init() re-runs on every SW cold-start, so without
@@ -724,21 +1038,26 @@ async function init(mode: 'full' | 'wake' = 'full'): Promise<void> {
     }
   }
 
-  // Messaging every open tab is only needed when the paid state actually moved (grace expiry,
-  // an ExtPay cancel), or on a genuine start. On an ordinary wake it is a broadcast to every
-  // tab to tell them nothing changed.
+  // The dark-mode registrations follow the license: resync them when the paid state moved
+  // (grace expiry, an ExtPay cancel, a dev unlock). Messaging every open tab is only needed
+  // then, or on a genuine start; on an ordinary wake it would tell every tab nothing changed.
   const paidChanged = isLicenseEffectivelyPaid(license) !== wasPaid;
-  const touchTabs = mode === 'full' || paidChanged;
-
-  await withSettings(async (settings) => {
-    await applyAll(settings, license, { touchTabs });
-    // Neutral grey, not brand green: a green badge melts into the green icon. White text 6:1.
-    await chrome.action.setBadgeBackgroundColor({ color: '#5f6368' });
-  });
+  if (paidChanged) await withSettings((s) => syncDarkModeScripts(s, license));
+  if (mode === 'full' || paidChanged) void refreshDarkModeInOpenTabs();
 }
 
 const AUTO_OFF_RESET_KEY = 'stampstack.darkAutoOffReset.v1';
 const DARK_AUTO_ENABLE_KEY = 'stampstack.darkAutoEnable.v1';
+/** Set once dark mode has been switched on for a first unlock; later unlocks leave it alone. */
+const DARK_UNLOCKED_ONCE_KEY = 'stampstack.darkUnlockedOnce.v1';
+
+/** Record the first unlock. True only for the call that recorded it. */
+async function markDarkModeUnlockedOnce(): Promise<boolean> {
+  const flag = await chrome.storage.local.get(DARK_UNLOCKED_ONCE_KEY);
+  if (flag[DARK_UNLOCKED_ONCE_KEY]) return false;
+  await chrome.storage.local.set({ [DARK_UNLOCKED_ONCE_KEY]: true });
+  return true;
+}
 
 /** Remove force-off entries that were auto-persisted under the invert false-positive bug. */
 async function clearBuggyAutoOffOverrides(): Promise<void> {
@@ -754,12 +1073,71 @@ async function clearBuggyAutoOffOverrides(): Promise<void> {
   await chrome.storage.local.set({ [AUTO_OFF_RESET_KEY]: true });
 }
 
-/** After purchase / restore: cache is paid — auto-enable dark mode once. */
-async function onLicenseUnlocked(_license: LicenseState): Promise<void> {
-  const settings = await mutateSettings((s) => {
-    s.darkModeEnabled = true;
-  });
-  await syncDarkModeAndActiveTab(settings, _license);
+/**
+ * The cache just turned paid: a purchase, a restore, or a verify after the cache had lapsed.
+ * Dark mode switches itself on for the first unlock only. A buyer who turned it off must not
+ * find it back on because a grace period ran out while offline, or ExtensionPay once answered
+ * "unpaid" and then "paid" again.
+ */
+async function onLicenseUnlocked(license: LicenseState): Promise<void> {
+  if (await markDarkModeUnlockedOnce()) {
+    await mutateSettings((s) => {
+      s.darkModeEnabled = true;
+    });
+  }
+  await syncDarkModeNow(license);
+}
+
+interface LicenseRefresh {
+  at: number;
+  settled: boolean;
+  result: Promise<{ license: LicenseState; reached: boolean }>;
+}
+
+/**
+ * The last license refresh, shared. init's wake and full runs, the popup and Options opening,
+ * and "Refresh license" all ask, often within a second of each other, and ExtensionPay's answer
+ * does not change in between. A caller that needs a newer answer passes a smaller `maxAgeMs`;
+ * one still in flight is always joined.
+ */
+let licenseRefresh: LicenseRefresh | null = null;
+
+function refreshLicenseSharedDetailed(
+  maxAgeMs = 60_000,
+): Promise<{ license: LicenseState; reached: boolean }> {
+  const last = licenseRefresh;
+  if (last && (!last.settled || Date.now() - last.at < maxAgeMs)) return last.result;
+  const entry: LicenseRefresh = { at: Date.now(), settled: false, result: refreshLicenseDetailed() };
+  const settle = (): void => {
+    entry.settled = true;
+  };
+  entry.result.then(settle, settle);
+  licenseRefresh = entry;
+  return entry.result;
+}
+
+async function refreshLicenseShared(maxAgeMs?: number): Promise<LicenseState> {
+  return (await refreshLicenseSharedDetailed(maxAgeMs)).license;
+}
+
+/**
+ * Opening the popup or Options re-verifies the purchase (spec B.2, REVIEW_2026-09-24 M16), so
+ * a purchase made on another device, or a refund, shows up where the user looks for it. At most
+ * once per LICENSE_UI_RECHECK_MS, and never awaited by the page that triggered it.
+ */
+const LICENSE_UI_RECHECK_MS = 10 * 60 * 1000;
+let licenseUiRecheckAt = 0;
+
+async function maybeReverifyLicense(): Promise<void> {
+  const now = Date.now();
+  if (now - licenseUiRecheckAt < LICENSE_UI_RECHECK_MS) return;
+  licenseUiRecheckAt = now;
+  const cached = await loadLicense();
+  if (cached.verifiedAt != null && now - cached.verifiedAt < LICENSE_UI_RECHECK_MS) return;
+  const wasPaid = isLicenseEffectivelyPaid(cached);
+  const license = await refreshLicenseShared(LICENSE_UI_RECHECK_MS);
+  // A new unlock has already re-synced through onLicenseUnlocked; a lapse or refund must here.
+  if (wasPaid && !isLicenseEffectivelyPaid(license)) await syncDarkModeNow(license);
 }
 
 /**
@@ -781,10 +1159,50 @@ chrome.runtime.onInstalled.addListener((details) => {
   // re-applying a regional default would silently switch back on a list they turned off.
   if (details.reason === 'install') void applyLocaleDefaults();
   void init('full');
+  if (details.reason === 'install' || details.reason === 'update') void reinjectContentScripts();
 });
 chrome.runtime.onStartup.addListener(() => void init('full'));
 // Module scope: this is the every-wake path, not a start. Keep it cheap.
 void init('wake');
+
+/**
+ * Tabs open across an install or update have no live content script (REVIEW_2026-09-24 M2).
+ * Chrome injects the manifest's content scripts only into pages loaded afterwards, and an update
+ * cuts the old ones off from the worker, so those tabs lost SponsorBlock, live toggles, the
+ * filter refresh and the page report until reloaded while the popup described them as covered.
+ * The new content script goes into each of their frames; the orphaned one stands down by itself.
+ */
+async function reinjectContentScripts(): Promise<void> {
+  let tabs: chrome.tabs.Tab[] = [];
+  try {
+    tabs = await chrome.tabs.query({ url: ['http://*/*', 'https://*/*'] });
+  } catch {
+    return;
+  }
+  const files =
+    chrome.runtime.getManifest().content_scripts?.find((c) => c.js?.includes('content.js'))?.js ??
+    ['content.js'];
+  await Promise.all(
+    tabs.map(async (tab) => {
+      // A discarded tab reloads, and gets the manifest's scripts, when it is next shown.
+      if (tab.id == null || tab.discarded || isExtensionRestrictedHostname(hostOf(tab.url))) return;
+      try {
+        await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, files });
+      } catch {
+        /* a page Chrome keeps extensions out of (an error page, the PDF viewer) */
+      }
+    }),
+  );
+}
+
+function hostOf(url: string | undefined | null): string {
+  if (!url) return '';
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return '';
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Blocked-request counting + badge (fires only for unpacked/dev builds)
@@ -835,8 +1253,40 @@ chrome.tabs.onRemoved.addListener((tabId) => tabBlocked.delete(tabId));
 // Messaging
 // ---------------------------------------------------------------------------
 
+/**
+ * What a content script may ask. A content script runs in a web page's renderer, and a renderer
+ * the page has compromised can send whatever a content script can. These messages read what one
+ * page needs, or (the picker) add one hide rule for the sender's own site. Everything else
+ * changes settings or reads them whole, and is answered only for the extension's own pages: the
+ * popup and Options. Web pages and other extensions cannot reach onMessage at all.
+ */
+const CONTENT_SCRIPT_MESSAGES: ReadonlySet<Message['type']> = new Set<Message['type']>([
+  'cosmetic:get',
+  'scriptlets:get',
+  'youtube:getOptions',
+  'sponsorblock:getSegments',
+  'darkmode:get',
+  'customfilters:add',
+]);
+
+/** The popup, Options, or another page of this extension (never a content script). */
+function isExtensionPage(sender: chrome.runtime.MessageSender): boolean {
+  if (sender.id !== chrome.runtime.id || typeof sender.url !== 'string') return false;
+  return sender.url.startsWith(chrome.runtime.getURL(''));
+}
+
 chrome.runtime.onMessage.addListener((msg: Message, sender, sendResponse) => {
-  handleMessage(msg, sender)
+  // ExtPay's own content script messages the worker too, with plain strings its listener answers.
+  if (!msg || typeof msg !== 'object' || typeof (msg as { type?: unknown }).type !== 'string') {
+    return false;
+  }
+  const trusted = isExtensionPage(sender);
+  if (!trusted && !CONTENT_SCRIPT_MESSAGES.has(msg.type)) {
+    console.warn('[StampStack] refused', msg.type, 'from a content script', sender.url ?? '');
+    sendResponse(null);
+    return false;
+  }
+  handleMessage(msg, sender, trusted)
     .then((r) => sendResponse(r))
     .catch((e) => {
       console.error('[StampStack] message handler error', msg.type, e);
@@ -845,15 +1295,20 @@ chrome.runtime.onMessage.addListener((msg: Message, sender, sendResponse) => {
   return true;
 });
 
-async function handleMessage(msg: Message, sender: chrome.runtime.MessageSender): Promise<unknown> {
+async function handleMessage(
+  msg: Message,
+  sender: chrome.runtime.MessageSender,
+  trusted: boolean,
+): Promise<unknown> {
   switch (msg.type) {
     case 'cosmetic:get':
-      return handleCosmetic(msg.hostname, sender);
+      return handleCosmetic(msg, sender);
 
     case 'scriptlets:get':
       return handleScriptlets(msg, sender);
 
     case 'popup:get':
+      void maybeReverifyLicense().catch(() => {});
       return handlePopupGet();
 
     case 'popup:toggleSite':
@@ -872,7 +1327,7 @@ async function handleMessage(msg: Message, sender: chrome.runtime.MessageSender)
       return handlePickerStart();
 
     case 'customfilters:add':
-      return handleCustomFilterAdd(msg.line, sender);
+      return handleCustomFilterAdd(msg.line, sender, trusted);
 
     case 'customfilters:get':
       return handleCustomFiltersGet();
@@ -886,6 +1341,12 @@ async function handleMessage(msg: Message, sender: chrome.runtime.MessageSender)
 
     case 'sitefix:set':
       return handleSiteFixSet(msg.hostname, msg.level);
+
+    case 'sitefix:remove':
+      return handleSiteFixRemove(msg.hostname);
+
+    case 'allowlist:remove':
+      return handleAllowlistRemove(msg.hostname);
 
     case 'sitefix:list':
       return handleSiteFixList();
@@ -904,7 +1365,7 @@ async function handleMessage(msg: Message, sender: chrome.runtime.MessageSender)
       );
 
     case 'youtube:getOptions':
-      return handleYoutubeGetOptions(policyHost(msg.hostname, sender));
+      return handleYoutubeGetOptions(policyHost(msg.hostname, sender, msg.topHost));
 
     case 'sponsorblock:getCategories':
       return handleSponsorCategoriesGet();
@@ -925,17 +1386,10 @@ async function handleMessage(msg: Message, sender: chrome.runtime.MessageSender)
       return handleStatsGet();
 
     case 'darkmode:get':
-      // Content-script callers (incl. subframes) resolve against the TOP document's host so
-      // every frame in a tab follows the top site's setting — a Stripe iframe on example.com
-      // follows example.com's toggle, not stripe.com's. Popup/options callers have no sender
-      // tab and use the hostname they pass (or the active tab).
-      if (sender.tab?.url && isHttpOrHttpsUrl(sender.tab.url)) {
-        try {
-          return handleDarkModeGet(new URL(sender.tab.url).hostname);
-        } catch {
-          /* fall through to msg.hostname */
-        }
-      }
+      // Content scripts, every frame: the decision for the page the frame is on, and nothing
+      // else. Extension pages: the full state for the host they name (or the active tab).
+      if (!trusted) return handleDarkModeGetForPage(msg, sender);
+      void maybeReverifyLicense().catch(() => {});
       return handleDarkModeGet(msg.hostname);
 
     case 'darkmode:setEnabled':
@@ -945,14 +1399,13 @@ async function handleMessage(msg: Message, sender: chrome.runtime.MessageSender)
       return handleDarkModeSetSiteOverride(msg.hostname, msg.override);
 
     case 'cosmetic:refresh':
-      // SW → content only.
-      return null;
-
     case 'darkmode:refresh':
-      // SW → content only; tabs should not message the SW with this type.
+    case 'youtube:refresh':
+      // SW → content only; tabs should not message the SW with these.
       return null;
 
     case 'license:get':
+      void maybeReverifyLicense().catch(() => {});
       return handleLicenseGet();
 
     case 'license:openCheckout':
@@ -1000,19 +1453,36 @@ function policyHost(
 }
 
 async function handleCosmetic(
-  hostname: string,
+  msg: Extract<Message, { type: 'cosmetic:get' }>,
   sender: chrome.runtime.MessageSender,
 ): Promise<CosmeticResponse> {
   const settings = await loadSettings();
-  const site = policyHost(hostname, sender);
+  const hostname = String(msg.hostname ?? '');
+  const site = policyHost(hostname, sender, msg.topHost);
+  const ids = enabledListIds(settings);
+  const top = isTopDocument(sender, msg);
+  // The document may hold sheets an earlier worker inserted (syncDocumentSheet).
+  const refetch = msg.refetch === true;
   // A breakage fix suppresses element hiding while leaving network blocking in place. The
   // registered generic stylesheet is excluded separately in syncRegisteredScripts — returning
   // nothing here only covers the per-page specific/procedural payload.
   if (
     settings.paused ||
-    isAllowlistedHost(site, settings.allowlist) ||
+    isSiteAllowlisted(site, settings.allowlist) ||
     fixDisablesCosmetics(resolveSiteFix(site, settings.siteFixes))
   ) {
+    void syncDocumentSheet('USER', sender, null, refetch && top);
+    // The registered sheet's excludes test each frame's own URL, so a third-party frame on a
+    // switched-off page still got generic hiding (B24). uBO switches element hiding off for the
+    // whole page: undo the sheet in that frame. Not while paused, when nothing is registered,
+    // nor where the frame's own host or page kept the sheet out.
+    // Elsewhere a revert already in the document stays (its sheet was injected before the switch),
+    // including one the worker no longer remembers.
+    const revert =
+      !settings.paused && !top && !userCosmeticsOff(hostname, settings)
+        ? await genericRevertFilesFor(hostname, ids, sender.url).catch(() => null)
+        : null;
+    void syncDocumentSheet('AUTHOR', sender, revert ?? revertsIn(sender), refetch && revert !== null);
     return {
       allowlisted: true,
       hide: [],
@@ -1022,23 +1492,163 @@ async function handleCosmetic(
       disableSpecific: true,
     };
   }
-  // The frame's own URL: page-scoped exceptions (EasyList's search-results generichide) need it.
-  const m = matchCosmetic(hostname, COSMETIC, enabledListIds(settings), sender.url);
   // The user's own rules ride along with the list-derived ones. Their exceptions are applied
-  // inside customCosmeticsFor, and their unhides also cancel list hides below — a user must be
-  // able to override a filter list, not just their own picks.
+  // inside customCosmeticsFor, and their unhides also cancel list hides, procedural rules and
+  // actions (matchCosmetic's userUnhide) — a user must be able to override a filter list, not
+  // just their own picks.
   const custom = customCosmeticsFor(settings.customFilters, hostname);
+  // The frame's own URL: page-scoped exceptions (EasyList's search-results generichide) need it.
+  const m = await cosmeticMatchFor(hostname, ids, sender.url, custom.unhide);
   const hide = [...new Set([...m.hide, ...custom.hide])].filter(
     (s) => !custom.unhide.includes(s),
   );
+  // Only what the generic sheet really hides here needs a `display: revert` (matchCosmetic
+  // folds the user's exceptions in). Reverting every user `#@#` selector would override the
+  // page's own CSS on elements nothing hid.
+  const unhide = m.unhide;
+  // The reverse of the B24 case above: a frame whose own host the user switched off, embedded in
+  // a page that is on, had no generic sheet, since the excludes see only the frame's URL.
+  const lostSheet = !top && !m.disableGeneric && userCosmeticsOff(hostname, settings);
+  const authorFiles = [
+    ...(lostSheet ? (await genericSheetRegistration(ids)).css : []),
+    ...m.revertGenericCss,
+  ];
+  void syncDocumentSheet('AUTHOR', sender, authorFiles, refetch);
+  const procedural = [
+    ...m.procedural.filter((p) => !custom.unhide.includes(p.expr)),
+    ...(custom.procedural ?? []),
+  ];
+  // The generic sheet again, as a USER-origin sheet (B21), where nothing asks for it to be
+  // reverted or restyled: an element-hiding exception undoes generic hides with an author-origin
+  // rule, and a `:style()` filter shows an element with one, which a user-origin `!important`
+  // would beat.
+  const restyles =
+    m.actions.some((a) => a.action === 'style') || procedural.some((p) => p.expr.includes(':style('));
+  const userSheet =
+    top && !m.disableGeneric && !unhide.length && !restyles
+      ? (await genericSheetRegistration(ids)).css
+      : null;
+  void syncDocumentSheet('USER', sender, userSheet, refetch && top);
   return {
     allowlisted: false,
     hide,
-    unhide: [...new Set([...m.unhide, ...custom.unhide])],
-    procedural: m.procedural,
+    unhide,
+    procedural,
+    ...(m.actions.length ? { actions: m.actions } : {}),
     disableGeneric: m.disableGeneric,
     disableSpecific: m.disableSpecific,
   };
+}
+
+/**
+ * The user's own switches (the allowlist, a repair step) cover `frameHost` itself, so the
+ * registered generic sheet's excludes (syncRegisteredScripts) keep it out of that frame.
+ */
+function userCosmeticsOff(frameHost: string, settings: Settings): boolean {
+  if (!frameHost) return false;
+  return (
+    isSiteAllowlisted(frameHost, settings.allowlist) ||
+    fixDisablesCosmetics(resolveSiteFix(frameHost, settings.siteFixes))
+  );
+}
+
+/** A tab's top-level document, prerendered ones included (their frameId is not 0 until shown). */
+function isTopDocument(
+  sender: chrome.runtime.MessageSender,
+  msg: { isTop?: boolean },
+): boolean {
+  if (sender.frameId === 0) return true;
+  return sender.documentLifecycle === 'prerender' && msg.isTop === true;
+}
+
+type SheetOrigin = 'USER' | 'AUTHOR';
+
+/**
+ * documentId → the package stylesheets inserted there, per origin, so a refresh neither stacks
+ * a second copy nor leaves one behind on a page that was switched off meanwhile. Lost on every
+ * wake and bounded for a long-lived worker; a document that asks again says so (`refetch`), and
+ * syncDocumentSheet then clears what an earlier worker may have left there.
+ */
+const documentSheets: Record<SheetOrigin, Map<string, string>> = {
+  USER: new Map(),
+  AUTHOR: new Map(),
+};
+const DOCUMENT_SHEET_MEMORY = 200;
+
+/** The generic revert files already inserted into the sender's document, or null. */
+function revertsIn(sender: chrome.runtime.MessageSender): string[] | null {
+  const now = sender.documentId ? documentSheets.AUTHOR.get(sender.documentId) : undefined;
+  const reverts = (now ?? '').split('\n').filter((f) => f.endsWith('.revert.css'));
+  return reverts.length ? reverts : null;
+}
+
+/**
+ * Package stylesheets inserted into the sender's document (null or [] removes what is there).
+ *
+ * USER: generic element hiding at user origin for a top-level page (REVIEW_2026-09-24 B21).
+ * The registered generic sheet (syncRegisteredScripts) is author-origin: a page rule
+ * `display: block !important`, or the same inline, beats it, and anti-adblock scripts that
+ * re-show a hidden slot do exactly that. A user-origin `!important` beats both. chrome.scripting
+ * can only insert user-origin CSS per document (registerContentScripts takes no origin:
+ * "Unexpected property", Chromium 131), which lands after the content script's first message.
+ * So the registered sheet stays, for first paint, and this one follows it: no flash of ads
+ * before, and nothing a page can override after. Top frames only: measured with the default
+ * lists, a second copy cost the top document about 5 ms of style work, and on a page with 20
+ * ad iframes another copy in each delayed `load` by about 100 ms, for frames that are
+ * themselves the ads.
+ *
+ * AUTHOR: the generic sheet's revert twins where an exception or a switched-off page undoes it,
+ * or the sheet itself where the registration's excludes wrongly left a frame out (B24). Author
+ * origin, inserted after the registered sheet, so a revert wins over it at equal specificity.
+ */
+async function syncDocumentSheet(
+  origin: SheetOrigin,
+  sender: chrome.runtime.MessageSender,
+  files: string[] | null,
+  mayHold = false,
+): Promise<void> {
+  const tabId = sender.tab?.id;
+  const documentId = sender.documentId;
+  if (tabId == null || !documentId) return;
+  const sheets = documentSheets[origin];
+  const target: chrome.scripting.InjectionTarget = { tabId, documentIds: [documentId] };
+  const before = sheets.get(documentId);
+  const next = files?.length ? files.join('\n') : undefined;
+  // Forgotten, but the document may still hold what an earlier worker inserted: a user sheet
+  // that now has to go (a new `#@#`, a switched-off page) would stay, and a copy inserted next
+  // to it would outlive the next removal, which takes out one copy per call (Chromium 131). So
+  // every file this origin could hold goes first; removing CSS never inserted is a no-op.
+  const unknown = before === undefined && mayHold;
+  if (before === next && !unknown) return;
+  try {
+    if (before) {
+      sheets.delete(documentId);
+      await chrome.scripting.removeCSS({ target, files: before.split('\n'), origin });
+    } else if (unknown) {
+      await chrome.scripting.removeCSS({ target, files: await insertableSheets(origin), origin });
+    }
+    if (next) {
+      sheets.set(documentId, next);
+      if (sheets.size > DOCUMENT_SHEET_MEMORY) {
+        sheets.delete(sheets.keys().next().value as string);
+      }
+      await chrome.scripting.insertCSS({ target, files: files!, origin });
+    }
+  } catch {
+    // Usually the document is already gone. The registered sheet still hides as before.
+    sheets.delete(documentId);
+  }
+}
+
+/** Every package stylesheet syncDocumentSheet can insert at `origin`, whatever the lists. */
+async function insertableSheets(origin: SheetOrigin): Promise<string[]> {
+  const plan = Object.values((await cosmeticCore().catch(() => null))?.genericCss ?? {}).flat();
+  const sheets = [
+    ...plan.map((s) => s.file),
+    ...META.lists.map((l) => l.genericCssFile).filter((p): p is string => !!p),
+  ];
+  const reverts = origin === 'AUTHOR' ? plan.map((s) => s.revert) : [];
+  return [...new Set([...sheets, ...reverts])].map((p) => `generated/${p}`);
 }
 
 /**
@@ -1062,7 +1672,7 @@ async function handleScriptlets(
   const site = msg.registered ? frameHost : policyHost(frameHost, sender, msg.topHost);
   if (
     settings.paused ||
-    isAllowlistedHost(site, settings.allowlist) ||
+    isSiteAllowlisted(site, settings.allowlist) ||
     fixDisablesScriptlets(resolveSiteFix(site, settings.siteFixes))
   ) {
     return { allowlisted: true, injected: false };
@@ -1132,19 +1742,21 @@ async function handlePopupGet(): Promise<PopupData> {
       hostname = null;
     }
   }
-  const allowlisted = !!hostname && isAllowlistedHost(hostname, settings.allowlist);
+  const allowlisted = !!hostname && isSiteAllowlisted(hostname, settings.allowlist);
   // Count what Chrome actually loaded. Reporting the requested total would overstate
   // protection on a profile whose static-rule pool is exhausted.
   const { rows: listRows, degraded } = await buildListRows(settings);
   const activeRules = listRows.filter((l) => l.active).reduce((n, l) => n + l.ruleCount, 0);
   // A parent entry (example.com) allowlists sub.example.com, but removing the *sub* host from
   // the list cannot undo it. The popup needs to say so instead of offering a dead toggle.
+  const ownKey = siteRuleKey(hostname);
   const coveredBy =
     hostname && allowlisted
       ? settings.allowlist
-          .map(normalizeHostname)
-          .find((h) => h !== normalizeHostname(hostname) && isAllowlistedHost(hostname, [h])) ?? null
+          .map(siteRuleKey)
+          .find((h) => !!h && h !== ownKey && siteRuleCovers(h, hostname)) ?? null
       : null;
+  const fix = resolveSiteFixEntry(hostname, settings.siteFixes);
   return {
     hostname,
     url,
@@ -1155,13 +1767,19 @@ async function handlePopupGet(): Promise<PopupData> {
     statsReliable: STATS_RELIABLE,
     activeRuleCount: activeRules,
     coveredBy,
-    siteFix: resolveSiteFix(hostname, settings.siteFixes),
+    siteFix: fix?.level ?? null,
+    siteFixHost: fix?.entry ?? null,
+    siteActionable: !!hostname && siteRuleScope(hostname) !== null,
+    siteRefusal: hostname ? siteRuleRefusal(hostname) : null,
+    ...(tab?.incognito ? { incognito: true } : {}),
     degraded,
     youtubeBlockSponsored: settings.youtubeBlockSponsored !== false,
     youtubeBlockShorts: !!settings.youtubeBlockShorts,
     youtubeSponsorBlock: settings.youtubeSponsorBlock !== false,
   };
 }
+
+const YOUTUBE_HOST_RE = /(^|\.)(youtube\.com|youtube-nocookie\.com|youtu\.be|youtubekids\.com)$/;
 
 /**
  * Compose a breakage report for the user to send.
@@ -1172,22 +1790,43 @@ async function handlePopupGet(): Promise<PopupData> {
  */
 async function handleBreakageReport(hostname: string): Promise<BreakageReport> {
   const settings = await loadSettings();
-  const host = normalizeHostname(hostname);
+  const host = normalizeHostname(String(hostname ?? ''));
   // Same gate as allowlist / DNR match patterns — refuse garbage or CRLF-bearing hosts so
   // they cannot land in a mailto subject (normal tab hosts already pass).
   if (!isValidMatchPatternHost(host)) {
     throw new Error('invalid hostname for breakage report');
   }
   const { rows, degraded } = await buildListRows(settings);
+  const license = await loadLicense();
+  const dark = resolveDarkModeForHost({
+    paid: isLicenseEffectivelyPaid(license),
+    enabled: settings.darkModeEnabled,
+    overrides: settings.darkModeSiteOverrides,
+    hostname: host,
+  });
+  const custom = customCosmeticsFor(settings.customFilters, host);
   return buildBreakageReport({
     hostname: host,
     siteFix: resolveSiteFix(host, settings.siteFixes),
-    allowlisted: isAllowlistedHost(host, settings.allowlist),
+    allowlisted: isSiteAllowlisted(host, settings.allowlist),
+    paused: settings.paused,
     version: chrome.runtime.getManifest().version,
     listsGeneratedAt: META.generatedAt,
     activeRuleCount: rows.filter((l) => l.active).reduce((n, l) => n + l.ruleCount, 0),
     degraded,
-    enabledLists: rows.filter((l) => l.enabled).map((l) => l.id),
+    // What Chrome actually loaded; a list it refused is named apart, as the likely suspect is
+    // the one missing.
+    enabledLists: rows.filter((l) => l.active).map((l) => l.id),
+    refusedLists: rows.filter((l) => l.refused).map((l) => l.id),
+    customRules: custom.hide.length + custom.unhide.length + (custom.procedural?.length ?? 0),
+    darkMode: isLicenseEffectivelyPaid(license) ? dark.apply : null,
+    youtube: YOUTUBE_HOST_RE.test(host)
+      ? {
+          sponsored: settings.youtubeBlockSponsored !== false,
+          shorts: !!settings.youtubeBlockShorts,
+          sponsorBlock: settings.youtubeSponsorBlock !== false,
+        }
+      : null,
     browser: browserLabel(typeof navigator === 'undefined' ? null : navigator.userAgent),
     now: Date.now(),
   });
@@ -1195,9 +1834,14 @@ async function handleBreakageReport(hostname: string): Promise<BreakageReport> {
 
 async function handleYoutubeGetOptions(hostname: string): Promise<YoutubeOptionsData> {
   const settings = await loadSettings();
+  // The repair ladder reaches YouTube's own features too (B32): its hide CSS is element hiding,
+  // and the sponsored scrub, the Shorts redirect and SponsorBlock's skips are script patches.
+  const fix = resolveSiteFix(hostname, settings.siteFixes);
   return {
     paused: settings.paused,
-    allowlisted: isAllowlistedHost(hostname, settings.allowlist),
+    allowlisted: isSiteAllowlisted(hostname, settings.allowlist),
+    cosmeticsOff: fixDisablesCosmetics(fix),
+    scriptletsOff: fixDisablesScriptlets(fix),
     youtubeBlockSponsored: settings.youtubeBlockSponsored !== false,
     youtubeBlockShorts: !!settings.youtubeBlockShorts,
     youtubeSponsorBlock: settings.youtubeSponsorBlock !== false,
@@ -1218,6 +1862,7 @@ async function handleSetYoutubeOptions(
   // Sync must ride settingsChain — overlapping applyAll/sync* with a stale snapshot
   // can undo a newer allowlist/pause/list change (last writer wins on DNR/scripts).
   await withSettings((s) => syncRegisteredScripts(s));
+  void refreshYoutubeInOpenTabs();
   return handlePopupGet();
 }
 
@@ -1259,20 +1904,38 @@ async function handleSponsorCategorySet(
 
 /** The allowlist after switching blocking on (`enabled`) or off for `host`. */
 function toggledAllowlist(allowlist: string[], host: string, enabled: boolean): string[] {
-  const set = new Set(allowlist.map(normalizeHostname).filter((h) => isSafeAllowlistHost(h)));
+  const set = new Set(allowlist.map(siteRuleKey).filter(Boolean));
   if (enabled) {
     // Deleting the exact host is not enough: a parent entry (example.com) also allowlists
     // sub.example.com, so the toggle would spring straight back with no explanation. Drop
     // every entry that covers this host.
     for (const h of [...set]) {
-      if (isAllowlistedHost(host, [h])) set.delete(h);
+      if (siteRuleCovers(h, host)) set.delete(h);
     }
-  } else if (isSafeAllowlistHost(host)) set.add(host);
+  } else {
+    const key = siteRuleKey(host);
+    if (key) set.add(key);
+  }
   return [...set];
 }
 
+/** `fixes` without the entries that apply to `host`, parents included. */
+function withoutCoveringFixes(
+  fixes: Record<string, SiteFixLevel> | undefined,
+  host: string,
+): Record<string, SiteFixLevel> {
+  const out = { ...(fixes ?? {}) };
+  for (const entry of Object.keys(out)) {
+    if (siteRuleCovers(entry, host)) delete out[entry];
+  }
+  return out;
+}
+
 async function handleToggleSite(hostname: string, enabled: boolean): Promise<SiteToggleData> {
-  const host = normalizeHostname(hostname);
+  const host = normalizeHostname(String(hostname ?? ''));
+  // A host no site rule can hold (an IPv6 literal, a Web Store page) used to store nothing and
+  // answer as if it had worked, and the popup then asked for a reload that changed nothing.
+  if (!enabled && !siteRuleScope(host)) return { ...(await handlePopupGet()), applied: false };
   // Chrome first, storage second, in one settings-chain step. Stored first, a refused
   // updateDynamicRules left the popup saying blocking was off for the site while every request
   // was still blocked, and each wake retried the refused change. Now a refusal stores nothing
@@ -1286,6 +1949,10 @@ async function handleToggleSite(hostname: string, enabled: boolean): Promise<Sit
       return false;
     }
     s.allowlist = next;
+    // Blocking back on means all of it (B30). The ladder's rungs come before the allowlist, so a
+    // site switched off from the last rung still carries its repair step, which would otherwise
+    // quietly keep element hiding and script patches off under a green "Blocking on this site".
+    if (enabled) s.siteFixes = withoutCoveringFixes(s.siteFixes, host);
     await saveSettings(s);
     return true;
   });
@@ -1297,6 +1964,7 @@ async function handleToggleSite(hostname: string, enabled: boolean): Promise<Sit
     } catch (e) {
       console.error('[StampStack] cosmetic registration sync failed', e);
     }
+    void refreshYoutubeInOpenTabs();
   }
   return { ...(await handlePopupGet()), applied };
 }
@@ -1305,8 +1973,10 @@ async function handleToggleSite(hostname: string, enabled: boolean): Promise<Sit
  * Per-page report. Asks the content script what the page reached for, then names the hosts.
  *
  * The naming index is compiled (`trackers.json`, ~9 KB): 171 domains for organizations a user
- * recognizes, each flagged with whether a shipped rule actually matches it. Hosts outside the
- * index are counted but not named — better than mislabeling an asset CDN as a tracker.
+ * recognizes, each with the lists whose rules block it. Whether one is blocked is decided here,
+ * from the lists Chrome has actually loaded (B39): a guess made at compile time called OneTrust
+ * blocked with the cookie list off. Hosts outside the index are counted but not named — better
+ * than mislabeling an asset CDN as a tracker.
  */
 async function handleReportGet(): Promise<PageReport> {
   const settings = await loadSettings();
@@ -1326,20 +1996,27 @@ async function handleReportGet(): Promise<PageReport> {
 
   if (!hostname || tab?.id == null) return empty('restricted');
   if (settings.paused) return empty('paused');
-  if (isAllowlistedHost(hostname, settings.allowlist)) return empty('allowlisted');
+  if (isSiteAllowlisted(hostname, settings.allowlist)) return empty('allowlisted');
 
   let page: { hosts?: unknown; hiddenCount?: unknown; truncated?: unknown } | undefined;
   try {
     // Top document only. all_frames content scripts each reply; without frameId the
-    // first response wins and can be an iframe's hosts labeled as the tab hostname.
-    page = await chrome.tabs.sendMessage(tab.id, { type: 'page:collect' }, { frameId: 0 });
+    // first response wins and can be an iframe's hosts labeled as the tab hostname. Bounded: a
+    // page with an alert() open answers nothing until it closes, and the popup would wait (B33).
+    page = await settleWithin(
+      chrome.tabs.sendMessage(tab.id, { type: 'page:collect' }, { frameId: 0 }),
+      2 * TAB_MESSAGE_TIMEOUT_MS,
+      undefined,
+    );
   } catch {
     // No content script in this tab: a restricted page, or the tab predates the install.
     return empty('no-content-script');
   }
   if (!page || !Array.isArray(page.hosts)) return empty('no-content-script');
 
-  const { trackers, unnamedThirdParty } = classifyHosts(page.hosts, TRACKERS);
+  const { rows } = await buildListRows(settings);
+  const loaded = new Set(rows.filter((r) => r.active).map((r) => r.id));
+  const { trackers, unnamedThirdParty } = classifyHosts(page.hosts, TRACKERS, loaded);
 
   return {
     available: true,
@@ -1351,11 +2028,37 @@ async function handleReportGet(): Promise<PageReport> {
   };
 }
 
-/** Inject the picker into the active tab. Not part of the always-on content script. */
-async function handlePickerStart(): Promise<{ ok: boolean; error?: string }> {
+/**
+ * Inject the picker into the active tab. Not part of the always-on content script.
+ *
+ * Refused where element hiding is off (paused, the site switched off, a repair step), since the
+ * pick would save and then never apply, and on hosts a custom filter cannot name (the parser
+ * needs a dotted host). The keyboard shortcut reaches this without the popup's own checks.
+ * `reason` uses the popup's vocabulary (site-state.ts PickBlock).
+ */
+async function handlePickerStart(): Promise<{
+  ok: boolean;
+  error?: string;
+  reason?: 'page' | 'host' | 'paused' | 'allowlisted' | 'fix';
+}> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tab?.id == null || !tab.url || !isHttpOrHttpsUrl(tab.url)) {
-    return { ok: false, error: 'The picker only works on ordinary web pages.' };
+  const host = hostOf(tab?.url);
+  if (tab?.id == null || !tab.url || !isHttpOrHttpsUrl(tab.url) || isExtensionRestrictedHostname(host)) {
+    return { ok: false, reason: 'page', error: 'The picker only works on ordinary web pages.' };
+  }
+  const settings = await loadSettings();
+  // The picker saves `host##selector`; a host the filter parser will not take cannot be named.
+  if (!host || parseCustomFilters(`${host.replace(/^www\./, '')}##.x`).errors.length) {
+    return { ok: false, reason: 'host', error: 'A hiding rule cannot name this site.' };
+  }
+  if (settings.paused) {
+    return { ok: false, reason: 'paused', error: 'StampStack is paused.' };
+  }
+  if (isSiteAllowlisted(host, settings.allowlist)) {
+    return { ok: false, reason: 'allowlisted', error: 'Blocking is off on this site.' };
+  }
+  if (fixDisablesCosmetics(resolveSiteFix(host, settings.siteFixes))) {
+    return { ok: false, reason: 'fix', error: 'Element hiding is off on this site.' };
   }
   try {
     await chrome.scripting.executeScript({
@@ -1365,7 +2068,7 @@ async function handlePickerStart(): Promise<{ ok: boolean; error?: string }> {
     return { ok: true };
   } catch (e) {
     console.error('[StampStack] picker injection failed', e);
-    return { ok: false, error: 'Chrome would not let the picker run on this page.' };
+    return { ok: false, reason: 'page', error: 'Chrome would not let the picker run on this page.' };
   }
 }
 
@@ -1374,28 +2077,52 @@ async function handlePickerStart(): Promise<{ ok: boolean; error?: string }> {
  *
  * The line is re-parsed before it is stored: it arrives from a content script, and a content
  * script is only as trustworthy as the page it runs in. A malformed or unsafe selector is
- * rejected rather than persisted where it would break every later parse.
+ * rejected rather than persisted where it would break every later parse. From a content script
+ * only what the picker makes is accepted: a hide for the sender's own site. A compromised
+ * renderer could otherwise hide content on every other site, or unhide a list's rules.
  */
 async function handleCustomFilterAdd(
   line: string,
   sender: chrome.runtime.MessageSender,
+  trusted: boolean,
 ): Promise<{ ok: boolean; error?: string }> {
   if (typeof line !== 'string' || !line.trim()) return { ok: false, error: 'Empty filter.' };
   const { filters, errors } = parseCustomFilters(line);
   if (errors.length || filters.length !== 1) {
     return { ok: false, error: errors[0]?.reason ?? 'Could not parse that filter.' };
   }
-  await mutateSettings((s) => {
-    s.customFilters = appendFilterLine(s.customFilters ?? '', line.trim());
-  });
-  // Re-push cosmetics to the tab that picked, so the element stays hidden after a reload
-  // without waiting for the next navigation.
-  if (sender.tab?.id != null) {
-    try {
-      await chrome.tabs.sendMessage(sender.tab.id, { type: 'cosmetic:refresh' });
-    } catch {
-      /* tab closed or navigated */
+  if (!trusted) {
+    const f = filters[0];
+    const pageHost = normalizeHostname(hostOf(sender.url));
+    const ownSite = (d: string): boolean =>
+      filterAppliesTo({ ...f, domains: [d] }, pageHost) &&
+      (siteRuleScope(d) === 'domain' || normalizeHostname(d) === pageHost);
+    if (f.kind !== 'hide' || !f.domains.length || !f.domains.every(ownSite)) {
+      console.warn('[StampStack] refused a picker rule for another site', sender.url ?? '');
+      return { ok: false, error: 'A picked rule can only hide something on the page it was picked on.' };
     }
+  }
+  let full = false;
+  await mutateSettings((s) => {
+    const next = appendFilterLine(s.customFilters ?? '', line.trim());
+    // Past the cap the rule would be cut off on the next load and vanish while the pick said ok.
+    if (next.length > CUSTOM_FILTERS_MAX_CHARS) full = true;
+    else s.customFilters = next;
+  });
+  if (full) {
+    return {
+      ok: false,
+      error: 'Your filter list is full. Remove some rules in Options, then pick again.',
+    };
+  }
+  // Re-push cosmetics to the tab that picked, so the element stays hidden after a reload
+  // without waiting for the next navigation. Bounded like every other tab message (B33).
+  if (sender.tab?.id != null) {
+    await settleWithin(
+      chrome.tabs.sendMessage(sender.tab.id, { type: 'cosmetic:refresh' } satisfies Message),
+      TAB_MESSAGE_TIMEOUT_MS,
+      undefined,
+    );
   }
   return { ok: true };
 }
@@ -1409,47 +2136,91 @@ async function handleCustomFiltersGet(): Promise<CustomFiltersData> {
 
 async function handleCustomFiltersSet(text: string): Promise<CustomFiltersData> {
   if (typeof text !== 'string') return handleCustomFiltersGet();
+  const capped = capFilterText(text);
   await mutateSettings((s) => {
-    s.customFilters = text.slice(0, 100_000);
+    s.customFilters = capped.text;
   });
-  await notifyCosmeticRefresh();
-  return handleCustomFiltersGet();
-}
-
-/** Re-apply hostname cosmetics on open pages after the user edits their own filters. */
-async function notifyCosmeticRefresh(): Promise<void> {
-  const tabs = await chrome.tabs.query({ url: ['http://*/*', 'https://*/*'] });
-  await Promise.all(
-    tabs.map(async (tab) => {
-      if (tab.id == null) return;
-      try {
-        await chrome.tabs.sendMessage(tab.id, { type: 'cosmetic:refresh' } satisfies Message);
-      } catch {
-        /* tab has no content script */
-      }
-    }),
-  );
+  void refreshCosmeticsInOpenTabs();
+  const data = await handleCustomFiltersGet();
+  return capped.truncated ? { ...data, truncated: true } : data;
 }
 
 async function handleSiteFixSet(
   hostname: string,
   level: SiteFixLevel | null,
 ): Promise<PopupData> {
-  const host = normalizeHostname(hostname);
-  if (!host || !isSafeAllowlistHost(host)) return handlePopupGet();
+  const host = siteRuleKey(String(hostname ?? ''));
+  if (!host || (level !== null && level !== 'cosmetics' && level !== 'injection')) {
+    return handlePopupGet();
+  }
   await mutateSettings((s) => {
     if (!s.siteFixes) s.siteFixes = {};
-    // Clear every entry that covers this host, not just the exact key — otherwise a fix
-    // inherited from a parent domain could not be stepped back from the affected page.
     for (const entry of Object.keys(s.siteFixes)) {
-      if (isAllowlistedHost(host, [entry])) delete s.siteFixes[entry];
+      // A step down the ladder applies to this host and the hosts under it (B29). A parent's
+      // fix (example.com, on forum.example.com) also serves its other hosts, so it stays; the
+      // most permissive entry covering a host still decides (resolveSiteFix).
+      // Back to full blocking (null) removes every entry that covers this page, a parent's
+      // included, since otherwise the page could not return to full blocking at all. The popup
+      // names the parent first (PopupData.siteFixHost).
+      const drop = level ? siteRuleCovers(host, entry) : siteRuleCovers(entry, host);
+      if (drop) delete s.siteFixes[entry];
     }
     if (level) s.siteFixes[host] = level;
   });
   // Cosmetic/scriptlet excludes are part of the registered scripts, so they must be resynced;
   // network rules are untouched by a fix, which is the entire point of the ladder.
   await withSettings((s) => syncRegisteredScripts(s));
+  void refreshYoutubeInOpenTabs();
   return handlePopupGet();
+}
+
+/** Does stored `entry` name the row `key` Options shows (the raw key, or its normal form)? */
+function sameSiteKey(entry: string, key: string): boolean {
+  return entry === key || normalizeHostname(entry) === normalizeHostname(key);
+}
+
+/** Options "Remove" on a repair row: that entry and nothing else, never a parent (B29). */
+async function handleSiteFixRemove(hostname: string): Promise<SiteRulesData> {
+  const key = String(hostname ?? '');
+  if (key) {
+    await mutateSettings((s) => {
+      for (const entry of Object.keys(s.siteFixes ?? {})) {
+        if (sameSiteKey(entry, key)) delete s.siteFixes[entry];
+      }
+    });
+    await withSettings((s) => syncRegisteredScripts(s));
+    void refreshYoutubeInOpenTabs();
+  }
+  return handleSiteFixList();
+}
+
+/**
+ * Options "Remove" on an allowlist row: that entry and nothing else. popup:toggleSite with
+ * `enabled` removes every entry covering the host, which from a subdomain row deleted the
+ * parent (B29). Chrome first, as handleToggleSite.
+ */
+async function handleAllowlistRemove(hostname: string): Promise<SiteRulesData & { applied: boolean }> {
+  const key = String(hostname ?? '');
+  const applied = await withSettings(async (s) => {
+    const next = s.allowlist.filter((e) => !sameSiteKey(e, key));
+    if (next.length === s.allowlist.length) return true;
+    try {
+      await syncAllowlist({ ...s, allowlist: next });
+    } catch (e) {
+      console.error('[StampStack] allowlist DNR sync failed; the entry was not removed', e);
+      return false;
+    }
+    s.allowlist = next;
+    await saveSettings(s);
+    return true;
+  });
+  if (applied) {
+    await withSettings((s) => syncRegisteredScripts(s)).catch((e) =>
+      console.error('[StampStack] cosmetic registration sync failed', e),
+    );
+    void refreshYoutubeInOpenTabs();
+  }
+  return { ...(await handleSiteFixList()), applied };
 }
 
 async function handleSiteFixList(): Promise<SiteRulesData> {
@@ -1466,32 +2237,44 @@ async function handleSettingsExport(): Promise<{ json: string }> {
   return { json: JSON.stringify(buildSettingsExportDocument(s), null, 2) };
 }
 
-async function handleSettingsImport(json: string): Promise<{ ok: boolean; error?: string }> {
+async function handleSettingsImport(json: string): Promise<SettingsImportResult> {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(json);
+    parsed = JSON.parse(String(json));
   } catch {
-    return { ok: false, error: 'That file is not valid JSON.' };
+    return { ok: false, code: 'not_json', error: 'That file is not valid JSON.' };
   }
   const doc = parsed as { format?: unknown; settings?: unknown };
   if (doc?.format !== 'stampstack-settings' || !doc.settings || typeof doc.settings !== 'object') {
-    return { ok: false, error: 'That is not a StampStack settings export.' };
+    return { ok: false, code: 'not_export', error: 'That is not a StampStack settings export.' };
   }
-  // applyImportedSettings validates via mergeSettings and keeps fields the file never
-  // contained (older backups omit customFilters / sponsorBlockCategories).
+  // Field by field (settings-import.ts): a field of the wrong type keeps this install's value
+  // instead of resetting it to the default, and site keys are normalized so every imported row
+  // matches what the popup shows and can be removed. applyImportedSettings then keeps fields
+  // the file never contained (older backups omit customFilters / sponsorBlockCategories).
+  const { settings: clean, ignored, truncated } = sanitizeImportedSettings(doc.settings);
   await mutateSettings((s) => {
-    const next = applyImportedSettings(s, doc.settings as Partial<Settings>);
-    Object.assign(s, next);
+    Object.assign(s, applyImportedSettings(s, clean));
   });
   await withSettings((s) => applyAll(s));
-  return { ok: true };
+  // Open pages follow without a reload: the user's filters and site rules, dark mode, YouTube.
+  void refreshCosmeticsInOpenTabs();
+  void refreshDarkModeInOpenTabs();
+  void refreshYoutubeInOpenTabs();
+  return {
+    ok: true,
+    ...(ignored.length ? { ignored } : {}),
+    ...(truncated ? { truncated: true } : {}),
+  };
 }
 
 async function handleSetPaused(paused: boolean): Promise<PopupData> {
+  if (typeof paused !== 'boolean') return handlePopupGet();
   await mutateSettings((s) => {
     s.paused = paused;
   });
   await withSettings((s) => applyAll(s));
+  void refreshYoutubeInOpenTabs();
   return handlePopupGet();
 }
 
@@ -1510,23 +2293,30 @@ async function buildListRows(settings: Settings): Promise<{ rows: ListRow[]; deg
     live = null; // Cannot tell — assume what the user asked for rather than crying wolf.
   }
   const rows = META.lists.map((l) => {
-    const enabled = isListEnabled(settings, l.id, l.enabledByDefault) && !settings.paused;
-    return {
-      ...l,
-      enabled: isListEnabled(settings, l.id, l.enabledByDefault),
-      active: live == null ? enabled : enabled && live.includes(l.id),
-    };
+    const enabled = isListEnabled(settings, l.id, l.enabledByDefault);
+    const wanted = enabled && !settings.paused;
+    const active = live == null ? wanted : wanted && live.includes(l.id);
+    // While paused nothing is loaded by design, so nothing is refused (B36): Options showed
+    // every enabled list as "Not active — Chrome's shared rule limit is full".
+    return { ...l, enabled, active, refused: wanted && !active };
   });
-  return { rows, degraded: rows.some((r) => r.enabled && !settings.paused && !r.active) };
+  return { rows, degraded: rows.some((r) => r.refused) };
 }
 
+/**
+ * Queued behind settingsChain (B37): Options re-reads the lists on the storage change a toggle
+ * makes, which lands before that toggle's syncRulesets has run, and read then, a list just
+ * switched on showed as refused by Chrome until the page was reopened.
+ */
 async function handleListsGet(): Promise<ListsData> {
-  const settings = await loadSettings();
-  const { rows, degraded } = await buildListRows(settings);
-  return { lists: rows, degraded };
+  return withSettings(async (settings) => {
+    const { rows, degraded } = await buildListRows(settings);
+    return { lists: rows, degraded, paused: settings.paused };
+  });
 }
 
 async function handleListSetEnabled(id: string, enabled: boolean): Promise<ListsData> {
+  if (!META.lists.some((l) => l.id === id) || typeof enabled !== 'boolean') return handleListsGet();
   await mutateSettings((s) => {
     s.enabledLists[id] = enabled;
   });
@@ -1541,6 +2331,7 @@ async function handleListSetEnabled(id: string, enabled: boolean): Promise<Lists
       console.error(`[StampStack] ${i === 0 ? 'ruleset' : 'cosmetic'} sync failed`, r.reason);
     }
   });
+  // Read after the sync, so the answer says what Chrome did with the change.
   return handleListsGet();
 }
 
@@ -1601,16 +2392,34 @@ async function handleDarkModeGet(hostname?: string | null): Promise<DarkModeData
   return buildDarkModeData(settings, license, host);
 }
 
+/**
+ * darkmode:get from a content script. Every frame follows the top page's setting — a Stripe
+ * iframe on example.com follows example.com's toggle, not stripe.com's — so the host is the
+ * tab's, or for a prerendered page (whose tab still shows the page before it, B27) the top host
+ * the frame reports. The answer is the decision only: every frame of every site asks, and the
+ * purchase email and the list of overridden sites are none of a page's business.
+ */
+async function handleDarkModeGetForPage(
+  msg: Extract<Message, { type: 'darkmode:get' }>,
+  sender: chrome.runtime.MessageSender,
+): Promise<DarkModePageData> {
+  const frameHost = String(msg.hostname ?? hostOf(sender.url));
+  const host = policyHost(frameHost, sender, msg.topHost);
+  const [settings, license] = await Promise.all([loadSettings(), loadLicense()]);
+  const data = await buildDarkModeData(settings, license, host || null);
+  return { paid: data.paid, apply: data.apply };
+}
+
 async function handleDarkModeSetEnabled(enabled: boolean): Promise<DarkModeData> {
   const license = await loadLicense();
-  if (!isLicenseEffectivelyPaid(license)) {
+  if (!isLicenseEffectivelyPaid(license) || typeof enabled !== 'boolean') {
     const settings = await loadSettings();
     return buildDarkModeData(settings, license, null);
   }
-  const settings = await mutateSettings((s) => {
+  await mutateSettings((s) => {
     s.darkModeEnabled = enabled;
   });
-  await syncDarkModeAndActiveTab(settings, license);
+  await syncDarkModeNow(license);
   return handleDarkModeGet();
 }
 
@@ -1618,13 +2427,16 @@ async function handleDarkModeSetSiteOverride(
   hostname: string,
   override: DarkModeSiteOverride | null,
 ): Promise<DarkModeData> {
-  const host = normalizeHostname(hostname);
+  // The host a tab reports, from a host or a pasted URL: a URL or a stray word stored as a key
+  // matched no page and could not be cleared.
+  const host = siteRuleKeyFromInput(String(hostname ?? ''));
   const license = await loadLicense();
-  if (!isLicenseEffectivelyPaid(license) || !host) {
+  const valid = override === null || override === 'on' || override === 'off';
+  if (!isLicenseEffectivelyPaid(license) || !host || !valid) {
     const settings = await loadSettings();
     return buildDarkModeData(settings, license, host || null);
   }
-  const settings = await mutateSettings((s) => {
+  await mutateSettings((s) => {
     if (!s.darkModeAutoOff) s.darkModeAutoOff = {};
     if (override == null) {
       delete s.darkModeSiteOverrides[host];
@@ -1635,32 +2447,29 @@ async function handleDarkModeSetSiteOverride(
       delete s.darkModeAutoOff[host];
     }
   });
-  await syncDarkModeAndActiveTab(settings, license);
+  await syncDarkModeNow(license);
   return handleDarkModeGet(host);
 }
 
-/**
- * Content script detected a confidently already-dark page.
- * Persist force-off (exclude from registered invert) unless user Force on.
- */
 async function handleLicenseGet(): Promise<LicenseData> {
   const license = await loadLicense();
   return toLicenseData(license);
 }
 
+/** "Refresh license": a new answer (joining one in flight), and a word when there was none. */
 async function handleLicenseRefresh(): Promise<LicenseData> {
-  const license = await refreshLicense();
-  const settings = await loadSettings();
-  await syncDarkModeAndActiveTab(settings, license);
-  return toLicenseData(license);
+  const { license, reached } = await refreshLicenseSharedDetailed(0);
+  await syncDarkModeNow(license);
+  return { ...toLicenseData(license), ...(reached ? {} : { unreachable: true }) };
 }
 
 async function handleLicenseDevUnlock(): Promise<{ ok: boolean; error?: string; darkMode?: DarkModeData }> {
   const result = await devUnlock();
   if (!result.ok || !result.license) return { ok: false, error: result.error };
-  const settings = await mutateSettings((s) => {
+  await markDarkModeUnlockedOnce();
+  await mutateSettings((s) => {
     s.darkModeEnabled = true;
   });
-  await syncDarkModeAndActiveTab(settings, result.license);
+  await syncDarkModeNow(result.license);
   return { ok: true, darkMode: await handleDarkModeGet() };
 }
