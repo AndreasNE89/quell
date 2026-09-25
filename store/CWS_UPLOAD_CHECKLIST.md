@@ -65,7 +65,7 @@ Homepage / Official URL: leave blank until a public site exists. Do not paste th
 2. **New item** → upload the zip above.
 3. **Privacy policy HTTPS URL** — already hosted at the URL above; confirm it still loads.
 4. **Screenshots** (≥1) — 1280×800 preferred; popup + Options. Save under `store/screenshots/`.
-5. Privacy practices — no account, no remote telemetry, settings local-only (match privacy policy).
+5. Privacy practices — no account, no remote telemetry, settings local-only; for dark-mode purchases, ExtensionPay's license key and purchase email sit in `chrome.storage.sync` (match privacy policy).
 6. **Settings:** provide + verify publisher contact email (blocks Submit until done).
 7. Submit for review only when the dashboard shows no required-field errors.
 

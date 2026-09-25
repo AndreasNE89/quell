@@ -76,6 +76,8 @@ Privacy
   id or the page URL, and can be narrowed or switched off entirely in Settings
 • The optional dark-mode purchase is handled by ExtensionPay / Stripe (email for receipt and
   restore only); no browsing data is shared with the payment provider
+• Buying or restoring dark mode stores an ExtensionPay license key (and, for buyers, the
+  purchase email) in Chrome's synced storage, which Chrome syncs to your other signed-in browsers
 • Export and re-import your settings any time
 
 Tips
@@ -129,6 +131,7 @@ When answering Chrome Web Store privacy practices, disclose:
 
 - Optional one-time in-extension purchase via ExtensionPay (Stripe)
 - Email may be collected by the payment provider for receipt / restore
+- ExtensionPay's library stores a license key and, for buyers, the purchase email in `chrome.storage.sync`, which Chrome syncs across the user's signed-in browsers (StampStack's own license cache is in `chrome.storage.local`)
 - SponsorBlock: on by default; sends a 4-character SHA-256 hash prefix of the video id to sponsor.ajay.app (never the video id or page URL, no cookies), and can be turned off in Options
 - No browsing history shared with the payment provider
 - Update the hosted privacy policy URL after publishing `docs/privacy-policy.html`

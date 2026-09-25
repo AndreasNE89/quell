@@ -12,11 +12,13 @@ import type {
   SiteFixLevel,
   CustomFiltersData,
   SponsorCategoriesData,
+  LicenseData,
 } from '../shared/types.js';
 import { siteFixLabel } from '../shared/site-fix.js';
 import { listAge } from '../shared/list-age.js';
 import { applyI18n, msg } from '../shared/i18n.js';
-import { STORAGE_KEY } from '../shared/constants.js';
+import { LICENSE_STORAGE_KEY, STORAGE_KEY } from '../shared/constants.js';
+import { LICENSE_UI_RECHECK_MS, shouldRecheckLicense } from '../shared/dark-mode.js';
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -310,6 +312,28 @@ async function loadDarkMode(): Promise<void> {
   // Store / CWS: never show. Also hide once paid (popup already does).
   dev.hidden = !data.license.unpacked || data.paid;
   renderDarkOverrides(data);
+
+  if (shouldRecheckLicense(data.license)) void recheckLicense();
+}
+
+/**
+ * Same re-check as the popup: an unpaid page asks the worker to re-verify with ExtensionPay
+ * (rate-limited by shouldRecheckLicense) rather than waiting for onPaid, which a restore finished
+ * in another browser never fires. A result that unlocked redraws; a new license write also
+ * reaches the storage listener below.
+ */
+let lastRecheckAt = 0;
+async function recheckLicense(): Promise<void> {
+  // Also bounded per page, which covers a check still in flight: a failed check leaves
+  // verifiedAt where it was, and without this every re-render during an outage would retry.
+  if (Date.now() - lastRecheckAt < LICENSE_UI_RECHECK_MS) return;
+  lastRecheckAt = Date.now();
+  try {
+    const lic = (await send({ type: 'license:refresh' })) as LicenseData | null;
+    if (lic?.paid) void loadDarkMode();
+  } catch (e) {
+    console.warn('[StampStack] license re-check failed', e);
+  }
 }
 
 async function loadVersion(): Promise<void> {
@@ -333,16 +357,18 @@ $<HTMLInputElement>('darkModeEnabled').addEventListener('change', async () => {
   void loadDarkMode();
 });
 
+// The error is written after loadDarkMode settles: that rewrites #darkActionHint for every
+// state, so writing first erased the error before anyone could read it.
 $('darkBuy').addEventListener('click', async () => {
-  const r = (await send({ type: 'license:openCheckout' })) as { ok: boolean; error?: string };
-  if (!r?.ok && r?.error) $('darkActionHint').textContent = r.error;
-  void loadDarkMode();
+  const r = (await send({ type: 'license:openCheckout' })) as { ok: boolean; error?: string } | null;
+  await loadDarkMode();
+  if (!r?.ok) $('darkActionHint').textContent = r?.error ?? msg('options_checkout_failed');
 });
 
 $('darkRestore').addEventListener('click', async () => {
-  const r = (await send({ type: 'license:openRestore' })) as { ok: boolean; error?: string };
-  if (!r?.ok && r?.error) $('darkActionHint').textContent = r.error;
-  void loadDarkMode();
+  const r = (await send({ type: 'license:openRestore' })) as { ok: boolean; error?: string } | null;
+  await loadDarkMode();
+  if (!r?.ok) $('darkActionHint').textContent = r?.error ?? msg('options_restore_failed');
 });
 
 $('darkRefresh').addEventListener('click', async () => {
@@ -372,7 +398,13 @@ $<HTMLFormElement>('darkOverrideForm').addEventListener('submit', async (e) => {
 // same toggles from the popup. Without this the stale form would silently write its old values
 // back on the next edit (re-enabling SponsorBlock's network calls, for instance).
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== 'local' || !changes[STORAGE_KEY]) return;
+  if (area !== 'local') return;
+  // A purchase, restore or lapse lands in the license blob, not in settings.
+  if (changes[LICENSE_STORAGE_KEY] && !changes[STORAGE_KEY]) {
+    void loadDarkMode();
+    return;
+  }
+  if (!changes[STORAGE_KEY]) return;
   void loadStats();
   void loadLists();
   void loadYoutubeOptions();

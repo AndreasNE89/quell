@@ -14,8 +14,9 @@ before(async () => {
   await build({
     stdin: {
       contents: `
-        export { isDevUnlockLicense } from './src/shared/dark-mode.js';
-        export { licenseIsFresh, LICENSE_FRESH_MS } from './src/shared/dark-mode.js';
+        export { isDevUnlockLicense, isLicenseEffectivelyPaid } from './src/shared/dark-mode.js';
+        export { licenseIsFresh, LICENSE_FRESH_MS, LICENSE_FUTURE_SKEW_MS } from './src/shared/dark-mode.js';
+        export { shouldRecheckLicense, LICENSE_UI_RECHECK_MS } from './src/shared/dark-mode.js';
       `,
       resolveDir: ROOT,
       loader: 'ts',
@@ -80,10 +81,53 @@ test('a never-verified license always refreshes', () => {
   assert.equal(mod.licenseIsFresh({ paid: false, provider: 'none', verifiedAt: null }), false);
 });
 
-test('a future timestamp does not grant unbounded freshness', () => {
-  // Clock skew or a hand-edited storage blob must not be able to suppress refreshes forever;
-  // it is bounded by the same window rather than trusted.
+// --- verifiedAt in the future -----------------------------------------------------------
+// A future stamp reads as a negative age, which used to sit inside every window forever: one
+// bad clock or hand-edited storage blob meant no refresh ever again AND unlimited offline grace.
+// Past a small skew allowance it now counts as unverified — a real buyer whose clock jumped
+// back is simply re-checked on the next wake.
+
+test('a verifiedAt far in the future is neither fresh nor within grace', () => {
   const now = 1_000_000_000_000;
   const skewed = { paid: true, provider: 'extensionpay', verifiedAt: now + 10 * mod.LICENSE_FRESH_MS };
-  assert.equal(mod.licenseIsFresh(skewed, now), true, 'documents current behavior: still bounded by grace at use time');
+  assert.equal(mod.licenseIsFresh(skewed, now), false, 'must be re-checked on the next wake');
+  assert.equal(mod.isLicenseEffectivelyPaid(skewed, now), false, 'must not grant offline grace');
+});
+
+test('a verifiedAt just past the skew allowance counts as unverified', () => {
+  const now = 1_000_000_000_000;
+  const atLimit = { paid: true, provider: 'extensionpay', verifiedAt: now + mod.LICENSE_FUTURE_SKEW_MS };
+  const beyond = { paid: true, provider: 'extensionpay', verifiedAt: now + mod.LICENSE_FUTURE_SKEW_MS + 1 };
+  assert.equal(mod.licenseIsFresh(atLimit, now), true, 'ordinary clock skew is tolerated');
+  assert.equal(mod.isLicenseEffectivelyPaid(atLimit, now), true);
+  assert.equal(mod.licenseIsFresh(beyond, now), false);
+  assert.equal(mod.isLicenseEffectivelyPaid(beyond, now), false);
+});
+
+// --- UI-triggered re-check ----------------------------------------------------------------
+// The popup and Options ask the worker to re-verify an unpaid license, because unlock would
+// otherwise wait on ExtPay's onPaid edge. Someone who abandoned checkout holds an API key, so
+// each ask is a real request to extensionpay.com — it has to be bounded.
+
+const unpaid = (verifiedAt) => ({ paid: false, configured: true, verifiedAt });
+
+test('an unpaid license that was never verified is re-checked', () => {
+  assert.equal(mod.shouldRecheckLicense(unpaid(null), 1_000_000_000_000), true);
+});
+
+test('an unpaid license is re-checked at most once per interval', () => {
+  const now = 1_000_000_000_000;
+  assert.equal(mod.shouldRecheckLicense(unpaid(now - mod.LICENSE_UI_RECHECK_MS + 1), now), false);
+  assert.equal(mod.shouldRecheckLicense(unpaid(now - mod.LICENSE_UI_RECHECK_MS), now), true);
+});
+
+test('a paid or unconfigured license is never re-checked by the UI', () => {
+  const now = 1_000_000_000_000;
+  assert.equal(mod.shouldRecheckLicense({ paid: true, configured: true, verifiedAt: null }, now), false);
+  assert.equal(mod.shouldRecheckLicense({ paid: false, configured: false, verifiedAt: null }, now), false);
+});
+
+test('an unpaid license stamped in the future is re-checked, not trusted as recent', () => {
+  const now = 1_000_000_000_000;
+  assert.equal(mod.shouldRecheckLicense(unpaid(now + 10 * mod.LICENSE_FRESH_MS), now), true);
 });

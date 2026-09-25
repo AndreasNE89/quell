@@ -1,18 +1,34 @@
 // Pure helpers for paid dark-mode gating and per-host override resolution.
 // Kept free of chrome.* so unit tests can exercise grace + apply logic.
 
-import type { DarkModeSiteOverride, LicenseState, Settings } from './types.js';
+import type { DarkModeSiteOverride, LicenseData, LicenseState, Settings } from './types.js';
 import { LICENSE_GRACE_MS } from './constants.js';
 import { normalizeHostname } from './hostname.js';
 
-/** Honor cached paid within the offline grace window (or when never verified but paid). */
+/**
+ * How far ahead of `now` a `verifiedAt` may sit and still count (a fast clock being corrected).
+ *
+ * Without a bound, a stamp in the future reads as a negative age — inside every window forever —
+ * so one bad clock or hand-edited blob granted unlimited offline grace and suppressed every
+ * refresh. Beyond this it is treated as unverified; a real buyer is simply re-checked.
+ */
+export const LICENSE_FUTURE_SKEW_MS = 5 * 60 * 1000;
+
+/** Age of the last verification, or null when there is none (or none worth trusting). */
+function verifiedAgeMs(verifiedAt: number | null, nowMs: number): number | null {
+  if (verifiedAt == null) return null;
+  const age = nowMs - verifiedAt;
+  return age < -LICENSE_FUTURE_SKEW_MS ? null : age;
+}
+
+/** Honor cached paid within the offline grace window (never when unverified). */
 export function isLicenseEffectivelyPaid(
   license: Pick<LicenseState, 'paid' | 'verifiedAt'>,
   nowMs: number = Date.now(),
 ): boolean {
   if (!license.paid) return false;
-  if (license.verifiedAt == null) return false;
-  return nowMs - license.verifiedAt <= LICENSE_GRACE_MS;
+  const age = verifiedAgeMs(license.verifiedAt, nowMs);
+  return age != null && age <= LICENSE_GRACE_MS;
 }
 
 /** Local dev unlock on unpacked installs (`license:devUnlock` / auto-grant). */
@@ -106,5 +122,28 @@ export function isDarkModeInjectibleUrl(url: string | undefined | null): boolean
 export const LICENSE_FRESH_MS = 6 * 60 * 60 * 1000;
 
 export function licenseIsFresh(license: LicenseState, nowMs: number = Date.now()): boolean {
-  return license.verifiedAt != null && nowMs - license.verifiedAt < LICENSE_FRESH_MS;
+  const age = verifiedAgeMs(license.verifiedAt, nowMs);
+  return age != null && age < LICENSE_FRESH_MS;
+}
+
+/**
+ * Minimum gap between license checks the popup / Options trigger on their own.
+ *
+ * Unlock otherwise rides on ExtPay's onPaid edge alone, which never fires for a restore link
+ * opened in another browser or profile, a Stripe webhook later than ExtPay's two-minute poll,
+ * or a re-purchase after a refund — leaving a buyer locked until the six-hour wake refresh.
+ * Asking costs nothing for someone who never started a purchase (ExtPay answers locally without
+ * an API key), but an abandoned checkout does hold a key and every ask is a real GET, so it is
+ * bounded by this rather than by how often a page renders.
+ */
+export const LICENSE_UI_RECHECK_MS = 2 * 60 * 1000;
+
+/** Should a UI surface ask the worker to re-verify this unpaid license now? */
+export function shouldRecheckLicense(
+  license: Pick<LicenseData, 'paid' | 'configured' | 'verifiedAt'>,
+  nowMs: number = Date.now(),
+): boolean {
+  if (license.paid || !license.configured) return false;
+  const age = verifiedAgeMs(license.verifiedAt, nowMs);
+  return age == null || age >= LICENSE_UI_RECHECK_MS;
 }

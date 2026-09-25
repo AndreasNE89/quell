@@ -29,6 +29,9 @@
   "options_checking_license": {
     "message": "正在檢查授權…"
   },
+  "options_checkout_failed": {
+    "message": "無法開啟結帳頁面。請檢查網路連線後再試一次。"
+  },
   "options_clear": {
     "message": "清除"
   },
@@ -348,6 +351,9 @@
   "options_requests_blocked": {
     "message": "已攔截的請求"
   },
+  "options_restore_failed": {
+    "message": "無法開啟還原購買。請檢查網路連線後再試一次。"
+  },
   "options_rule": {
     "message": "規則"
   },
@@ -524,7 +530,7 @@
     "message": "購買深色模式"
   },
   "popup_checkout_unavailable": {
-    "message": "無法結帳。請試試還原購買，或開啟選項。"
+    "message": "無法開啟結帳頁面。請檢查網路連線後再試一次。"
   },
   "popup_checkout_unavailable_unpacked": {
     "message": "無法結帳 — 請用開發解鎖，或在選項中設定 ExtensionPay id。"
@@ -573,6 +579,9 @@
   },
   "popup_dark_summary_unavailable": {
     "message": "此處無法使用"
+  },
+  "popup_dark_upsell": {
+    "message": "用智慧霧面深色主題讓任何網頁變暗。一次性 $$2 解鎖，與廣告攔截各自獨立。重新安裝了嗎？請用收據上的電子郵件還原購買。"
   },
   "popup_details": {
     "message": "詳細資料"
@@ -763,7 +772,7 @@
     "message": "還原購買"
   },
   "popup_restore_unavailable": {
-    "message": "無法還原。請開啟選項 → 還原購買。"
+    "message": "無法開啟還原購買。請檢查網路連線後再試一次。"
   },
   "popup_rules_active": {
     "message": "$COUNT$ 條攔截規則生效中",

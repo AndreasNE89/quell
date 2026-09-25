@@ -29,6 +29,9 @@
   "options_checking_license": {
     "message": "Checking license…"
   },
+  "options_checkout_failed": {
+    "message": "Couldn't open checkout. Check your connection and try again."
+  },
   "options_clear": {
     "message": "Clear"
   },
@@ -348,6 +351,9 @@
   "options_requests_blocked": {
     "message": "requests blocked"
   },
+  "options_restore_failed": {
+    "message": "Couldn't open Restore purchase. Check your connection and try again."
+  },
   "options_rule": {
     "message": "Rule"
   },
@@ -524,7 +530,7 @@
     "message": "Buy dark mode"
   },
   "popup_checkout_unavailable": {
-    "message": "Checkout unavailable. Try Restore purchase, or open Options."
+    "message": "Couldn't open checkout. Check your connection and try again."
   },
   "popup_checkout_unavailable_unpacked": {
     "message": "Checkout unavailable — use Dev unlock or set ExtensionPay id in Options."
@@ -573,6 +579,9 @@
   },
   "popup_dark_summary_unavailable": {
     "message": "not available here"
+  },
+  "popup_dark_upsell": {
+    "message": "Darken any page with a smart, matte dark theme. One-time $$2 unlock — separate from ad blocking. Reinstalling? Use Restore purchase with your receipt email."
   },
   "popup_details": {
     "message": "Details"
@@ -763,7 +772,7 @@
     "message": "Restore purchase"
   },
   "popup_restore_unavailable": {
-    "message": "Restore unavailable. Open Options → Restore purchase."
+    "message": "Couldn't open Restore purchase. Check your connection and try again."
   },
   "popup_rules_active": {
     "message": "$COUNT$ blocking rules active",

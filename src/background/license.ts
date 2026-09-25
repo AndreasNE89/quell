@@ -174,10 +174,18 @@ async function refreshLicenseLocked(): Promise<LicenseState> {
     const user = await getExtPay().getUser();
     // A purchase that completed while this request was in flight has already been written with
     // a newer verifiedAt. Never let this response downgrade it — that is the "I paid and it
-    // locked itself again" report.
+    // locked itself again" report. The stamp must also be currently valid: a far-future
+    // verifiedAt is >= startedAt too, and letting it win here would mean it is never corrected.
     if (!user.paid) {
       const now = await loadLicense();
-      if (now.paid && now.verifiedAt != null && now.verifiedAt >= startedAt) return now;
+      if (
+        now.paid &&
+        now.verifiedAt != null &&
+        now.verifiedAt >= startedAt &&
+        isLicenseEffectivelyPaid(now)
+      ) {
+        return now;
+      }
     }
     const next: LicenseState = {
       paid: !!user.paid,
@@ -212,6 +220,18 @@ function extPayMisconfiguredError(action: 'checkout' | 'restore'): string {
   );
 }
 
+/**
+ * Whether a failed ExtPay call may show its raw detail. Only unpacked builds do: buyers get no
+ * `error`, and the popup / Options show their own localized "couldn't open …, check your
+ * connection" line instead. What ExtPay throws is not written for them — a failed key request
+ * throws `resp.status, url` (a comma expression), so the whole "detail" is the literal
+ * `https://extensionpay.com/home`, next to setup advice only the developer can act on.
+ */
+function extPayDetail(e: unknown): string | null {
+  if (!isUnpackedInstall()) return null;
+  return e instanceof Error ? e.message : String(e);
+}
+
 export async function openCheckout(): Promise<{ ok: boolean; error?: string }> {
   if (!isExtPayConfigured()) {
     return { ok: false, error: extPayMisconfiguredError('checkout') };
@@ -221,7 +241,8 @@ export async function openCheckout(): Promise<{ ok: boolean; error?: string }> {
     return { ok: true };
   } catch (e) {
     console.error('[StampStack] openCheckout failed', e);
-    const detail = e instanceof Error ? e.message : String(e);
+    const detail = extPayDetail(e);
+    if (detail == null) return { ok: false };
     return {
       ok: false,
       error: `Checkout failed (${detail}). Confirm the ExtensionPay project is linked to the Chrome Web Store item.`,
@@ -238,7 +259,8 @@ export async function openRestore(): Promise<{ ok: boolean; error?: string }> {
     return { ok: true };
   } catch (e) {
     console.error('[StampStack] openRestore failed', e);
-    const detail = e instanceof Error ? e.message : String(e);
+    const detail = extPayDetail(e);
+    if (detail == null) return { ok: false };
     return {
       ok: false,
       error: `Restore failed (${detail}). Use the email from your ExtensionPay / Stripe receipt.`,

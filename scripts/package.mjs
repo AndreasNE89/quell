@@ -21,6 +21,11 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { deflateRawSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
+import {
+  devUnlockReachableProblems,
+  readExtPayIds,
+  storeBundleExtPayProblems,
+} from './lib/store-gates.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -181,7 +186,7 @@ function assertReadableZip(zipPath, expected) {
   }
 }
 
-function validateDist() {
+async function validateDist() {
   const manPath = join(DIST, 'manifest.json');
   if (!existsSync(manPath)) {
     console.error('dist/manifest.json missing — build first.');
@@ -197,7 +202,13 @@ function validateDist() {
     console.error('No DNR rulesets in manifest — run update-lists + compile-filters.');
     process.exit(1);
   }
-  for (const req of ['icons/icon-128.png', 'background.js', 'content.js', 'privacy.html']) {
+  for (const req of [
+    'icons/icon-128.png',
+    'background.js',
+    'content.js',
+    'extpay-bridge.js',
+    'privacy.html',
+  ]) {
     if (!existsSync(join(DIST, req))) {
       console.error(`Missing required package file: ${req}`);
       process.exit(1);
@@ -218,10 +229,23 @@ function validateDist() {
   // Dev-unlock path that hands out the paid feature for free. `npm run smoke-extpay` restores
   // a [dev] dist as its last act, so "whatever is in dist/" is genuinely often a dev build.
   const background = readFileSync(join(DIST, 'background.js'), 'utf8');
-  if (/DEV_BUILD\s*=\s*(?:true|!0)\b/.test(background)) {
+  const devProblems = devUnlockReachableProblems(background);
+  if (devProblems.length) {
     console.error(
-      'dist/background.js is a DEV build (Dev unlock reachable). Run npm run build:store before packaging.',
+      `dist/background.js is not a store build (${devProblems.join('; ')}). ` +
+        'Run npm run build:store before packaging.',
     );
+    process.exit(1);
+  }
+
+  // The ExtensionPay id is where the money goes: a local override in a store zip bills buyers
+  // against a project that is not linked to this CWS item.
+  const idProblems = storeBundleExtPayProblems(
+    ['background.js', 'extpay-bridge.js'].map((f) => [f, readFileSync(join(DIST, f), 'utf8')]),
+    await readExtPayIds(ROOT),
+  );
+  if (idProblems.length) {
+    console.error(`ExtensionPay id check failed: ${idProblems.join('; ')}.`);
     process.exit(1);
   }
 
@@ -259,7 +283,7 @@ console.log('\n[2/4] Store build…');
 run('npm', ['run', 'compile-filters']);
 run('node', ['scripts/build.mjs', '--store']);
 
-const { man, rules } = validateDist();
+const { man, rules } = await validateDist();
 
 console.log('\n[3/4] Obfuscation scan…');
 run('node', ['scripts/scan-package-obfuscation.mjs']);

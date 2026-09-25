@@ -54,7 +54,7 @@ Messages are a single discriminated union in `src/shared/types.ts`. Keep handler
 
 ### Paid dark mode / ExtensionPay
 
-- Config: `src/shared/extpay-config.ts` (placeholder) or gitignored `extpay-config.local.ts` (from `.example`).
+- Config: `src/shared/extpay-config.ts` (tracked id) or gitignored `extpay-config.local.ts` (from `.example`) — the local override is dev-only; `--store` builds always ship the tracked id.
 - Unpacked QA: popup/options **Dev unlock**.
 - Already-dark hosts are handled at runtime by the engine's per-surface luminance check
   (`siteCanvasIsDark`), not by a persisted override. The old `darkmode:autoSkip` message that

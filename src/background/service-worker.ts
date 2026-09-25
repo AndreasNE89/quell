@@ -535,14 +535,12 @@ async function init(mode: 'full' | 'wake' = 'full'): Promise<void> {
   if (isUnpackedInstall() && isLicenseEffectivelyPaid(license)) {
     // One-shot on first unpacked run. init() re-runs on every SW cold-start, so without
     // this persisted flag a dev who later turns dark mode OFF would have it flipped back on.
-    const flag = await chrome.storage.local.get(DARK_AUTO_ENABLE_KEY);
-    if (!flag[DARK_AUTO_ENABLE_KEY]) {
-      await mutateSettings((s) => {
-        if (!s.darkModeEnabled) s.darkModeEnabled = true;
-      });
-      await chrome.storage.local.set({ [DARK_AUTO_ENABLE_KEY]: true });
-      license = await loadLicense();
-    }
+    if (await autoEnableDarkModeOnce()) license = await loadLicense();
+  } else if (mode === 'full' && wasPaid) {
+    // Already unlocked before this start, so the one auto-enable has been spent — for buyers
+    // from before the flag existed, by the old unconditional path. Record it, or their next
+    // lapse-and-restore would override their choice one last time.
+    await markDarkAutoEnableDone();
   }
 
   // Messaging every open tab is only needed when the paid state actually moved (grace expiry,
@@ -574,12 +572,32 @@ async function clearBuggyAutoOffOverrides(): Promise<void> {
   await chrome.storage.local.set({ [AUTO_OFF_RESET_KEY]: true });
 }
 
-/** After purchase / restore: cache is paid — auto-enable dark mode once. */
-async function onLicenseUnlocked(_license: LicenseState): Promise<void> {
-  const settings = await mutateSettings((s) => {
+/**
+ * Turn global dark mode on the first time this install is ever unlocked, and never again.
+ *
+ * Every unpaid→paid transition reaches onLicenseUnlocked — including a buyer whose offline grace
+ * ran out and was re-verified, or a refund followed by a re-purchase — and forcing the toggle
+ * on each time silently undid a user who had switched dark mode off. Returns the new settings
+ * when it did turn it on, null when this install had already used its one auto-enable.
+ */
+async function autoEnableDarkModeOnce(): Promise<Settings | null> {
+  const flag = await chrome.storage.local.get(DARK_AUTO_ENABLE_KEY);
+  if (flag[DARK_AUTO_ENABLE_KEY]) return null;
+  await chrome.storage.local.set({ [DARK_AUTO_ENABLE_KEY]: true });
+  return mutateSettings((s) => {
     s.darkModeEnabled = true;
   });
-  await syncDarkModeAndActiveTab(settings, _license);
+}
+
+async function markDarkAutoEnableDone(): Promise<void> {
+  const flag = await chrome.storage.local.get(DARK_AUTO_ENABLE_KEY);
+  if (!flag[DARK_AUTO_ENABLE_KEY]) await chrome.storage.local.set({ [DARK_AUTO_ENABLE_KEY]: true });
+}
+
+/** After purchase / restore: the cache is paid — sync dark mode, auto-enabling it only once. */
+async function onLicenseUnlocked(license: LicenseState): Promise<void> {
+  const settings = (await autoEnableDarkModeOnce()) ?? (await loadSettings());
+  await syncDarkModeAndActiveTab(settings, license);
 }
 
 /**
@@ -1407,9 +1425,16 @@ async function handleLicenseGet(): Promise<LicenseData> {
 }
 
 async function handleLicenseRefresh(): Promise<LicenseData> {
+  const wasPaid = isLicenseEffectivelyPaid(await loadLicense());
   const license = await refreshLicense();
   const settings = await loadSettings();
-  await syncDarkModeAndActiveTab(settings, license);
+  // The popup and Options now ask for this on their own while the license reads unpaid, so only
+  // message every open tab when the answer actually moved; the registration sync is idempotent.
+  if (isLicenseEffectivelyPaid(license) !== wasPaid) {
+    await syncDarkModeAndActiveTab(settings, license);
+  } else {
+    await syncDarkModeScripts(settings, license);
+  }
   return toLicenseData(license);
 }
 

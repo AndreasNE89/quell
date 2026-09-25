@@ -2,6 +2,7 @@
 
 import type {
   DarkModeData,
+  LicenseData,
   Message,
   PageReport,
   PopupData,
@@ -12,6 +13,7 @@ import type { BreakageReport } from '../shared/breakage-report.js';
 import { SUPPORT_EMAIL } from '../shared/constants.js';
 import { isValidMatchPatternHost, normalizeHostname } from '../shared/hostname.js';
 import { applyI18n, msg } from '../shared/i18n.js';
+import { LICENSE_UI_RECHECK_MS, shouldRecheckLicense } from '../shared/dark-mode.js';
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -62,7 +64,6 @@ const el = {
   darkSiteHost: $('darkSiteHost'),
   darkResetBtn: $<HTMLButtonElement>('darkResetBtn'),
   darkUpsell: $('darkUpsell'),
-  darkPrice: $('darkPrice'),
   darkBuyBtn: $<HTMLButtonElement>('darkBuyBtn'),
   darkRestoreBtn: $<HTMLButtonElement>('darkRestoreBtn'),
   darkDevUnlockBtn: $<HTMLButtonElement>('darkDevUnlockBtn'),
@@ -220,7 +221,6 @@ function renderRepair(data: PopupData): void {
 
 function renderDarkMode(data: DarkModeData): void {
   darkCurrent = data;
-  el.darkPrice.textContent = data.license.priceLabel;
   const host = data.hostname;
 
   // Summary for the collapsed group. Unpaid shows the price so the group is still a hook.
@@ -404,13 +404,38 @@ async function refresh(): Promise<void> {
       type: 'darkmode:get',
       hostname: data.hostname,
     })) as DarkModeData | null;
-    if (dark) renderDarkMode(dark);
+    if (dark) {
+      renderDarkMode(dark);
+      if (shouldRecheckLicense(dark.license)) void recheckLicense(data.hostname);
+    }
 
     // Last: it round-trips to the content script, so never let it delay the main UI.
     const report = (await send({ type: 'report:get' })) as PageReport | null;
     if (report) renderReport(report);
   } catch (e) {
     console.warn('[StampStack] popup refresh failed', e);
+  }
+}
+
+/**
+ * The cached license is all darkmode:get reads, and unlock otherwise waits on ExtPay's onPaid,
+ * which never fires for a restore finished in another browser or a webhook later than ExtPay's
+ * poll. So an unpaid popup asks the worker to re-verify (rate-limited by shouldRecheckLicense)
+ * and redraws only if that unlocked it.
+ */
+let lastRecheckAt = 0;
+async function recheckLicense(hostname: string | null): Promise<void> {
+  // Also bounded per page, which covers a check still in flight: a failed check leaves
+  // verifiedAt where it was, and without this every re-render during an outage would retry.
+  if (Date.now() - lastRecheckAt < LICENSE_UI_RECHECK_MS) return;
+  lastRecheckAt = Date.now();
+  try {
+    const lic = (await send({ type: 'license:refresh' })) as LicenseData | null;
+    if (!lic?.paid) return;
+    const dark = (await send({ type: 'darkmode:get', hostname })) as DarkModeData | null;
+    if (dark) renderDarkMode(dark);
+  } catch (e) {
+    console.warn('[StampStack] license re-check failed', e);
   }
 }
 
@@ -617,30 +642,34 @@ el.darkModeToggle.addEventListener('change', async () => {
   renderDarkMode(data);
 });
 
+// On failure these do NOT refresh(): renderDarkMode rewrites #darkHint for every unpaid state, so
+// a refresh straight after the error replaced it before anyone could read it.
 el.darkBuyBtn.addEventListener('click', async () => {
   el.darkBuyBtn.disabled = true;
   const r = (await send({ type: 'license:openCheckout' })) as { ok: boolean; error?: string };
-  if (!r?.ok) {
-    el.darkHint.hidden = false;
-    el.darkHint.textContent =
-      r?.error ??
-      (darkCurrent?.license.unpacked
-        ? msg('popup_checkout_unavailable_unpacked')
-        : msg('popup_checkout_unavailable'));
-  }
   el.darkBuyBtn.disabled = false;
-  void refresh();
+  if (r?.ok) {
+    void refresh();
+    return;
+  }
+  el.darkHint.hidden = false;
+  el.darkHint.textContent =
+    r?.error ??
+    (darkCurrent?.license.unpacked
+      ? msg('popup_checkout_unavailable_unpacked')
+      : msg('popup_checkout_unavailable'));
 });
 
 el.darkRestoreBtn.addEventListener('click', async () => {
   el.darkRestoreBtn.disabled = true;
   const r = (await send({ type: 'license:openRestore' })) as { ok: boolean; error?: string };
-  if (!r?.ok) {
-    el.darkHint.hidden = false;
-    el.darkHint.textContent = r?.error ?? msg('popup_restore_unavailable');
-  }
   el.darkRestoreBtn.disabled = !darkCurrent?.license.configured;
-  void refresh();
+  if (r?.ok) {
+    void refresh();
+    return;
+  }
+  el.darkHint.hidden = false;
+  el.darkHint.textContent = r?.error ?? msg('popup_restore_unavailable');
 });
 
 el.darkDevUnlockBtn.addEventListener('click', async () => {

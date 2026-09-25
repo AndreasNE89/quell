@@ -29,6 +29,9 @@
   "options_checking_license": {
     "message": "正在检查授权…"
   },
+  "options_checkout_failed": {
+    "message": "无法打开结账页面。请检查网络连接后重试。"
+  },
   "options_clear": {
     "message": "清除"
   },
@@ -348,6 +351,9 @@
   "options_requests_blocked": {
     "message": "已拦截请求"
   },
+  "options_restore_failed": {
+    "message": "无法打开恢复购买。请检查网络连接后重试。"
+  },
   "options_rule": {
     "message": "规则"
   },
@@ -524,7 +530,7 @@
     "message": "购买深色模式"
   },
   "popup_checkout_unavailable": {
-    "message": "无法结账。请试试恢复购买，或打开设置。"
+    "message": "无法打开结账页面。请检查网络连接后重试。"
   },
   "popup_checkout_unavailable_unpacked": {
     "message": "无法结账 — 请用开发解锁，或在设置中填写 ExtensionPay id。"
@@ -573,6 +579,9 @@
   },
   "popup_dark_summary_unavailable": {
     "message": "此处不可用"
+  },
+  "popup_dark_upsell": {
+    "message": "用智能哑光深色主题让任意网页变暗。一次性 $$2 解锁，与广告拦截相互独立。重新安装了？请用收据里的邮箱恢复购买。"
   },
   "popup_details": {
     "message": "详情"
@@ -763,7 +772,7 @@
     "message": "恢复购买"
   },
   "popup_restore_unavailable": {
-    "message": "无法恢复。请打开设置 → 恢复购买。"
+    "message": "无法打开恢复购买。请检查网络连接后重试。"
   },
   "popup_rules_active": {
     "message": "$COUNT$ 条拦截规则生效",
