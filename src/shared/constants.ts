@@ -49,6 +49,14 @@ export const LICENSE_STORAGE_KEY = 'stampstack.license';
 /** Offline grace: honor cached `paid: true` for this long after last verify. */
 export const LICENSE_GRACE_MS = 14 * 24 * 60 * 60 * 1000;
 
+/**
+ * How far in the future a cached `verifiedAt` may sit and still be believed (clock skew between
+ * a verify and a later read). Anything beyond this is not a verification we made — it is a
+ * hand-edited storage blob, and a future timestamp would otherwise give a negative age that
+ * never exceeds the grace window, i.e. paid forever.
+ */
+export const LICENSE_CLOCK_SKEW_MS = 5 * 60 * 1000;
+
 /** User-facing price for dark mode (matches ExtensionPay plan). */
 export const DARK_MODE_PRICE_LABEL = '$2';
 

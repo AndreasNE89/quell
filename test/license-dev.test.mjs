@@ -4,7 +4,7 @@ import { build } from 'esbuild';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { rmSync } from 'node:fs';
+import { rmSync, readFileSync } from 'node:fs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 let mod;
@@ -16,6 +16,7 @@ before(async () => {
       contents: `
         export { isDevUnlockLicense } from './src/shared/dark-mode.js';
         export { licenseIsFresh, LICENSE_FRESH_MS } from './src/shared/dark-mode.js';
+        export { LICENSE_CLOCK_SKEW_MS } from './src/shared/constants.js';
       `,
       resolveDir: ROOT,
       loader: 'ts',
@@ -80,10 +81,33 @@ test('a never-verified license always refreshes', () => {
   assert.equal(mod.licenseIsFresh({ paid: false, provider: 'none', verifiedAt: null }), false);
 });
 
-test('a future timestamp does not grant unbounded freshness', () => {
-  // Clock skew or a hand-edited storage blob must not be able to suppress refreshes forever;
-  // it is bounded by the same window rather than trusted.
+test('a future timestamp does not grant freshness', () => {
+  // Clock skew or a hand-edited storage blob must not be able to suppress refreshes forever:
+  // a verifiedAt beyond the skew allowance is not a verification we made, so it is not fresh
+  // and the next wake re-asks the provider.
   const now = 1_000_000_000_000;
   const skewed = { paid: true, provider: 'extensionpay', verifiedAt: now + 10 * mod.LICENSE_FRESH_MS };
-  assert.equal(mod.licenseIsFresh(skewed, now), true, 'documents current behavior: still bounded by grace at use time');
+  assert.equal(mod.licenseIsFresh(skewed, now), false);
+  const forged = { paid: true, provider: 'extensionpay', verifiedAt: 9e15 };
+  assert.equal(mod.licenseIsFresh(forged, now), false);
+});
+
+test('ordinary clock skew still counts as fresh', () => {
+  const now = 1_000_000_000_000;
+  const slightlyAhead = { paid: true, provider: 'extensionpay', verifiedAt: now + mod.LICENSE_CLOCK_SKEW_MS };
+  const pastSkew = { paid: true, provider: 'extensionpay', verifiedAt: now + mod.LICENSE_CLOCK_SKEW_MS + 1 };
+  assert.equal(mod.licenseIsFresh(slightlyAhead, now), true);
+  assert.equal(mod.licenseIsFresh(pastSkew, now), false);
+});
+
+test('the purchase race guard does not trust a future-dated license', () => {
+  // refreshLicense keeps a stored paid license over an unpaid ExtPay answer when it was written
+  // after the request started. Without a plausibility bound, a hand-set verifiedAt of 9e15
+  // satisfies ">= startedAt" forever and survives every refresh.
+  const src = readFileSync(join(ROOT, 'src/background/license.ts'), 'utf8');
+  const start = src.indexOf('if (!user.paid)');
+  assert.ok(start >= 0, 'race guard not found in license.ts');
+  const guard = src.slice(start, src.indexOf('const next: LicenseState', start));
+  assert.match(guard, /verifiedAt >= startedAt/);
+  assert.match(guard, /isPlausibleVerifiedAt\(now\.verifiedAt\)/);
 });

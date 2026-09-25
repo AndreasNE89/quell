@@ -19,6 +19,7 @@ import {
 } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { resolveExtPayId, storeExtPayProblem } from './lib/extpay-id.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -76,35 +77,25 @@ function ensureExtPayLocalConfig() {
 }
 
 /**
- * Resolve the ExtensionPay id the same way runtime does (local override → tracked → placeholder).
- * A store build with a placeholder would ship unpurchasable paid dark mode.
- * Override with ALLOW_UNCONFIGURED_EXTPAY=1 for local testing only.
+ * A store build must ship the tracked ExtensionPay id: not a placeholder (unpurchasable paid
+ * dark mode) and not a developer's gitignored local override (runtime lets it win, so it would
+ * be baked into the upload silently).
+ *
+ * ALLOW_UNCONFIGURED_EXTPAY=1 lets a local test build proceed with NO id configured. It never
+ * excuses a local override, and scripts/package.mjs refuses to run with it set.
  */
-function resolveExtPayId() {
-  const placeholder = 'YOUR_EXTENSIONPAY_ID';
-  const localPath = join(SRC, 'shared', 'extpay-config.local.ts');
-  if (existsSync(localPath)) {
-    const m = readFileSync(localPath, 'utf8').match(
-      /EXTPAY_EXTENSION_ID_OVERRIDE\s*:[^=]*=\s*(['"])([^'"]*)\1/,
-    );
-    if (m && m[2] && m[2] !== placeholder) return m[2];
-  }
-  const trackedPath = join(SRC, 'shared', 'extpay-config.ts');
-  const tm = readFileSync(trackedPath, 'utf8').match(
-    /EXTPAY_EXTENSION_ID_TRACKED(?:\s*:\s*[^=]+)?\s*=\s*(['"])([^'"]*)\1/,
-  );
-  if (tm && tm[2] && tm[2] !== placeholder) return tm[2];
-  return null;
-}
-
 function assertExtPayConfiguredForStore() {
+  const resolved = resolveExtPayId(SRC);
+  if (resolved.override) {
+    console.error(`\n[--store] ${storeExtPayProblem(resolved)}`);
+    process.exit(1);
+  }
   if (process.env.ALLOW_UNCONFIGURED_EXTPAY === '1') return;
-  const id = resolveExtPayId();
-  if (!id) {
+  const problem = storeExtPayProblem(resolved);
+  if (problem) {
     console.error(
-      `\n[--store] ExtensionPay id is not configured. Paid dark mode would be unpurchasable.\n` +
-        `Set EXTPAY_EXTENSION_ID_TRACKED in src/shared/extpay-config.ts (or local override), ` +
-        `or set ALLOW_UNCONFIGURED_EXTPAY=1 to build anyway for testing.`,
+      `\n[--store] ${problem}\n` +
+        'Or set ALLOW_UNCONFIGURED_EXTPAY=1 to build anyway for local testing (never for packaging).',
     );
     process.exit(1);
   }

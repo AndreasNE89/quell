@@ -247,6 +247,17 @@ function validateDist() {
   return { man, rules };
 }
 
+// ALLOW_UNCONFIGURED_EXTPAY=1 is a local-testing escape hatch for build.mjs --store. It is
+// inherited by the build this script spawns, so without this check an exported variable from
+// an earlier test session would package an upload with paid dark mode unpurchasable.
+if (process.env.ALLOW_UNCONFIGURED_EXTPAY) {
+  console.error(
+    'ALLOW_UNCONFIGURED_EXTPAY is set. A store package must never be built unconfigured — ' +
+      'unset it (e.g. `unset ALLOW_UNCONFIGURED_EXTPAY`) and re-run npm run package.',
+  );
+  process.exit(1);
+}
+
 console.log('== StampStack store package ==');
 if (!skipLists) {
   console.log('\n[1/4] Updating filter lists…');

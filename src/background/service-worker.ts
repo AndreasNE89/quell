@@ -655,11 +655,18 @@ chrome.tabs.onRemoved.addListener((tabId) => tabBlocked.delete(tabId));
 // Messaging
 // ---------------------------------------------------------------------------
 
-chrome.runtime.onMessage.addListener((msg: Message, sender, sendResponse) => {
-  handleMessage(msg, sender)
+chrome.runtime.onMessage.addListener((msg: unknown, sender, sendResponse) => {
+  // ExtensionPay's own background listener shares this channel and speaks in bare strings
+  // ('extpay-fetch-user', 'extpay-extinfo', ...). Returning true + sendResponse(null) here
+  // would claim those messages and could answer them with null before ExtPay does. Our
+  // protocol is always an object with a `type`; leave everything else alone.
+  if (!msg || typeof msg !== 'object' || typeof (msg as { type?: unknown }).type !== 'string') {
+    return false;
+  }
+  handleMessage(msg as Message, sender)
     .then((r) => sendResponse(r))
     .catch((e) => {
-      console.error('[StampStack] message handler error', msg.type, e);
+      console.error('[StampStack] message handler error', (msg as Message).type, e);
       sendResponse(null);
     });
   return true;

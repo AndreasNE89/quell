@@ -2,16 +2,31 @@
 // Kept free of chrome.* so unit tests can exercise grace + apply logic.
 
 import type { DarkModeSiteOverride, LicenseState, Settings } from './types.js';
-import { LICENSE_GRACE_MS } from './constants.js';
+import { LICENSE_CLOCK_SKEW_MS, LICENSE_GRACE_MS } from './constants.js';
 import { normalizeHostname } from './hostname.js';
 
-/** Honor cached paid within the offline grace window (or when never verified but paid). */
+/**
+ * A `verifiedAt` we could actually have written: present and not further in the future than
+ * ordinary clock skew allows. A far-future value is a forged storage blob, not a verification.
+ */
+export function isPlausibleVerifiedAt(
+  verifiedAt: number | null | undefined,
+  nowMs: number = Date.now(),
+): verifiedAt is number {
+  return (
+    typeof verifiedAt === 'number' &&
+    Number.isFinite(verifiedAt) &&
+    verifiedAt <= nowMs + LICENSE_CLOCK_SKEW_MS
+  );
+}
+
+/** Honor cached paid within the offline grace window; never for a missing or future verify. */
 export function isLicenseEffectivelyPaid(
   license: Pick<LicenseState, 'paid' | 'verifiedAt'>,
   nowMs: number = Date.now(),
 ): boolean {
   if (!license.paid) return false;
-  if (license.verifiedAt == null) return false;
+  if (!isPlausibleVerifiedAt(license.verifiedAt, nowMs)) return false;
   return nowMs - license.verifiedAt <= LICENSE_GRACE_MS;
 }
 
@@ -106,5 +121,6 @@ export function isDarkModeInjectibleUrl(url: string | undefined | null): boolean
 export const LICENSE_FRESH_MS = 6 * 60 * 60 * 1000;
 
 export function licenseIsFresh(license: LicenseState, nowMs: number = Date.now()): boolean {
-  return license.verifiedAt != null && nowMs - license.verifiedAt < LICENSE_FRESH_MS;
+  // A future-dated blob is not fresh: it must not suppress the refresh that would correct it.
+  return isPlausibleVerifiedAt(license.verifiedAt, nowMs) && nowMs - license.verifiedAt < LICENSE_FRESH_MS;
 }

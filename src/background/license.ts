@@ -5,7 +5,11 @@ import ExtPay from 'extpay';
 import type { LicenseData, LicenseState } from '../shared/types.js';
 import { DARK_MODE_PRICE_LABEL, LICENSE_STORAGE_KEY } from '../shared/constants.js';
 import { EXTPAY_EXTENSION_ID, isExtPayConfigured } from '../shared/extpay-config.js';
-import { isLicenseEffectivelyPaid, isDevUnlockLicense } from '../shared/dark-mode.js';
+import {
+  isLicenseEffectivelyPaid,
+  isDevUnlockLicense,
+  isPlausibleVerifiedAt,
+} from '../shared/dark-mode.js';
 import { DEV_BUILD } from '../shared/build-flags.js';
 
 export type LicensePaidListener = (license: LicenseState) => void | Promise<void>;
@@ -177,7 +181,16 @@ async function refreshLicenseLocked(): Promise<LicenseState> {
     // locked itself again" report.
     if (!user.paid) {
       const now = await loadLicense();
-      if (now.paid && now.verifiedAt != null && now.verifiedAt >= startedAt) return now;
+      // ...but only a verify we could have made: a future-dated blob (hand-edited storage) is
+      // not a newer purchase, and trusting it here would keep it past every unpaid answer.
+      if (
+        now.paid &&
+        now.verifiedAt != null &&
+        now.verifiedAt >= startedAt &&
+        isPlausibleVerifiedAt(now.verifiedAt)
+      ) {
+        return now;
+      }
     }
     const next: LicenseState = {
       paid: !!user.paid,

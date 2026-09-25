@@ -16,6 +16,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { resolveExtPayId, storeExtPayProblem } from './lib/extpay-id.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -27,26 +28,16 @@ function run(cmd, args) {
   if (r.status !== 0) process.exit(r.status ?? 1);
 }
 
-function resolveExtPayId() {
-  const placeholder = 'YOUR_EXTENSIONPAY_ID';
-  const localPath = join(SRC, 'shared', 'extpay-config.local.ts');
-  if (existsSync(localPath)) {
-    const m = readFileSync(localPath, 'utf8').match(
-      /EXTPAY_EXTENSION_ID_OVERRIDE\s*:[^=]*=\s*(['"])([^'"]*)\1/,
-    );
-    if (m && m[2] && m[2] !== placeholder) return { id: m[2], source: 'local' };
-  }
-  const tracked = readFileSync(join(SRC, 'shared', 'extpay-config.ts'), 'utf8');
-  const tm = tracked.match(
-    /EXTPAY_EXTENSION_ID_TRACKED(?:\s*:\s*[^=]+)?\s*=\s*(['"])([^'"]*)\1/,
-  );
-  if (tm && tm[2] && tm[2] !== placeholder) return { id: tm[2], source: 'tracked' };
-  return { id: null, source: 'none' };
-}
-
-const { id, source } = resolveExtPayId();
+const resolved = resolveExtPayId(SRC);
+const { id, source } = resolved;
 if (!id) {
   console.error('✗ ExtensionPay id is placeholder — cannot smoke checkout wiring.');
+  process.exit(1);
+}
+// The store build below would refuse a local override anyway; say why up front.
+const storeProblem = storeExtPayProblem(resolved);
+if (storeProblem) {
+  console.error(`✗ ${storeProblem}`);
   process.exit(1);
 }
 console.log(`✓ ExtensionPay id from ${source}: ${id}`);

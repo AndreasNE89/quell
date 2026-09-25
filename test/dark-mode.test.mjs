@@ -15,6 +15,7 @@ before(async () => {
     stdin: {
       contents: `export {
   isLicenseEffectivelyPaid,
+  isPlausibleVerifiedAt,
   resolveDarkModeForHost,
   hostsWithForceOff,
   hostsWithForceOn,
@@ -22,7 +23,7 @@ before(async () => {
   isExtensionRestrictedHostname,
   isDarkModeInjectibleUrl,
 } from './src/shared/dark-mode.js';
-export { LICENSE_GRACE_MS } from './src/shared/constants.js';`,
+export { LICENSE_GRACE_MS, LICENSE_CLOCK_SKEW_MS } from './src/shared/constants.js';`,
       resolveDir: ROOT,
       loader: 'ts',
     },
@@ -234,4 +235,26 @@ test('the engine lifts the scrim on both completion and shutdown', () => {
   assert.match(src, /setTimeout\(liftScrim/);
   // Shutdown must not wait for a timer.
   assert.match(src, /stopDynamicDark\(\): void \{[\s\S]{0,200}liftScrim\(\)/);
+});
+
+test('a future-dated verifiedAt is not paid (forged storage blob)', () => {
+  const now = 1_000_000_000_000;
+  // The exact blob that used to unlock a store build permanently.
+  assert.equal(mod.isLicenseEffectivelyPaid({ paid: true, verifiedAt: 9e15 }, now), false);
+  assert.equal(
+    mod.isLicenseEffectivelyPaid({ paid: true, verifiedAt: now + mod.LICENSE_CLOCK_SKEW_MS + 1 }, now),
+    false,
+  );
+  assert.equal(mod.isLicenseEffectivelyPaid({ paid: true, verifiedAt: Infinity }, now), false);
+});
+
+test('ordinary clock skew on verifiedAt is still honoured', () => {
+  const now = 1_000_000_000_000;
+  assert.equal(
+    mod.isLicenseEffectivelyPaid({ paid: true, verifiedAt: now + mod.LICENSE_CLOCK_SKEW_MS }, now),
+    true,
+  );
+  assert.equal(mod.isPlausibleVerifiedAt(now + mod.LICENSE_CLOCK_SKEW_MS, now), true);
+  assert.equal(mod.isPlausibleVerifiedAt(now + mod.LICENSE_CLOCK_SKEW_MS + 1, now), false);
+  assert.equal(mod.isPlausibleVerifiedAt(null, now), false);
 });
