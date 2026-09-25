@@ -40,7 +40,7 @@ StampStack 拦截广告、跟踪器和背投广告（在你当前窗口后面打
 在 YouTube 上，它会跳过赞助片段、隐藏推广视频。广告拦截免费。
 
 拦截什么
-• 广告和跟踪器：一安装就启用约 11.5 万条规则，来自 EasyList、EasyPrivacy 以及 uBlock Origin 的广告、隐私和恶意软件过滤列表。加上 Cookie 横幅和中文网站的可选列表，总数约 13 万条
+• 广告和跟踪器：一安装就启用约 12 万条规则，来自 EasyList、EasyPrivacy 以及 uBlock Origin 的广告和恶意软件过滤列表，另有 uBlock Origin 的 Unbreak 列表防止它们弄坏网站。加上 Cookie 横幅和中文网站的可选列表，总数约 13.5 万条
 • 中文网站：安装时如果浏览器语言是中文，EasyList China（约 1.2 万条规则）会自动启用。EasyList 和 EasyPrivacy 对国内广告联盟覆盖很有限，这份列表才是中文网站上真正管用的部分。CJX Annoyance 列表可在设置中开启
 • 背投广告，以及劫持你的点击、在新标签页打开广告的页面
 • 很多“请关闭广告拦截器”的提示
@@ -106,10 +106,10 @@ YouTube
   我的过滤规则, 设置, 恢复购买. 背投广告 is the established term for pop-unders.
 - The popup's "Hide an element" and "Site broken?" buttons are localized since the release after
   2.3.0: 隐藏元素 and 网站出问题？. Its shortcut tip now names the key Chrome actually assigned
-  (提示：按 … 可直接启动元素选择器). The sponsor-skip notice on YouTube is still English-only, so
-  describe it rather than quoting a label.
+  (提示：按 … 可直接启动元素选择器). The sponsor-skip notice on YouTube is localized
+  too (已跳过：… with 撤销 to undo).
 - Rule counts come from `src/generated/meta.json` (see "Where the claims come from" in
-  `LISTING.md`). For 2.2.2: about 115,000 on by default, EasyList China 12,119, 129,482 in total.
+  `LISTING.md`). For 2.4.0: 122,523 on by default, EasyList China 11,862, 137,221 in total.
 - Screenshots are shared across locales in the dashboard. Worth re-capturing at least the popup
   and Options with a Chinese-locale profile so the listing images match the listing language:
   `chrome://settings/languages`, move 中文 to the top, restart Chrome, then

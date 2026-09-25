@@ -2,13 +2,31 @@
 
 Written for users, not for the commit log. Internal refactors and test-only work are omitted.
 
-## Unreleased
+## 2.4.0
+
+More pages work with StampStack on, and more ads stay hidden. Google Search ads are hidden
+again, pages that wait for Google Analytics no longer sit blank, SponsorBlock no longer gives up
+on a video, and dark mode no longer leaks its colors into what you write. uBlock Origin's
+Unbreak list, its repairs for sites that other lists break, is now on by default.
+
+### Ads and pages
 
 - **Google Search ads are hidden again.** EasyList's rules for Google Search are written for
   `www.google.*`, and StampStack never applied them, so sponsored results stayed visible on every
   Google domain. The same fix brings back rules written for a site name across all its endings,
   such as `read.amazon.*`, and uBlock Origin rules written with `>>`, as a pattern, or with
   non-Latin site names.
+- **Pages that wait for Google Analytics or Tag Manager show up at once.** StampStack replaces
+  these scripts with a stand-in that sends nothing. The stand-in now also runs what the page
+  queued for the real scripts. Pages with an "anti-flicker" snippet no longer stay blank for
+  several seconds, and links and forms that continue from an analytics callback work again.
+- **Sites using Google's ad tag no longer break half way.** Its stand-in now covers Google's whole
+  documented interface and reports every ad slot as empty. Page scripts run to the end, and
+  content that waits for an ad slot appears.
+- **uBlock Origin's Unbreak list is now on by default.** It carries uBlock Origin's own repairs
+  for sites that other lists break. As in uBlock Origin, it also narrows a few blocks that were
+  too broad: sites such as fullstory.com, chartbeat.com and smartadserver.com work again,
+  while their trackers stay blocked on every other site.
 - **Fixed: filters meant to repair a page broke it instead.** uBlock Origin filters that restyle
   an element, or remove one of its attributes or classes, were applied as "hide this element".
   The play button on hianime.ms and a captcha form on networkhint.com disappeared, and pages such
@@ -27,6 +45,10 @@ Written for users, not for the commit log. Internal refactors and test-only work
   stops EasyList from hiding elements that sites use to detect ad blockers. StampStack now honors
   those exceptions across lists, so fewer "please disable your ad blocker" walls appear. As in
   uBlock Origin, some pages may now show an empty box where an ad would have been.
+- **AdSense placeholders look like unfilled ads, not blocked ones.** This is how uBlock Origin gets
+  past some "please disable your ad blocker" walls.
+- **Browser games that use Google's H5 ad placements start and resume again.** No ad is shown and
+  no reward is granted.
 - **Fixed: elements hidden on the very sites a rule was meant to spare.** An exception that left
   out some sites made StampStack hide elements on exactly those sites (onet.pl, fakt.pl,
   forbes.pl and others).
@@ -36,6 +58,68 @@ Written for users, not for the commit log. Internal refactors and test-only work
   when the page rewrites its style.
 - Ads written into blank frames on a page now get that page's element hiding, the general rules
   included.
+- Pages a filter list switches off entirely, such as the ad-industry opt-out page, now also keep
+  their elements visible. A few filters that also let a site's own scripts or images through
+  (uptoplay.net, im9.eu) now do both.
+
+### YouTube and SponsorBlock
+
+- **SponsorBlock no longer gives up on a video after one failed lookup.** A slow or busy
+  SponsorBlock server, or StampStack waking up just then, used to make the whole video play its
+  sponsors. The lookup is now retried a few times, and every video gets its own retries.
+- **SponsorBlock keeps skipping in the miniplayer and on Shorts, and now also works in YouTube
+  videos embedded on other sites, youtube-nocookie.com included.** An embedded video only asks
+  SponsorBlock once you start it.
+- **The skip notice gets out of the way.** After it faded, the "Skipped sponsor" notice still
+  caught clicks along the bottom of the page, and a click there could jump the video back, even
+  the next video. It now really goes away, and its Undo only ever affects the video it was shown
+  for. In fullscreen, clicking Undo no longer pauses the video. The notice is also shown in
+  Chinese and read out by screen readers.
+- **SponsorBlock stops when you switch its last category off.** Unticking the last category in
+  Settings used to leave the video you were watching still skipping until you moved on to
+  another one.
+- **One SponsorBlock request per video, and settings changes keep your skips.** StampStack used
+  to ask SponsorBlock three times for every video you opened. Any settings change, even on
+  another site, threw away the skip data of every open YouTube tab until it was fetched again.
+- Undoing one skipped segment no longer lets other segments that overlap it play.
+- SponsorBlock ignores a segment that covers most of a video, which is bad or vandalized data,
+  instead of jumping to the end.
+- If you picked SponsorBlock categories in 2.2.0 or earlier and update straight from that
+  version, your choices keep the meaning they had then.
+- **Ads in the Shorts feed are removed.** Up to one Short in three was an ad. They are now
+  dropped from the feed, as uBlock Origin does.
+- **Block Shorts no longer throws away the video you are watching.** Ctrl-, Cmd- or
+  Shift-clicking a Shorts link replaced the current tab with the YouTube home page and removed
+  it from history. Those clicks now open a new tab as usual, and a plain click on a Shorts link
+  simply does nothing.
+
+### Dark mode
+
+- **Dark mode no longer changes what you write.** In editors such as Gmail's compose window,
+  blog and forum editors, or Wikipedia's editor, dark mode's colors could be saved with your
+  text, so a post or email could go out with near-white text. Editors now keep the site's own
+  colors and show as a light box on the dark page. Some editors copy their starting text from
+  the page as they open, and that text can still carry dark mode's colors: switch dark mode off
+  for such a site.
+- **Formulas and dark logos no longer disappear.** Math on Wikipedia and other images drawn in
+  black on a transparent background are now shown in light ink. Photos are still never changed.
+- **No more white boxes around embedded widgets.** Chat buttons, payment fields and comment boxes
+  from other sites used to show as a white box with faint text on dark pages. They now stay
+  transparent, and frames a page writes itself are darkened too.
+- **Dark mode keeps up with the page.** Theme switches (your system going light or dark, or a
+  site's own theme button), stylesheets that load late, menus and cards that change color on
+  hover or focus, and content that appears later inside web components are now recolored too.
+- **Dark mode leaves sites that are already dark alone.** Their own background and their colored
+  buttons and badges are kept. Only large white panels are darkened.
+- **Turning dark mode off restores pages exactly.** Some inline backgrounds and borders used to be
+  lost until the page was reloaded.
+- Dark mode now also recolors dividers, the text of search boxes that have an icon, list bullets,
+  decorative fades, tooltip arrows and icons drawn with dark fills.
+- Dark mode no longer slows down pages that animate while you scroll, and a page opened in a
+  background tab is fully dark when you switch to it.
+
+### Switching a site off, and repair steps
+
 - **Turning StampStack off for a site now also covers what is embedded in it.** Ads and widgets
   in frames from other sites kept their element hiding on a site you switched off. They no longer
   do, as in uBlock Origin. The other way round, a site you switched off no longer loses element
@@ -50,33 +134,43 @@ Written for users, not for the commit log. Internal refactors and test-only work
   status line shows an active repair step, and names the parent site an inherited fix comes from.
 - **Your own exceptions now work on every kind of rule**, including rules that find ads by their
   text, and a list's "no site-specific hiding" exception now turns those off too.
-- My filters: text-matching and `:style()` rules now work, rules that could never apply are shown
-  as errors instead of being counted, and `example.*`, localhost and non-Latin site names are
-  accepted.
-- Element picker: ad iframes can be picked, the page no longer sees the click, Esc always closes
-  it, widening survives small mouse moves, and a pick is narrowed to the one element you pointed
-  at, with a live match count. It says so when a pick could not be saved, does not start where
-  element hiding is off, and works on single-name intranet hosts.
-- Settings: My filters no longer loses unsaved text, and keeps rules the picker added while you
-  were editing. Switching a list on no longer shows a false "Not active — rule limit full"
-  warning; while paused, lists read "paused" and a banner says so. Paid users are no longer
-  offered Buy again. Keyboard focus stays put after toggles, long hostnames wrap, and the dark
-  theme's warning colours and native buttons are readable.
-- **The popup and Settings are now fully translated**, including "Hide an element", "Site
-  broken?", the dark-mode offer, the footer links, every screen-reader label, the element
-  picker's hints, and the errors a purchase or a settings import can show. Pages announce their
-  language to assistive tech, and list dates are shown in it.
-- The picker tip shows the shortcut Chrome actually assigned, and is hidden when there is none.
 - The site switch and repair steps are only offered where StampStack can keep them, and a change
   that did not take effect no longer asks you to reload. Chrome Web Store and chrome:// pages no
   longer claim "Blocking on this site" or "Dark mode on here".
 - In an Incognito window, the popup says that a site switch set there also applies in normal
   windows: settings are shared, as in uBlock Origin. The privacy policy says so too.
+
+### Popup, Settings and the element picker
+
+- **The popup and Settings are now fully translated**, including "Hide an element", "Site
+  broken?", the dark-mode offer, the footer links, every screen-reader label, the element
+  picker's hints, and the errors a purchase or a settings import can show. Pages announce their
+  language to assistive tech, and list dates are shown in it.
+- Element picker: ad iframes can be picked, the page no longer sees the click, Esc always closes
+  it, widening survives small mouse moves, and a pick is narrowed to the one element you pointed
+  at, with a live match count. It says so when a pick could not be saved, does not start where
+  element hiding is off, and works on single-name intranet hosts.
+- The picker tip shows the shortcut Chrome actually assigned, and is hidden when there is none.
+- My filters: text-matching and `:style()` rules now work, rules that could never apply are shown
+  as errors instead of being counted, and `example.*`, localhost and non-Latin site names are
+  accepted.
+- Settings: My filters no longer loses unsaved text, and keeps rules the picker added while you
+  were editing. Switching a list on no longer shows a false "Not active — rule limit full"
+  warning; while paused, lists read "paused" and a banner says so. Paid users are no longer
+  offered Buy again. Keyboard focus stays put after toggles, long hostnames wrap, and the dark
+  theme's warning colours and native buttons are readable.
+- Settings import keeps a setting whose value has the wrong type instead of erasing it, and
+  updates open tabs. The size limit for My filters now cuts at a whole line.
 - The page report calls a tracker "blocked" only when a list that blocks it outright is on, and
   "partly blocked" when a list blocks only some of its addresses. The "ad slots hidden" count
   counts each slot once, only when it is really hidden, and says it covers rules for that site.
 - Breakage reports now include how many of your own filters apply to the site (never the filters
   themselves), dark mode, the YouTube switches, pause, and any list Chrome refused to load.
+- The uBlock Origin list is now called "uBlock Origin — Ads" in Settings. It never contained
+  uBlock Origin's privacy list.
+
+### Faster and steadier
+
 - **Faster.** Filter data is read from the package when it is needed instead of on every wake of
   StampStack's background worker: a wake that needs no element-hiding data answers in about 9 ms
   instead of 42 ms. Element hiding runs about 5 times faster on busy pages such as Facebook, and
@@ -88,101 +182,35 @@ Written for users, not for the commit log. Internal refactors and test-only work
 - Pages restored with Back pick up allowlist and filter changes, and a hiccup while refreshing no
   longer drops all hiding. A page Chrome loads ahead of time follows the settings of the site it
   belongs to, dark mode included.
-- Security: web pages can no longer get StampStack to change settings or read its storage,
-  dark-mode answers to pages no longer include the purchase email or the site list, and a
-  future-dated license stamp is no longer trusted.
-- Settings import keeps a setting whose value has the wrong type instead of erasing it, and
-  updates open tabs. The size limit for My filters now cuts at a whole line. Re-verifying your
-  purchase no longer switches dark mode back on after you turned it off, and "Refresh license"
-  says when ExtensionPay cannot be reached.
-- Pages a filter list switches off entirely, such as the ad-industry opt-out page, now also keep
-  their elements visible. A few filters that also let a site's own scripts or images through
-  (uptoplay.net, im9.eu) now do both.
-- **SponsorBlock stops when you switch its last category off.** Unticking the last category in
-  Settings used to leave the video you were watching still skipping until you moved on to
-  another one.
-- **SponsorBlock no longer gives up on a video after one failed lookup.** A slow or busy
-  SponsorBlock server, or StampStack waking up just then, used to make the whole video play its
-  sponsors. The lookup is now retried a few times, and every video gets its own retries.
-- **One SponsorBlock request per video, and settings changes keep your skips.** 2.2.2 asked
-  SponsorBlock three times for every video you opened. Any settings change, even on another
-  site, threw away the skip data of every open YouTube tab until it was fetched again.
-- **The skip notice gets out of the way.** After it faded, the "Skipped sponsor" notice still
-  caught clicks along the bottom of the page, and a click there could jump the video back, even
-  the next video. It now really goes away, and its Undo only ever affects the video it was shown
-  for. In fullscreen, clicking Undo no longer pauses the video. The notice is also shown in
-  Chinese and read out by screen readers.
-- Undoing one skipped segment no longer lets other segments that overlap it play.
-- **SponsorBlock keeps skipping in the miniplayer and on Shorts, and now also works in YouTube
-  videos embedded on other sites, youtube-nocookie.com included.** An embedded video only asks
-  SponsorBlock once you start it.
-- SponsorBlock ignores a segment that covers most of a video, which is bad or vandalized data,
-  instead of jumping to the end.
-- If you picked SponsorBlock categories in 2.2.0 or earlier and update straight from that
-  version, your choices keep the meaning they had then.
-- **Ads in the Shorts feed are removed.** Up to one Short in three was an ad. They are now
-  dropped from the feed, as uBlock Origin does.
-- **Block Shorts no longer throws away the video you are watching.** Ctrl-, Cmd- or
-  Shift-clicking a Shorts link replaced the current tab with the YouTube home page and removed
-  it from history. Those clicks now open a new tab as usual, and a plain click on a Shorts link
-  simply does nothing.
-- **Dark mode: formulas and dark logos no longer disappear.** Math on Wikipedia and other images
-  drawn in black on a transparent background are now shown in light ink. Photos are still never
-  changed.
-- **Dark mode: no more white boxes around embedded widgets.** Chat buttons, payment fields and
-  comment boxes from other sites used to show as a white box with faint text on dark pages. They
-  now stay transparent, and frames a page writes itself are darkened too.
-- **Dark mode keeps up with the page.** Theme switches (your system going light or dark, or a
-  site's own theme button), stylesheets that load late, menus and cards that change color on
-  hover or focus, and content that appears later inside web components are now recolored too.
-- **Dark mode leaves sites that are already dark alone.** Their own background and their colored
-  buttons and badges are kept. Only large white panels are darkened.
-- **Turning dark mode off restores pages exactly.** Some inline backgrounds and borders used to be
-  lost until the page was reloaded.
-- Dark mode now also recolors dividers, the text of search boxes that have an icon, list bullets,
-  decorative fades, tooltip arrows and icons drawn with dark fills.
-- Dark mode no longer slows down pages that animate while you scroll, and a page opened in a
-  background tab is fully dark when you switch to it.
-- **Dark mode no longer changes what you write.** In editors such as Gmail's compose window,
-  blog and forum editors, or Wikipedia's editor, dark mode's colors could be saved with your
-  text, so a post or email could go out with near-white text. Editors now keep the site's own
-  colors and show as a light box on the dark page. Some editors copy their starting text from
-  the page as they open, and that text can still carry dark mode's colors: switch dark mode off
-  for such a site.
-- **Pages that wait for Google Analytics or Tag Manager show up at once.** StampStack replaces
-  these scripts with a stand-in that sends nothing. The stand-in now also runs what the page
-  queued for the real scripts. Pages with an "anti-flicker" snippet no longer stay blank for
-  several seconds, and links and forms that continue from an analytics callback work again.
-- **Sites using Google's ad tag no longer break half way.** Its stand-in now covers Google's whole
-  documented interface and reports every ad slot as empty. Page scripts run to the end, and
-  content that waits for an ad slot appears.
-- **Browser games that use Google's H5 ad placements start and resume again.** No ad is shown and
-  no reward is granted.
-- **AdSense placeholders look like unfilled ads, not blocked ones.** This is how uBlock Origin gets
-  past some "please disable your ad blocker" walls.
-- **uBlock Origin's Unbreak list is now on by default.** It carries uBlock Origin's own repairs
-  for sites that other lists break. As in uBlock Origin, it also narrows a few blocks that were
-  too broad: sites such as fullstory.com, chartbeat.com and smartadserver.com work again,
-  while their trackers stay blocked on every other site.
-- **Fresher filter lists.** EasyList, EasyPrivacy, uBlock Origin's lists (Unbreak included),
-  EasyList Cookie and the Chinese lists were refreshed from upstream on 25 September 2026:
-  137,221 network rules in all. EasyList brings about 6,200 more, mostly newly seen ad servers.
-- The uBlock Origin list is now called "uBlock Origin — Ads" in Options. It never contained
-  uBlock Origin's privacy list.
-- The attributions page now lists the libraries StampStack bundles and links their license
-  texts, which now ship inside the extension. EasyList Cookie's license is shown correctly.
+
+### Purchases, privacy and security
+
 - **Dark mode unlocks on the page you have open.** When StampStack confirms a purchase or restore
-  while the popup or Options is open (bought on another device, or confirmed just after the page
+  while the popup or Settings is open (bought on another device, or confirmed just after the page
   appeared), that page updates straight away instead of on the next visit. A refund or a lapsed
   license shows up the same way.
 - If Buy or Restore purchase cannot open the payment page, the popup now says to check your
-  connection instead of sending you to Options to try the same thing again.
-- A license check dated ahead of the computer's clock no longer keeps dark mode unlocked until the
-  clock catches up. StampStack checks it again the next time the popup or Options opens.
+  connection instead of sending you to Settings to try the same thing again.
+- A license check dated ahead of the computer's clock is no longer trusted, and no longer keeps
+  dark mode unlocked until the clock catches up. StampStack checks it again the next time the
+  popup or Settings opens.
+- Re-verifying your purchase no longer switches dark mode back on after you turned it off, and
+  "Refresh license" says when ExtensionPay cannot be reached.
+- Security: web pages can no longer get StampStack to change settings or read its storage, and
+  dark-mode answers to pages no longer include the purchase email or the site list.
 - **Privacy policy updated.** It now says that the ExtensionPay payment library keeps its data in
   Chrome's synced storage, which Chrome copies to your other browsers when sync is on: the install
   date, a license key from the moment you open checkout or restore, and your purchase email once
   you have paid or signed in. StampStack's own settings stay in local storage and are not synced.
+
+### Filter lists
+
+- **Fresher filter lists.** EasyList, EasyPrivacy, uBlock Origin's lists (Unbreak included),
+  EasyList Cookie and the Chinese lists were refreshed from upstream on 25 September 2026:
+  137,221 network rules in all, 122,523 of them in the lists on by default. EasyList brings
+  about 6,200 more, mostly newly seen ad servers.
+- The attributions page now lists the libraries StampStack bundles and links their license
+  texts, which now ship inside the extension. EasyList Cookie's license is shown correctly.
 
 ## 2.3.0
 

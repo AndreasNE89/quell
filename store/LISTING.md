@@ -42,7 +42,7 @@ If a site breaks, fix it without turning blocking off. Point at anything else th
 On YouTube, it skips sponsor segments and hides promoted videos. Ad blocking is free.
 
 What it blocks
-• Ads and trackers, with about 115,000 rules on from the start. They come from EasyList, EasyPrivacy and uBlock Origin's ads, privacy and badware filter lists. Optional lists for cookie banners and Chinese-language sites bring the total to about 130,000
+• Ads and trackers, with about 120,000 rules on from the start. They come from EasyList, EasyPrivacy and uBlock Origin's ads and badware filter lists, and uBlock Origin's Unbreak list keeps them from breaking sites. Optional lists for cookie banners and Chinese-language sites bring the total to about 135,000
 • Pop-unders, and pages that hijack your click to open an ad in a new tab
 • Many "please turn off your ad blocker" messages
 • Cookie banners, once you turn on the EasyList Cookie list in Settings (it is off by default)
@@ -101,8 +101,8 @@ Tips
 
 Check these before each release. The description must not promise more than the build does.
 
-- Rule counts: `src/generated/meta.json` after `npm run build`. For 2.2.2 that is 114,529 rules
-  in the five lists on by default, and 129,482 across all eight (CHANGELOG 2.2.2). EasyList
+- Rule counts: `src/generated/meta.json` after `npm run build`. For 2.4.0 that is 122,523 rules
+  in the six lists on by default, and 137,221 across all nine (CHANGELOG 2.4.0). EasyList
   Cookie, EasyList China and CJX Annoyance ship off. EasyList China turns itself on for
   Chinese-language browsers (`src/shared/locale-lists.ts`).
 - Pop-unders: the `no-window-open-if` script patch in `src/scriptlets/library.ts`.

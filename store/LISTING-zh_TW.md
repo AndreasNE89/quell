@@ -39,7 +39,7 @@ StampStack 攔截廣告、追蹤器與背景彈出視窗（在你目前視窗後
 在 YouTube 上，它會略過贊助片段、隱藏推廣影片。廣告攔截免費。
 
 攔截什麼
-• 廣告與追蹤器：一安裝就啟用約 11.5 萬條規則，來自 EasyList、EasyPrivacy，以及 uBlock Origin 的廣告、隱私與惡意軟體過濾清單。加上 Cookie 橫幅與中文網站的選用清單，總數約 13 萬條
+• 廣告與追蹤器：一安裝就啟用約 12 萬條規則，來自 EasyList、EasyPrivacy，以及 uBlock Origin 的廣告與惡意軟體過濾清單，另有 uBlock Origin 的 Unbreak 清單防止它們弄壞網站。加上 Cookie 橫幅與中文網站的選用清單，總數約 13.5 萬條
 • 中文網站：安裝時若瀏覽器語言為中文，EasyList China（約 1.2 萬條規則）會自動啟用。EasyList 與 EasyPrivacy 對中文廣告聯播網的涵蓋相當有限，這份清單才是中文網站上真正有效的部分。CJX Annoyance 清單可在設定中開啟
 • 背景彈出視窗，以及劫持你的點擊、在新分頁開啟廣告的網頁
 • 許多「請關閉廣告攔截器」的提示
@@ -112,8 +112,8 @@ recognizes; the gloss after it does the rest.
 
 The popup's "Hide an element" and "Site broken?" buttons are localized since the release after
 2.3.0: 隱藏元素 and 網站有問題？. Its shortcut tip now names the key Chrome actually assigned
-(提示：按 … 可直接啟動元素挑選器). The sponsor-skip notice on YouTube is still English-only, so
-describe it rather than quoting a label.
+(提示：按 … 可直接啟動元素挑選器). The sponsor-skip notice on YouTube is localized too (已略過：…
+with 復原 to undo).
 
 Same screenshot note as the Simplified listing — capture with a 繁體中文 profile if you want the
 images to match.
