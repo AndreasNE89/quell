@@ -10,8 +10,9 @@ Unbreak list is new and on by default, and the filter lists were refreshed on 25
 **Size:** 3.96 MiB (4,150,312 bytes) · 176 files · 137,221 DNR rules across 9 rulesets
 (122,523 in the six on by default; 236 of 1,000 regex slots)
 **Toolchain:** node v22.23.2, Windows, `core.autocrlf=true`
-**Built from:** the uncommitted 2.4.0 working tree on top of `de32f7c`
-**Tagged commit:** _not yet: fill in `git rev-parse v2.4.0^{commit}` (see section 5)_
+**Built from:** tag `v2.4.0` (commit `e000583`); a rebuild from a clean checkout of the tag
+reproduced the hash above
+**Tagged commit:** `e0005838cea56e860ffc36f00a3eab7a8f30aa19` (annotated tag `v2.4.0`)
 
 Built with `npm run build:store`, then `npm run package -- --skip-lists`. Both runs of
 `npm run package -- --skip-lists` gave byte-identical zips with the hash above.
@@ -188,11 +189,11 @@ policy now also describes the ExtensionPay library's use of chrome.storage.sync.
 
 `docs/RELEASE_CHECKLIST.md` step 4 says to commit and tag first:
 
-- [ ] Commit the 2.4.0 tree. `git status --porcelain -- src scripts filters package.json package-lock.json`
+- [x] Commit the 2.4.0 tree. `git status --porcelain -- src scripts filters package.json package-lock.json`
       must print nothing. Leave `docs/REVIEW_*.md`, `undefined/`, `dist/`, `release/` and
       `store/screenshots/*.png` out of the commit.
-- [ ] `git tag v2.4.0`, then fill in "Tagged commit" at the top and commit this doc.
-- [ ] From the tag, run `npm run build:store` and then `npm run package -- --skip-lists`. It
+- [x] `git tag v2.4.0`, then fill in "Tagged commit" at the top and commit this doc.
+- [x] From the tag, run `npm run build:store` and then `npm run package -- --skip-lists`. It
       must print the sha256 above with node v22.23.2. `package.mjs` warns if it prints a
       different one. A mismatch means the zip is not the tagged tree.
 - [ ] Publish `docs/privacy-policy.html` to the hosted privacy URL.
