@@ -48,6 +48,7 @@ const ENTRIES = [
   ['content/content.ts', 'content.js', 'iife'],
   ['content/scriptlets-main.ts', 'scriptlets.js', 'iife'],
   ['content/scriptlets-youtube.ts', 'scriptlets-youtube.js', 'iife'],
+  ['content/scriptlets-youtube-frames.ts', 'scriptlets-youtube-frames.js', 'iife'],
   ['content/extpay-bridge.ts', 'extpay-bridge.js', 'iife'],
   // Injected on demand by chrome.scripting, so it is NOT a manifest content script.
   ['content/picker.ts', 'picker.js', 'iife'],

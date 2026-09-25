@@ -54,8 +54,23 @@ const MULTI_TENANT_SUFFIXES = new Set([
   'codesandbox.io',
 ]);
 
+/**
+ * Canonical dotted-quad IPv4 only: four octets, each 0-255 with no leading zero. Chrome
+ * canonicalizes `010.0.0.1` to `8.0.0.1` and `10.1` to `10.0.0.1`, so accepting any other
+ * spelling would store a key that never equals the host Chrome reports for the page.
+ */
 export function isIPv4Host(host: string): boolean {
-  return /^\d{1,3}(\.\d{1,3}){3}$/.test(host);
+  return /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/.test(host);
+}
+
+/**
+ * The URL host parser treats a host whose last label is a number (decimal, or `0x` hex) as an
+ * IPv4 address. `192.168` and `10.0.0` then become shorthand for other addresses, and
+ * `www.192.168` or `foo.123` fail to parse at all, which Chrome reports as "Invalid host".
+ */
+function endsInNumber(host: string): boolean {
+  const last = host.slice(host.lastIndexOf('.') + 1);
+  return /^(\d+|0x[0-9a-f]*)$/i.test(last);
 }
 
 /**
@@ -94,15 +109,21 @@ export function normalizeHostname(hostname: string): string {
 
 /**
  * Hostnames safe for Chrome match patterns and DNR `requestDomains`.
- * IPv6 / empty / garbage must be rejected so one bad allowlist entry cannot
- * abort `chrome.scripting` registration for cosmetics + YouTube hooks.
+ * Empty / garbage must be rejected so one bad allowlist entry cannot abort
+ * `chrome.scripting` registration for cosmetics + YouTube hooks: Chrome rejects the whole
+ * `registerContentScripts` call over a single invalid exclude pattern.
+ *
+ * IPv6 literals are rejected by policy. Match patterns can express `[::1]`, but it is
+ * unverified that DNR `requestDomains` matches a bracketed host, and a host we cannot
+ * allowlist on the network layer must not look switchable in the popup.
  */
 export function isValidMatchPatternHost(host: string): boolean {
   if (!host) return false;
-  // IPv6 (raw or bracketed) is not expressible as a match-pattern host.
   if (host.includes(':') || host.includes('[') || host.includes(']')) return false;
-  // Hostname or IPv4.
   if (isIPv4Host(host)) return true;
+  // Partial or non-canonical IPv4 (`192.168`, `10.0.0`, `010.0.0.1`) and names that end in a
+  // numeric label (`foo.123`) are either rewritten to another address or rejected outright.
+  if (endsInNumber(host)) return false;
   return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/i.test(host);
 }
 
@@ -120,10 +141,42 @@ export function isSafeAllowlistHost(host: string): boolean {
 }
 
 /**
+ * The host a site typed into Options > Add a site stands for, or '' when the service worker
+ * would refuse it (so the page can say so instead of clearing the field). A pasted URL keeps
+ * only its host, as the tab would report it; a trailing port or path is dropped; an
+ * internationalized name becomes its punycode form. A bare entry is otherwise checked as
+ * typed, so `10.0.0` is refused rather than quietly turned into 10.0.0.0.
+ */
+export function siteRuleHostFromInput(raw: string): string {
+  let s = raw.trim();
+  if (s.includes('://')) {
+    try {
+      s = new URL(s).hostname;
+    } catch {
+      return '';
+    }
+  } else {
+    s = s.replace(/[/?#].*$/, '').replace(/:\d*$/, '');
+    if (/[^\x00-\x7f]/.test(s)) {
+      try {
+        s = new URL(`http://${s}`).hostname;
+      } catch {
+        return '';
+      }
+    }
+  }
+  const host = normalizeHostname(s);
+  return isSafeAllowlistHost(host) ? host : '';
+}
+
+/**
  * Chrome match-pattern excludes for an allowlisted host (and for generichide
  * registration excludes).
- * IPv4 only gets an exact host pattern — `*.192.168.1.1` is rejected by Chrome
- * and would abort the whole `chrome.scripting` registration batch.
+ * IPv4 only gets an exact host pattern: an IP has no subdomains, and `www.10.0.0.1`
+ * ends in a number, so Chrome rejects it and with it the whole registration batch.
+ *
+ * `localhost` is single-label, so the public-suffix check below would drop it, yet
+ * isSafeAllowlistHost lets users switch it off; `*.localhost` also resolves to loopback.
  *
  * Bare TLDs are never emitted. Multi-tenant suffixes (github.io) ARE emitted so
  * EasyList `@@||github.io^$generichide` can exclude `*.github.io` from the
@@ -133,8 +186,54 @@ export function allowlistMatchPatterns(host: string): string[] {
   const h = normalizeHostname(host);
   if (!isValidMatchPatternHost(h)) return [];
   if (isIPv4Host(h)) return [`*://${h}/*`];
+  if (h === 'localhost') return [`*://${h}/*`, `*://*.${h}/*`];
   if (isPublicSuffixHost(h)) return [];
   return [`*://${h}/*`, `*://*.${h}/*`, `*://www.${h}/*`];
+}
+
+/** `bing.com/search?*` → host and path glob; null when the entry has no path. */
+function splitPathException(entry: string): { host: string; path: string } | null {
+  const slash = entry.indexOf('/');
+  if (slash <= 0) return null;
+  return { host: entry.slice(0, slash), path: entry.slice(slash) };
+}
+
+/**
+ * Match patterns for a page-scoped cosmetic exception (`bing.com/search?*`, from EasyList's
+ * `@@||bing.com/search?$generichide`). Chrome tests a pattern's path against the URL's path
+ * and query, so the exception stays on the results page. An entity host (`google.*` +
+ * `/search?*`) has no match pattern and yields none; matchCosmetic handles it per page.
+ */
+export function pathExceptionMatchPatterns(entry: string): string[] {
+  const parts = splitPathException(entry);
+  if (!parts) return [];
+  return allowlistMatchPatterns(parts.host).map((p) => `${p.slice(0, -2)}${parts.path}`);
+}
+
+/** Does a page-scoped exception entry cover this host and path+query (`/search?q=x`)? */
+export function pathExceptionMatches(
+  entry: string,
+  hostname: string,
+  pathAndQuery: string,
+): boolean {
+  const parts = splitPathException(entry);
+  if (!parts || !hostMatchesDomain(hostname, parts.host)) return false;
+  const body = parts.path
+    .split('*')
+    .map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('.*');
+  return new RegExp(`^${body}$`).test(pathAndQuery);
+}
+
+/**
+ * Exact-host match patterns (plus the `www.` twin that normalizeHostname folds into the same
+ * key), with no subdomain wildcard. IPv4 gets no `www.` twin, for the reason above.
+ */
+export function exactHostMatchPatterns(host: string): string[] {
+  const h = normalizeHostname(host);
+  if (!isValidMatchPatternHost(h)) return [];
+  if (isIPv4Host(h)) return [`*://${h}/*`];
+  return [`*://${h}/*`, `*://www.${h}/*`];
 }
 
 /** Return the hostname and each of its parent domains, most specific first. */

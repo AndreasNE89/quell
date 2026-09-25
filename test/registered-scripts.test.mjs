@@ -10,6 +10,11 @@
 // The fake below implements the real delta semantics of updateContentScripts. That is what
 // makes the test meaningful: a fake that replaced the whole record would pass against the
 // broken implementation too.
+//
+// B4 (REVIEW_2026-09-24): replacing a registration means unregister, then register. When Chrome
+// rejected the new payload (one invalid exclude pattern fails the whole call), the old code
+// "patched" the id it had just removed, which threw "does not exist" over the real error and
+// left the working script deleted for good. The fake models that rejection too.
 
 import { test, before, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -35,7 +40,15 @@ function overIpc(script) {
   return out;
 }
 
-function installFakeChrome({ registerThrows = false } = {}) {
+/** Chrome's wording when a pattern in a registerContentScripts payload does not parse. */
+const INVALID_HOST =
+  "Script with ID 'quell-scriptlets-youtube' has invalid value for exclude_matches[0]: Invalid host.";
+
+function installFakeChrome({
+  registerThrows = false,
+  rejectPattern = null,
+  rejectAll = false,
+} = {}) {
   store = new Map();
   calls = [];
   globalThis.chrome = {
@@ -47,6 +60,11 @@ function installFakeChrome({ registerThrows = false } = {}) {
       },
       async registerContentScripts(scripts) {
         calls.push(['register', scripts.map((s) => s.id)]);
+        // Chrome validates the whole batch before registering any of it.
+        const bad = scripts.some(
+          (s) => rejectAll || (rejectPattern && (s.excludeMatches ?? []).includes(rejectPattern)),
+        );
+        if (bad) throw new Error(INVALID_HOST);
         if (registerThrows) {
           // Model the real race: a concurrent sync claimed the id between our unregister and
           // our register, so the id is live again (with someone else's shape) and register
@@ -178,12 +196,66 @@ test('a lost register race falls back to update instead of throwing', async () =
 
   await mod.syncOneRegisteredScript(script({ excludeMatches: ['*://fresh.example/*'] }), true);
 
-  assert.deepEqual(calls.map((c) => c[0]), ['get', 'unregister', 'register', 'update']);
+  // The second get is how a lost race is told apart from a rejected payload: the id is live.
+  assert.deepEqual(calls.map((c) => c[0]), ['get', 'unregister', 'register', 'get', 'update']);
   assert.deepEqual(
     store.get('quell-scriptlets-youtube').excludeMatches,
     ['*://fresh.example/*'],
     'the update fallback must still land our shape, not the racer\'s',
   );
+});
+
+test('a rejected payload puts the previous registration back and reports the error Chrome gave', async () => {
+  const BAD = '*://www.192.168/*';
+  installFakeChrome({ rejectPattern: BAD });
+  await mod.syncOneRegisteredScript(script({ excludeMatches: ['*://a.example/*'] }), true);
+
+  await assert.rejects(
+    mod.syncOneRegisteredScript(script({ excludeMatches: ['*://a.example/*', BAD] }), true),
+    (err) => err.message === INVALID_HOST,
+    'the caller must see why Chrome refused, not a follow-up "does not exist"',
+  );
+
+  const live = store.get('quell-scriptlets-youtube');
+  assert.ok(live, 'the working registration was deleted');
+  assert.deepEqual(live.excludeMatches, ['*://a.example/*']);
+  assert.deepEqual(live.js, ['scriptlets-youtube.js']);
+  assert.equal(
+    calls.some((c) => c[0] === 'update'),
+    false,
+    'nothing is registered under this id, so there is nothing to patch',
+  );
+});
+
+test('a rejected first registration leaves nothing behind and reports the real error', async () => {
+  installFakeChrome({ rejectAll: true });
+  await assert.rejects(
+    mod.syncOneRegisteredScript(script(), true),
+    (err) => err.message === INVALID_HOST,
+  );
+  assert.equal(store.size, 0);
+  assert.deepEqual(calls.map((c) => c[0]), ['get', 'register', 'get']);
+});
+
+test('when the restore fails too, the original error is still the one reported', async () => {
+  installFakeChrome();
+  await mod.syncOneRegisteredScript(script(), true);
+  installFakeChrome({ rejectAll: true });
+  store.set('quell-scriptlets-youtube', structuredClone(overIpc(script())));
+
+  const logged = [];
+  const origError = console.error;
+  console.error = (...args) => logged.push(args);
+  try {
+    await assert.rejects(
+      mod.syncOneRegisteredScript(script({ excludeMatches: ['*://a.example/*'] }), true),
+      (err) => err.message === INVALID_HOST,
+    );
+  } finally {
+    console.error = origError;
+  }
+  assert.deepEqual(calls.map((c) => c[0]), ['get', 'unregister', 'register', 'get', 'register']);
+  assert.equal(logged.length, 1, 'the failed restore is logged, not swallowed');
 });
 
 test('registrationShape ignores ordering but not content', () => {

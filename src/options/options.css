@@ -303,6 +303,9 @@ code {
   color: var(--danger, #b4443a);
   font-size: 12px;
 }
+.filter-error:empty {
+  display: none;
+}
 
 .list-warn {
   color: var(--danger, #b4443a);

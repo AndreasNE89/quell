@@ -360,6 +360,15 @@
   "options_settings_imported": {
     "message": "設定已匯入。"
   },
+  "options_site_rule_invalid": {
+    "message": "無法為「$HOST$」新增網站規則。請輸入網站名稱（例如 example.com）或完整的 IP 位址（例如 192.168.1.1）。",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "10.0.0"
+      }
+    }
+  },
   "options_site_rules": {
     "message": "網站規則"
   },

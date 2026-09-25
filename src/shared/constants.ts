@@ -19,8 +19,11 @@ export const ALLOWLIST_PRIORITY = 1_000_000;
  */
 export const GENERIC_CSS_SCRIPT_ID = 'quell-generic-cosmetic';
 
-/** MAIN-world document_start YouTube ad hooks (registered only when not paused). */
+/** MAIN-world document_start YouTube ad hooks for top-level YouTube pages (registered only when not paused). */
 export const YOUTUBE_SCRIPTLETS_SCRIPT_ID = 'quell-scriptlets-youtube';
+
+/** The same hooks for YouTube embeds (subframes), which follow the page they are embedded in. */
+export const YOUTUBE_FRAME_SCRIPTLETS_SCRIPT_ID = 'quell-scriptlets-youtube-frames';
 
 /** Legacy id — unregistered on sync so older builds don't double-inject. */
 export const SCRIPTLETS_SCRIPT_ID = 'quell-scriptlets';

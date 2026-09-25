@@ -4,6 +4,88 @@ Written for users, not for the commit log. Internal refactors and test-only work
 
 ## Unreleased
 
+- **Fixed: many news sites broke because of StampStack.** A script patch meant to stop one ad
+  script on arstechnica.com, nypost.com, nbcnews.com, howtogeek.com and about 2,400 other
+  sites also took basic page functions away from every other script on the page, such as
+  creating elements, reading cookies and listening for events. Those functions now keep
+  working, and only the targeted script is stopped. Some rules also silently dropped a page's
+  own "on load" handler. They no longer do.
+- **Fixed: element hiding and YouTube ad blocking could quietly switch off.** Chrome refused
+  all of StampStack's element hiding, and the YouTube ad blocking with it, in two cases: with
+  the Chinese filter list on (it is turned on automatically when the browser is set to
+  Chinese), or after adding a site such as `10.0.0` in Settings. The Chinese list's broken
+  entry is now skipped, and if Chrome ever turns down an update, the previous working setup
+  stays in place.
+- Settings > Add a site now says why it cannot use an entry, such as an incomplete address
+  like `10.0.0` or `192.168.1`, and keeps what you typed so you can correct it. It used to
+  clear the field and do nothing. A pasted web address now adds its site.
+- **Turning StampStack off for a site now follows the page you are on.** Switching off
+  youtube.com used to also unblock YouTube videos embedded on every other site, with their ads
+  and trackers. The same went for comment boxes and social widgets. Embeds on other sites now
+  get network blocking, YouTube ad blocking, site-specific hiding and script patches again,
+  and frames on a site you switched off get none of these. The lighter breakage fixes work
+  the same way. Two gaps remain because Chrome decides them by each frame's own address:
+  general ad hiding inside a frame still follows the frame's own site, and a YouTube player
+  on a site you switched off still has its ads blocked.
+- **YouTube:** ads that get past the blocking are now skipped for as long as the tab stays
+  open. The skip helper used to stop 10 minutes after you opened YouTube.
+- **More ads get a silent stand-in instead of playing.** Audio and video ads on sites such as
+  SoundCloud, Spotify, TF1, RTÉ, myCANAL and Tubi now receive a short silent clip, and many ad
+  images receive a transparent placeholder, the way uBlock Origin handles them. About 200
+  filters that used to be dropped now work, including EasyList's video-ad rules written in
+  Adblock Plus syntax.
+- **Fixed: some filters worked against their purpose.**
+  - Two filters meant to switch element hiding back on switched it off: on kobieta.wp.pl no
+    ads were hidden at all, and on seznamzpravy.cz general ad hiding was off.
+  - An exception meant for WordPress.com sites let the Jetpack stats tracker (stats.wp.com)
+    load on every website. A LastPass ad frame was also allowed everywhere.
+  - Some scam and malware blocks blocked links leaving a bad site instead of the bad site
+    itself, and did nothing when you typed its address or opened it from a bookmark.
+  - About 135 filters that leave out one kind of content, such as images or scripts, also
+    blocked whole pages. A filter for `-banner-ads-` blocked any page with that phrase in its
+    address, and an EasyList China filter for 57 sites blocked every link leaving them.
+- Exceptions that EasyList limits to the search results of Google, DuckDuckGo and Yandex used
+  to switch general ad hiding off across the whole site, Google News included. They now apply
+  to the results pages only, where general hiding could hide real results. A few similar
+  exceptions on other sites, such as Weibo's share page, are now limited to their page too.
+- Filter lists are read the way uBlock Origin reads them for Chrome. Sections written only for
+  Firefox, Safari, phones or other ad blockers (614 lines) no longer apply. Among them was a
+  Firefox-only rule that let Amazon ad scripts load on 14 sites.
+- Script patches read their settings the way uBlock Origin does, quotes and backslashes
+  included. This fixes the Facebook feed-ad rule, the Admiral anti-adblock rules on about 265
+  sites, filemoon, and datanodes.to, where a rule removed almost every inline script.
+- Script patches follow uBlock Origin's rules more closely:
+  - Popup blocking now catches popups that open in a new tab, leaves same-tab links alone, and
+    waits the full number of seconds a rule asks for.
+  - Countdown skippers only speed up the timer they were written for. On about 180 sites they
+    used to speed up every timer on the page, animations included.
+  - Rules that remove click handlers only touch the element and event they name. One rule
+    used to remove every click handler on link.paid4link.com.
+  - Rules that edit a page's inline scripts now respect their conditions and exclusions. They
+    no longer touch `<noscript>` text or content added after the page loads.
+  - Promoted posts in X, Facebook and Pinterest feeds are removed entirely, instead of staying
+    in the feed looking like normal posts. These rules also no longer edit data they were not
+    written for.
+  - Facebook rules that rewrite streamed search results are no longer undone.
+  - Rules aimed at a setting deep inside a site's configuration now apply when the site builds
+    that configuration piece by piece. Among them are the video-ad rules for howtogeek.com,
+    makeuseof.com, cbr.com, gamerant.com and 27 other sites, n-tv.de and rtl.de, which had
+    no effect before.
+  - Rules that set a value on every object of a page no longer show up as an extra entry when
+    the page lists an object's contents, which could break the page's own scripts.
+- Most of EasyList China's and CJX Annoyance's `:-abp-has()` and `:-abp-contains()` hiding
+  rules now work. They were shipped but could never match.
+- More pattern-based filters now load, including EasyList's rule for rotating ad scripts and
+  EasyPrivacy's fingerprinting blockers for Kleinanzeigen, Spectrum and TD Bank. Filters that
+  apply only to certain kinds of requests, such as form submissions, now work too, and filters
+  that strip tracking parameters from links honor the lists' exceptions.
+- Turning StampStack off for `localhost`, or turning element hiding off there, now stops
+  element hiding on it too. Before, only network blocking stopped. EasyList's own exceptions
+  for local development pages at `localhost` and `127.0.0.1` now apply as well.
+- Dark mode: a per-site setting on an IP address, such as a router page at 192.168.1.1, no
+  longer turns dark mode off everywhere.
+- Installs that started on the very first version no longer keep a leftover script patch that
+  ran on every page.
 - **A new icon.** A postage stamp with a postmark, in the same green as the rest of StampStack.
   The old one was a small scene of "AD" cards under a "BLOCK" stamp, and at toolbar size it
   turned into a smudge. The new one still reads as a stamp at 16 pixels, on light and dark

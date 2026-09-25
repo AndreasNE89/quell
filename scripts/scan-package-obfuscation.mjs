@@ -27,6 +27,7 @@ const LONG_BASE64_TARGETS = new Set([
   'background.js',
   'scriptlets.js',
   'scriptlets-youtube.js',
+  'scriptlets-youtube-frames.js',
   'content.js',
   'extpay-bridge.js',
 ]);

@@ -44,6 +44,7 @@ export const SUPPORTED_SCRIPTLET_NAMES = new Set([
   'abort-on-property-write',
   'acs',
   'acis',
+  'abort-current-script',
   'abort-current-inline-script',
   'nostif',
   'no-setTimeout-if',

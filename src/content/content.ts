@@ -63,6 +63,22 @@ async function fetchSponsorSegments(videoId: string): Promise<SponsorSegment[]> 
   }
 }
 
+/**
+ * Host of the page this frame belongs to, for the storage fast path below. The service worker
+ * decides the same way from the tab: a YouTube embed follows the site it is embedded in.
+ */
+function pageHost(): string {
+  if (window === window.top) return location.hostname;
+  try {
+    const origins = location.ancestorOrigins;
+    const top = origins?.[origins.length - 1];
+    if (top && top !== 'null') return new URL(top).hostname;
+  } catch {
+    /* opaque or unavailable: fall back to this frame */
+  }
+  return location.hostname;
+}
+
 /** Shorts redirect + hide must start before cosmetic:get (can take hundreds of ms). */
 function bootstrapYoutube(host: string): void {
   if (!isYoutubeHost(host)) return;
@@ -75,7 +91,7 @@ function bootstrapYoutube(host: string): void {
   void chrome.storage.local.get(STORAGE_KEY).then((stored) => {
     const partial = stored[STORAGE_KEY] as Partial<Settings> | undefined;
     if (!partial) return;
-    youtubeOpts = youtubeOptsFromSettings(partial, host);
+    youtubeOpts = youtubeOptsFromSettings(partial, pageHost());
     applyYoutubeFeatures(youtubeOpts);
     refreshSponsorBlock();
   });

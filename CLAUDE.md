@@ -27,13 +27,14 @@ Do not hand-edit `src/generated/` or `dist/`.
 
 - Static DNR rulesets are compiled offline; the SW only enables/disables them and manages dynamic allowlist rules.
 - Regex DNR rules share a global budget (`MAX_NUMBER_OF_REGEX_RULES = 1000`) across lists.
-- Priority bands in `scripts/lib/limits.mjs`: block < redirect < allow < important; allowlist dynamic priority is `1_000_000`.
+- Priority bands in `scripts/lib/limits.mjs`: removeparam (500) < its `@@` allow (600) < block < redirect (`1500`, plus uBO's `:N` clamped to ±499) < allow < important; allowlist dynamic priority is `1_000_000`.
 - Generic cosmetics = injected CSS via `chrome.scripting`; specific/procedural = content script.
 - Scriptlets must be domain-scoped (compiler drops global scriptlet injection).
 - `src/manifest.json` has empty `rule_resources`; `scripts/build.mjs` fills them from `meta.json`.
 - Settings key is `stampstack.settings` (migrates legacy `quell.settings` and short-lived rename keys).
 - Ruleset id `quell-seed` stays stable; chrome.scripting ids stay `quell-*` for upgrade safety.
 - The filter lists are committed and marked `-text` in `.gitattributes`. Without that, `core.autocrlf` rewrites them on checkout and every hash in `lists.lock.json` fails on a Linux runner.
+- Lists are preprocessed like uBO's (`!#if` env: chromium, mv3, ublock, plus ubol for network lines only, since cosmetics and scriptlets run uBO MV2's engine; everything else false; see `preprocessFilterText`). `!#include` is expanded only from a file already under `filters/`, never downloaded.
 - `meta.generatedAt` comes from `lists.lock.json`, not from file mtimes — mtimes do not survive a clone, and the value is embedded in the shipped bundle.
 
 ## Testing

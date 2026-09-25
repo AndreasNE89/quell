@@ -50,6 +50,7 @@ import {
   GENERIC_CSS_SCRIPT_ID,
   SCRIPTLETS_SCRIPT_ID,
   YOUTUBE_SCRIPTLETS_SCRIPT_ID,
+  YOUTUBE_FRAME_SCRIPTLETS_SCRIPT_ID,
   DARK_MODE_SCRIPT_ID,
   DARK_MODE_FORCE_ON_SCRIPT_ID,
   DARK_MODE_CSS_PATH,
@@ -104,13 +105,20 @@ import {
   isDarkModeInjectibleUrl,
   isHttpOrHttpsUrl,
 } from '../shared/dark-mode.js';
-import { matchCosmetic, matchScriptlets, mergeNetworkExceptions } from '../engine/cosmetic-match.js';
+import {
+  matchCosmetic,
+  matchScriptlets,
+  mergeNetworkExceptions,
+  mergePathExceptions,
+} from '../engine/cosmetic-match.js';
 import {
   normalizeHostname,
   isAllowlistedHost,
   isSafeAllowlistHost,
   isValidMatchPatternHost,
   allowlistMatchPatterns,
+  exactHostMatchPatterns,
+  pathExceptionMatchPatterns,
 } from '../shared/hostname.js';
 
 import cosmeticJson from '../generated/cosmetic.json';
@@ -201,9 +209,7 @@ async function syncRulesets(settings: Settings): Promise<void> {
  * exclude/include sub.example.com and diverge from what the content script applies.
  */
 function darkModeHostPatterns(host: string): string[] {
-  const h = normalizeHostname(host);
-  if (!isValidMatchPatternHost(h)) return [];
-  return [`*://${h}/*`, `*://www.${h}/*`];
+  return exactHostMatchPatterns(host);
 }
 
 async function syncAllowlist(settings: Settings): Promise<void> {
@@ -220,30 +226,34 @@ async function syncAllowlist(settings: Settings): Promise<void> {
         .filter((h) => isSafeAllowlistHost(h)),
     ),
   ];
+  // main_frame only. allowAllRequests on the top-level navigation already allows every request
+  // in that tab's frame tree, iframes included. Adding sub_frame would also match an iframe
+  // FROM the allowlisted host embedded on any other site, so allowlisting youtube.com would
+  // unblock every YouTube embed everywhere. uBO keys its trusted-site switch on the top page.
   const addRules: chrome.declarativeNetRequest.Rule[] = hosts.map((host, i) => ({
     id: ALLOWLIST_ID_START + i,
     priority: ALLOWLIST_PRIORITY,
     action: { type: 'allowAllRequests' as chrome.declarativeNetRequest.RuleActionType },
     condition: {
       requestDomains: [host],
-      resourceTypes: [
-        'main_frame' as chrome.declarativeNetRequest.ResourceType,
-        'sub_frame' as chrome.declarativeNetRequest.ResourceType,
-      ],
+      resourceTypes: ['main_frame' as chrome.declarativeNetRequest.ResourceType],
     },
   }));
 
   // Same reasoning as syncRulesets: this runs on every wake, and rewriting identical dynamic
-  // rules is pure churn.
+  // rules is pure churn. The key covers resourceTypes too, so rules written by an older build
+  // with a different shape are replaced on upgrade rather than kept forever.
+  const bandKey = (r: chrome.declarativeNetRequest.Rule): string => {
+    const domains = (r.condition.requestDomains ?? []).join('|');
+    const types = [...(r.condition.resourceTypes ?? [])].sort().join('|');
+    return `${r.id}:${domains}:${types}`;
+  };
   const liveBand = existing
     .filter((r) => r.id >= ALLOWLIST_ID_START && r.id < ALLOWLIST_ID_END)
-    .map((r) => `${r.id}:${(r.condition.requestDomains ?? []).join('|')}`)
+    .map(bandKey)
     .sort()
     .join(',');
-  const wantBand = addRules
-    .map((r) => `${r.id}:${(r.condition.requestDomains ?? []).join('|')}`)
-    .sort()
-    .join(',');
+  const wantBand = addRules.map(bandKey).sort().join(',');
   if (liveBand === wantBand) return;
 
   try {
@@ -256,42 +266,54 @@ async function syncAllowlist(settings: Settings): Promise<void> {
 /**
  * Register (or update / unregister) generic cosmetic CSS and YouTube MAIN hooks.
  * Both honor pause + allowlist excludes. List-scoped scriptlets still inject on demand.
+ *
+ * The allowlist and breakage fixes belong to the top-level page (see policyHost), but
+ * excludeMatches is tested against each frame's own URL. The YouTube hooks get that right by
+ * splitting top frames from embeds. The generic sheet cannot: an allowlisted page's third-party
+ * iframes still get it, and an embed from an allowlisted host goes without it on other sites.
  */
 async function syncRegisteredScripts(settings: Settings): Promise<void> {
   const shouldExist = !settings.paused;
+  // User entries pass the same gate as isAllowlistedHost, so a legacy or imported `github.io`
+  // cannot exclude every tenant here while the network layer and popup ignore it.
+  const userCosmeticsOff = [
+    ...settings.allowlist,
+    ...hostsWithCosmeticsOff(settings.siteFixes),
+  ].filter(isSafeAllowlistHost);
+  const userScriptletsOff = [
+    ...settings.allowlist,
+    ...hostsWithScriptletsOff(settings.siteFixes),
+  ].filter(isSafeAllowlistHost);
   // Always an array, never undefined: syncOneRegisteredScript compares against the live
   // registration, and an absent property would read as "leave whatever is there".
   // The YouTube MAIN-world hooks are scriptlets, so an `injection`-level fix must exclude
   // them too or "scriptlets off" would not actually be off on YouTube.
-  const allowlistExclude = [
-    ...new Set(
-      [...settings.allowlist, ...hostsWithScriptletsOff(settings.siteFixes)].flatMap(
-        allowlistMatchPatterns,
-      ),
-    ),
-  ];
+  const allowlistExclude = [...new Set(userScriptletsOff.flatMap(allowlistMatchPatterns))];
 
   const ids = enabledListIds(settings);
   // Only exceptions from *enabled* lists exclude the generic sheet. A disabled cookie
   // list must not keep its @@$generichide hosts unhidden.
   const netEx = mergeNetworkExceptions(COSMETIC, ids);
+  const pathEx = mergePathExceptions(COSMETIC, ids);
 
   // Generic cosmetic CSS is additionally excluded on hosts with a $generichide/$elemhide
   // network exception, so those hosts never receive the sheet (and need no per-page revert
   // of the whole generic set). matchCosmetic mirrors this: it only emits the revert for
   // entity-domain (example.*) exceptions, which can't be expressed as a match pattern here.
   const cosmeticMatches = [
-    ...new Set(
-      [
-        ...settings.allowlist,
+    ...new Set([
+      ...[
         // Breakage fixes must also drop the registered generic sheet — it is injected by
         // chrome.scripting, so suppressing the per-page payload in handleCosmetic is not
         // enough to stop generic hiding on that host.
-        ...hostsWithCosmeticsOff(settings.siteFixes),
+        ...userCosmeticsOff,
         ...netEx.generichide,
         ...netEx.elemhide,
       ].flatMap(allowlistMatchPatterns),
-    ),
+      // Page-scoped exceptions keep their path: EasyList's `@@||duckduckgo.com/?q=` excludes
+      // the results page (`*://*.duckduckgo.com/?q=*`), not the whole site.
+      ...[...pathEx.generichide, ...pathEx.elemhide].flatMap(pathExceptionMatchPatterns),
+    ]),
   ];
   const cosmeticExclude = cosmeticMatches;
   const cssFiles = ids
@@ -309,41 +331,69 @@ async function syncRegisteredScripts(settings: Settings): Promise<void> {
     persistAcrossSessions: true,
   };
 
+  const youtubeMatches = [
+    '*://*.youtube.com/*',
+    '*://*.youtube-nocookie.com/*',
+    '*://youtu.be/*',
+    '*://*.youtubekids.com/*',
+  ];
+  // Top-level YouTube pages: here the frame URL is the page, so the allowlist excludes work.
   const youtube: chrome.scripting.RegisteredContentScript = {
     id: YOUTUBE_SCRIPTLETS_SCRIPT_ID,
     js: ['scriptlets-youtube.js'],
-    matches: [
-      '*://*.youtube.com/*',
-      '*://*.youtube-nocookie.com/*',
-      '*://youtu.be/*',
-      '*://*.youtubekids.com/*',
-    ],
+    matches: youtubeMatches,
     excludeMatches: allowlistExclude,
+    runAt: 'document_start',
+    allFrames: false,
+    world: 'MAIN',
+    persistAcrossSessions: true,
+  };
+  // Embeds follow the page they sit on, which excludeMatches cannot test: switching off
+  // youtube.com must not unhook YouTube players on every other site. The script itself skips
+  // the top frame. Known limit, the other way round: a YouTube frame on an allowlisted page
+  // (youtube.com's own subframes included) is still hooked.
+  const youtubeFrames: chrome.scripting.RegisteredContentScript = {
+    id: YOUTUBE_FRAME_SCRIPTLETS_SCRIPT_ID,
+    js: ['scriptlets-youtube-frames.js'],
+    matches: youtubeMatches,
+    excludeMatches: [],
     runAt: 'document_start',
     allFrames: true,
     world: 'MAIN',
     persistAcrossSessions: true,
   };
+  const youtubeOn = shouldExist && settings.youtubeBlockSponsored !== false;
 
-  try {
-    // Drop any legacy MAIN scriptlets registration from older builds.
-    try {
-      await chrome.scripting.unregisterContentScripts({
-        ids: ['StampStack-scriptlets', SCRIPTLETS_SCRIPT_ID],
-      });
-    } catch {
-      /* not registered */
-    }
-
-    await syncOneRegisteredScript(cosmetic, shouldExist && cssFiles.length > 0);
+  await settleEach('syncRegisteredScripts', [
+    ['legacy scriptlets cleanup', removeLegacyScriptlets()],
+    [cosmetic.id, syncOneRegisteredScript(cosmetic, shouldExist && cssFiles.length > 0)],
     // Sponsored scrub runs only when the YouTube sponsored toggle is on.
-    await syncOneRegisteredScript(
-      youtube,
-      shouldExist && settings.youtubeBlockSponsored !== false,
-    );
-  } catch (e) {
-    console.error('[StampStack] syncRegisteredScripts failed', e);
-  }
+    [youtube.id, syncOneRegisteredScript(youtube, youtubeOn)],
+    [youtubeFrames.id, syncOneRegisteredScript(youtubeFrames, youtubeOn)],
+  ]);
+}
+
+/**
+ * Registrations are settled independently: Chrome rejects a payload as a whole, and one rejected
+ * script (an unparseable exclude pattern, say) must not also skip the syncs next to it.
+ */
+async function settleEach(label: string, jobs: [string, Promise<void>][]): Promise<void> {
+  const settled = await Promise.allSettled(jobs.map(([, job]) => job));
+  settled.forEach((r, i) => {
+    if (r.status === 'rejected') {
+      console.error(`[StampStack] ${label}: ${jobs[i][0]} failed`, r.reason);
+    }
+  });
+}
+
+/**
+ * 0.1.0 registered list scriptlets globally (MAIN world, <all_urls>, persisted); they now inject
+ * on demand. unregisterContentScripts rejects the whole call when any id is not registered, so
+ * remove only what is actually there.
+ */
+async function removeLegacyScriptlets(): Promise<void> {
+  const live = await chrome.scripting.getRegisteredContentScripts({ ids: [SCRIPTLETS_SCRIPT_ID] });
+  for (const s of live) await chrome.scripting.unregisterContentScripts({ ids: [s.id] });
 }
 
 
@@ -387,17 +437,18 @@ async function syncDarkModeScripts(
     persistAcrossSessions: true,
   };
 
-  try {
-    const globalOn = paid && settings.darkModeEnabled;
-    await syncOneRegisteredScript(globalScript, globalOn);
+  const globalOn = paid && settings.darkModeEnabled;
+  await settleEach('syncDarkModeScripts', [
+    [globalScript.id, syncOneRegisteredScript(globalScript, globalOn)],
     // When global is on, force-on hosts are already covered; only need force script when global off.
-    await syncOneRegisteredScript(
-      forceOnScript,
-      paid && !settings.darkModeEnabled && forceOnMatches.length > 0,
-    );
-  } catch (e) {
-    console.error('[StampStack] syncDarkModeScripts failed', e);
-  }
+    [
+      forceOnScript.id,
+      syncOneRegisteredScript(
+        forceOnScript,
+        paid && !settings.darkModeEnabled && forceOnMatches.length > 0,
+      ),
+    ],
+  ]);
 }
 
 /**
@@ -678,10 +729,10 @@ chrome.runtime.onMessage.addListener((msg: Message, sender, sendResponse) => {
 async function handleMessage(msg: Message, sender: chrome.runtime.MessageSender): Promise<unknown> {
   switch (msg.type) {
     case 'cosmetic:get':
-      return handleCosmetic(msg.hostname);
+      return handleCosmetic(msg.hostname, sender);
 
     case 'scriptlets:get':
-      return handleScriptlets(msg.hostname);
+      return handleScriptlets(msg.hostname, sender);
 
     case 'scriptlets:inject':
       return handleScriptletsInject(msg.scriptlets, sender);
@@ -737,7 +788,7 @@ async function handleMessage(msg: Message, sender: chrome.runtime.MessageSender)
       );
 
     case 'youtube:getOptions':
-      return handleYoutubeGetOptions(msg.hostname);
+      return handleYoutubeGetOptions(policyHost(msg.hostname, sender));
 
     case 'sponsorblock:getCategories':
       return handleSponsorCategoriesGet();
@@ -806,15 +857,38 @@ async function handleMessage(msg: Message, sender: chrome.runtime.MessageSender)
   }
 }
 
-async function handleCosmetic(hostname: string): Promise<CosmeticResponse> {
+/**
+ * Host whose switches (the allowlist and breakage fixes) govern a content script's request: the
+ * tab's top-level page, as for network blocking (syncAllowlist) and in uBO. A YouTube embed on
+ * news.example follows news.example's switch, not youtube.com's, and a comment iframe on a
+ * switched-off page is off too. Rules are still matched against the frame's own host.
+ *
+ * A prerendered page is not yet the tab's page, so its subframes fall back to their own host.
+ */
+function policyHost(frameHost: string, sender: chrome.runtime.MessageSender): string {
+  const topUrl = sender.tab?.url;
+  if (!sender.frameId || !topUrl || sender.documentLifecycle === 'prerender') return frameHost;
+  if (!isHttpOrHttpsUrl(topUrl)) return frameHost;
+  try {
+    return new URL(topUrl).hostname || frameHost;
+  } catch {
+    return frameHost;
+  }
+}
+
+async function handleCosmetic(
+  hostname: string,
+  sender: chrome.runtime.MessageSender,
+): Promise<CosmeticResponse> {
   const settings = await loadSettings();
+  const site = policyHost(hostname, sender);
   // A breakage fix suppresses element hiding while leaving network blocking in place. The
   // registered generic stylesheet is excluded separately in syncRegisteredScripts — returning
   // nothing here only covers the per-page specific/procedural payload.
   if (
     settings.paused ||
-    isAllowlistedHost(hostname, settings.allowlist) ||
-    fixDisablesCosmetics(resolveSiteFix(hostname, settings.siteFixes))
+    isAllowlistedHost(site, settings.allowlist) ||
+    fixDisablesCosmetics(resolveSiteFix(site, settings.siteFixes))
   ) {
     return {
       allowlisted: true,
@@ -825,7 +899,8 @@ async function handleCosmetic(hostname: string): Promise<CosmeticResponse> {
       disableSpecific: true,
     };
   }
-  const m = matchCosmetic(hostname, COSMETIC, enabledListIds(settings));
+  // The frame's own URL: page-scoped exceptions (EasyList's search-results generichide) need it.
+  const m = matchCosmetic(hostname, COSMETIC, enabledListIds(settings), sender.url);
   // The user's own rules ride along with the list-derived ones. Their exceptions are applied
   // inside customCosmeticsFor, and their unhides also cancel list hides below — a user must be
   // able to override a filter list, not just their own picks.
@@ -843,12 +918,16 @@ async function handleCosmetic(hostname: string): Promise<CosmeticResponse> {
   };
 }
 
-async function handleScriptlets(hostname: string): Promise<ScriptletsResponse> {
+async function handleScriptlets(
+  hostname: string,
+  sender: chrome.runtime.MessageSender,
+): Promise<ScriptletsResponse> {
   const settings = await loadSettings();
+  const site = policyHost(hostname, sender);
   if (
     settings.paused ||
-    isAllowlistedHost(hostname, settings.allowlist) ||
-    fixDisablesScriptlets(resolveSiteFix(hostname, settings.siteFixes))
+    isAllowlistedHost(site, settings.allowlist) ||
+    fixDisablesScriptlets(resolveSiteFix(site, settings.siteFixes))
   ) {
     return { allowlisted: true, scriptlets: [] };
   }

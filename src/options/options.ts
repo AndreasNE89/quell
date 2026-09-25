@@ -14,6 +14,7 @@ import type {
   SponsorCategoriesData,
 } from '../shared/types.js';
 import { siteFixLabel } from '../shared/site-fix.js';
+import { siteRuleHostFromInput } from '../shared/hostname.js';
 import { listAge } from '../shared/list-age.js';
 import { applyI18n, msg } from '../shared/i18n.js';
 import { STORAGE_KEY } from '../shared/constants.js';
@@ -460,8 +461,19 @@ async function loadSiteRules(): Promise<void> {
 $<HTMLFormElement>('siteRuleForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const input = $<HTMLInputElement>('siteRuleHost');
-  const host = input.value.trim();
-  if (!host) return;
+  const typed = input.value.trim();
+  const error = $('siteRuleError');
+  error.textContent = '';
+  if (!typed) return;
+  // The service worker silently ignores a host it cannot key a rule on (a partial IP such as
+  // 10.0.0, IPv6, a bare suffix). Check with the same validator first and keep the entry, so
+  // it can be corrected rather than vanishing.
+  const host = siteRuleHostFromInput(typed);
+  if (!host) {
+    error.textContent = msg('options_site_rule_invalid', [typed]);
+    input.focus();
+    return;
+  }
   const choice = $<HTMLSelectElement>('siteRuleLevel').value;
   if (choice === 'allowlist') {
     await send({ type: 'popup:toggleSite', hostname: host, enabled: false });

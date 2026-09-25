@@ -37,6 +37,11 @@ export function forApi(
  * forever — e.g. allowlisting youtube.com and then un-allowlisting it would leave the YouTube
  * MAIN-world hooks permanently excluded from YouTube. Replace the registration outright
  * instead of patching it, and skip the write entirely when nothing changed.
+ *
+ * Replacing means a window with no registration at all. If Chrome rejects the new payload
+ * (one invalid excludeMatches entry fails the whole call), the previous registration is put
+ * back and the original error is rethrown: otherwise a bad pattern would silently delete a
+ * working script, and persistAcrossSessions would keep it deleted.
  */
 export async function syncOneRegisteredScript(
   script: chrome.scripting.RegisteredContentScript,
@@ -48,14 +53,29 @@ export async function syncOneRegisteredScript(
     return;
   }
   const desired = forApi(script);
-  if (existing.length) {
-    if (registrationShape(existing[0]) === registrationShape(script)) return;
+  const previous = existing[0];
+  if (previous) {
+    if (registrationShape(previous) === registrationShape(script)) return;
     await chrome.scripting.unregisterContentScripts({ ids: [script.id] });
   }
   try {
     await chrome.scripting.registerContentScripts([desired]);
-  } catch {
-    // Lost a race with a concurrent sync that re-registered this id — patch it instead.
-    await chrome.scripting.updateContentScripts([desired]);
+  } catch (err) {
+    const live = await chrome.scripting
+      .getRegisteredContentScripts({ ids: [script.id] })
+      .catch(() => []);
+    if (live.length) {
+      // Lost a race with a concurrent sync that re-registered this id — patch it instead.
+      await chrome.scripting.updateContentScripts([desired]);
+      return;
+    }
+    if (previous) {
+      try {
+        await chrome.scripting.registerContentScripts([forApi(previous)]);
+      } catch (restoreErr) {
+        console.error(`[StampStack] could not restore ${script.id}`, restoreErr);
+      }
+    }
+    throw err;
   }
 }

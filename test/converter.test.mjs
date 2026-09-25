@@ -144,18 +144,20 @@ test('mixed real-host + public-suffix $document strips TLD (residual after #20)'
   // hasMeaningfulDomainScope was true because example.com is real, but Chrome
   // OR-matches every requestDomains/initiatorDomains entry — leaving `com` would
   // still allowAllRequests across *.com. Strip the suffix; keep the real host.
+  // A document's `domain=` is the page being opened (uBO), so it lands in requestDomains too.
   for (const [line, field, expected] of [
     ['@@*$document,to=example.com|com', 'requestDomains', ['example.com']],
-    ['@@*$document,domain=example.com|com', 'initiatorDomains', ['example.com']],
+    ['@@*$document,domain=example.com|com', 'requestDomains', ['example.com']],
     ['@@*$document,to=example.com|co.uk', 'requestDomains', ['example.com']],
-    ['@@*$document,domain=example.com|co.uk', 'initiatorDomains', ['example.com']],
-    ['@@*$document,domain=192.168.1.1|com', 'initiatorDomains', ['192.168.1.1']],
+    ['@@*$document,domain=example.com|co.uk', 'requestDomains', ['example.com']],
+    ['@@*$document,domain=192.168.1.1|com', 'requestDomains', ['192.168.1.1']],
   ]) {
     const { dnr } = convert(line);
     assert.equal(dnr.rule.action.type, 'allowAllRequests', line);
     assert.deepEqual(dnr.rule.condition[field], expected, line);
     assert.equal(dnr.rule.condition[field].includes('com'), false, line);
     assert.equal(dnr.rule.condition[field].includes('co.uk'), false, line);
+    assert.equal(dnr.rule.condition.initiatorDomains, undefined, line);
   }
 });
 
@@ -209,10 +211,13 @@ test('hostname-scoped regex $document exception still allowAllRequests', () => {
   assert.equal(dnr.rule.condition.regexFilter, '^https:\\/\\/good\\.example\\/');
 });
 
-test('$document with initiator domain still allowAllRequests', () => {
+test('$document with domain= allowAllRequests on the page being opened', () => {
+  // uBO's context for a top-level document is that document, so domain= names its host.
+  // As an initiator it would exempt every page reached FROM good.example instead.
   const { dnr } = convert('@@$document,domain=good.example');
   assert.equal(dnr.rule.action.type, 'allowAllRequests');
-  assert.deepEqual(dnr.rule.condition.initiatorDomains, ['good.example']);
+  assert.deepEqual(dnr.rule.condition.requestDomains, ['good.example']);
+  assert.equal(dnr.rule.condition.initiatorDomains, undefined);
   assert.deepEqual(dnr.rule.condition.resourceTypes, ['main_frame']);
 });
 
@@ -294,6 +299,25 @@ test('isValidDnrDomain accepts canonical hosts / IPv4 / bracketed IPv6, rejects 
   assert.equal(isValidDnrDomain(''), false);
 });
 
+test('isValidDnrDomain refuses partial and non-canonical IPv4 the URL parser rewrites', async () => {
+  // A host whose last label is numeric is parsed as IPv4: `10.0.0` becomes 10.0.0.0 and
+  // `010.0.0.1` becomes 8.0.0.1, so as a request/initiator domain it can never match.
+  const { isValidDnrDomain } = await import('../scripts/lib/to-dnr.mjs');
+  for (const host of ['10.0.0', '192.168', '256.1.1.1', '010.0.0.1', '1.2.3.4.5', 'foo.123', 'a.0x1f']) {
+    assert.equal(isValidDnrDomain(host), false, host);
+  }
+  for (const host of ['0.0.0.0', '255.255.255.255', '10.0.0.1', '123.example', 'x1.a2']) {
+    assert.equal(isValidDnrDomain(host), true, host);
+  }
+  // Dropping the only include never widens the rule; dropping one of several narrows it.
+  assert.equal(convert('||ads.example^$domain=10.0.0').dnr.skip, 'invalid-domain');
+  assert.deepEqual(
+    convert('||ads.example^$domain=10.0.0|site.example').dnr.rule.condition.initiatorDomains,
+    ['site.example'],
+  );
+  assert.equal(convert('||ads.example^$domain=~192.168').dnr.skip, 'invalid-domain');
+});
+
 test('entity-wildcard $domain drops invalid entries, keeping valid ones', () => {
   const { dnr } = convert('||x.example/a.js$script,domain=gmx.*|realsite.com');
   assert.equal(dnr.skip, undefined);
@@ -342,8 +366,10 @@ test('should map uBO $ghide/$ehide/$shide aliases to cosmetic exceptions', () =>
 
 test('should extract entity hosts from generichide patterns for runtime matching', async () => {
   const { hostsFromPattern } = await import('../scripts/lib/parse-filter.mjs');
-  // EasyList: @@||www.google.*/search?$generichide — must not become dead host `www.google`.
-  assert.deepEqual(hostsFromPattern('||www.google.*/search?', false), ['google.*']);
+  // EasyList: @@||www.google.*/search?$generichide is scoped to search pages. Keyed by host it
+  // would turn generic hiding off on every google.* property, so it yields no host at all.
+  assert.deepEqual(hostsFromPattern('||www.google.*/search?', false), []);
+  assert.deepEqual(hostsFromPattern('||www.pahe.*^', false), ['pahe.*']);
   assert.deepEqual(hostsFromPattern('||pahe.*^', false), ['pahe.*']);
   assert.deepEqual(hostsFromPattern('||userupload.*^', false), ['userupload.*']);
   assert.deepEqual(hostsFromPattern('||example.com^', false), ['example.com']);
@@ -358,15 +384,20 @@ test('should map trailing-dot hostname prefixes to entity keys for generichide',
   assert.deepEqual(hostsFromPattern('||asd.', false), ['asd.*']);
   assert.deepEqual(hostsFromPattern('||shrink.', false), ['shrink.*']);
   assert.deepEqual(hostsFromPattern('||asd.^', false), ['asd.*']);
-  // Multi-label hosts stay exact — do not treat example.com. as entity.
-  assert.deepEqual(hostsFromPattern('||example.com.', false), ['example.com']);
+  // A trailing dot is a hostname prefix whatever the label count: EasyList's `||music.amazon.`
+  // means music.amazon.<tld>. Truncating it to `music.amazon` produced a host no site has.
+  assert.deepEqual(hostsFromPattern('||music.amazon.', false), ['music.amazon.*']);
+  assert.deepEqual(hostsFromPattern('||example.com.', false), ['example.com.*']);
+  assert.deepEqual(hostsFromPattern('||example.com^', false), ['example.com']);
 });
 
 test('$removeparam=<name> becomes a queryTransform redirect', () => {
   const { dnr } = convert('||example.com^$removeparam=fbclid');
   assert.equal(dnr.rule.action.type, 'redirect');
   assert.deepEqual(dnr.rule.action.redirect.transform.queryTransform.removeParams, ['fbclid']);
-  assert.equal(dnr.rule.priority, PRIORITY.REDIRECT);
+  // Below BLOCK, so an `@@…$removeparam` exception can sit between them (see limits.mjs).
+  assert.equal(dnr.rule.priority, PRIORITY.REMOVEPARAM);
+  assert.ok(dnr.rule.priority < PRIORITY.BLOCK);
   assert.equal(dnr.rule.condition.urlFilter, '||example.com^');
 });
 
@@ -377,15 +408,17 @@ test('global $removeparam (no pattern) is allowed, not dropped as too-broad', ()
   assert.equal(dnr.rule.condition.urlFilter, undefined);
 });
 
-test('regex / negated / bare $removeparam is skipped, not mis-emitted', () => {
+test('regex / negated $removeparam is skipped, not mis-emitted', () => {
   assert.ok(convert('||x.example^$removeparam=/utm_.*/').dnr.skip?.startsWith('unsupported'));
   assert.ok(convert('||x.example^$removeparam=~keep').dnr.skip?.startsWith('unsupported'));
 });
 
-test('@@...$removeparam exception is skipped (cannot be narrowly exempted)', () => {
+test('@@...$removeparam exception cancels the strip without out-ranking a block', () => {
   const { dnr } = convert('@@||example.com^$removeparam=fbclid');
-  assert.equal(dnr.rule, undefined);
-  assert.equal(dnr.skip, 'exception-removeparam');
+  assert.equal(dnr.rule.action.type, 'allow');
+  assert.equal(dnr.rule.priority, PRIORITY.REMOVEPARAM_ALLOW);
+  assert.ok(dnr.rule.priority > PRIORITY.REMOVEPARAM, 'beats the strip');
+  assert.ok(dnr.rule.priority < PRIORITY.BLOCK, 'never unblocks');
 });
 
 test('ruleKey distinguishes $important from plain block', async () => {
@@ -659,8 +692,9 @@ test('re2UnsupportedReason reports regex-memory for oversized class repeats', as
   const { re2UnsupportedReason } = await import('../scripts/lib/to-dnr.mjs');
   assert.equal(re2UnsupportedReason('[-a-z_]{4,22}'), 'regex-memory');
   assert.equal(re2UnsupportedReason('ads?[0-9]+'), null);
-  // Chrome default is case-insensitive; counted classes often fit only when `$match-case`.
-  assert.equal(re2UnsupportedReason('[a-z]{10,20}'), 'regex-memory');
+  // Chrome default is case-insensitive, folding ASCII letters only (Latin1): Chrome's
+  // isRegexSupported accepts this both ways. Unicode `i` folding used to reject it.
+  assert.equal(re2UnsupportedReason('[a-z]{10,20}'), null);
   assert.equal(re2UnsupportedReason('[a-z]{10,20}', { caseSensitive: true }), null);
   // ubo-badware hex.sbs — over budget even with match-case (Latin1 margin).
   assert.equal(
@@ -695,7 +729,7 @@ test('bare @@||domain^ exception is a plain allow, NOT allowAllRequests', () => 
 test('negated-resource-type exception never emits both resourceTypes and excludedResourceTypes', () => {
   const { dnr } = convert('@@||example.com^$~image');
   assert.equal(dnr.rule.action.type, 'allow');
-  assert.deepEqual(dnr.rule.condition.excludedResourceTypes, ['image']);
+  assert.deepEqual(dnr.rule.condition.excludedResourceTypes, ['image', 'main_frame']);
   assert.equal(dnr.rule.condition.resourceTypes, undefined, 'Chrome rejects both fields together');
 });
 
@@ -716,8 +750,9 @@ test('overly broad filter (no url/regex/domain/type) is dropped', () => {
 });
 
 test('negated resource type maps to excludedResourceTypes', () => {
+  // main_frame too: uBO never applies a negated-only filter to the page being opened.
   const { dnr } = convert('||x.example^$~script');
-  assert.deepEqual(dnr.rule.condition.excludedResourceTypes, ['script']);
+  assert.deepEqual(dnr.rule.condition.excludedResourceTypes, ['script', 'main_frame']);
 });
 
 test('cosmetic hide rule parses domain + selector', () => {
@@ -770,9 +805,11 @@ test('AdGuard scriptlet syntax parses', () => {
 });
 
 test('should keep regex backslashes in scriptlet arguments', () => {
-  assert.deepEqual(splitArgs('/[^\\n]+/, next'), ['/[^\\n]+/', ' next']);
-  assert.deepEqual(splitArgs('a\\,b, c'), ['a,b', ' c']);
-  assert.deepEqual(splitArgs('a\\\\,b'), ['a\\', 'b']);
+  assert.deepEqual(splitArgs('/[^\\n]+/, next'), ['/[^\\n]+/', 'next']);
+  assert.deepEqual(splitArgs('a\\,b, c'), ['a,b', 'c']);
+  // `\\` before a comma is an escaped backslash, not an escaped comma: uBO keeps both
+  // backslashes and splits there (test/parser-scriptlet-args.test.mjs has the shipped cases).
+  assert.deepEqual(splitArgs('a\\\\,b'), ['a\\\\', 'b']);
 
   const ubo = readFileSync(join(FILTERS, 'ubo-filters.txt'), 'utf8');
   const searchAds = ubo.split('\n').find((l) => l.includes('SEARCH_ADS') && l.includes('+js('));
@@ -816,9 +853,13 @@ test('$all block covers main_frame (DNR default would exclude it)', () => {
 });
 
 test('$all keeps working alongside other options', () => {
+  // A top-level document is first-party to itself in uBO, so `$3p` never blocks the
+  // navigation: only the subresource part ships, and it keeps the party condition.
   const { dnr } = convert('||ads.example^$all,third-party');
-  assert.ok(dnr.rule.condition.resourceTypes.includes('main_frame'));
+  assert.equal(dnr.rule.condition.resourceTypes.includes('main_frame'), false);
+  assert.ok(dnr.rule.condition.resourceTypes.includes('sub_frame'));
   assert.equal(dnr.rule.condition.domainType, 'thirdParty');
+  assert.equal(dnr.partialSkip, undefined, 'a part that can never match is not a loss');
 });
 
 test('typeless $removeparam strips the param from top-level URLs too', () => {
@@ -885,10 +926,12 @@ test('suffix-only domain scope is dropped, not silently widened', () => {
 
 test('an exception keeps emitting when some scope survives the strip', () => {
   // `to=` is suffix-only here, but `from=` names real hosts — the rule is still scoped.
+  // The suffix-only `to=` list stays as written: deleting it would allow these requests to
+  // every host, wider than the filter (review 2026-09-24 B6).
   const { dnr } = convert('@@*$xhr,script,3p,from=real.example|other.example,to=shop|autos');
   assert.equal(dnr.rule.action.type, 'allow');
   assert.deepEqual(dnr.rule.condition.initiatorDomains, ['real.example', 'other.example']);
-  assert.equal(dnr.rule.condition.requestDomains, undefined);
+  assert.deepEqual(dnr.rule.condition.requestDomains, ['shop', 'autos']);
 });
 
 test('a two-label domain under a non-ccTLD is not a public suffix', () => {

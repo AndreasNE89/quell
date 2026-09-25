@@ -360,6 +360,15 @@
   "options_settings_imported": {
     "message": "设置已导入。"
   },
+  "options_site_rule_invalid": {
+    "message": "无法为“$HOST$”添加站点规则。请输入网站名称（如 example.com）或完整的 IP 地址（如 192.168.1.1）。",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "10.0.0"
+      }
+    }
+  },
   "options_site_rules": {
     "message": "站点规则"
   },

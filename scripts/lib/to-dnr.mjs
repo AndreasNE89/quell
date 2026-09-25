@@ -1,16 +1,19 @@
 // Convert a parsed network filter (from parse-filter.mjs) into a declarativeNetRequest
 // rule object (without an `id` — the compiler assigns ids). Returns:
 //   { rule }                     on success
+//   { rules: [rule, rule] }      when one filter needs two DNR rules (see splitDocumentContext)
 //   { skip: reason }             when the filter can't be represented in DNR
 //   { cosmeticException }        generichide/elemhide/specifichide (not a network rule)
+//   { badfilter, identity }      a `$badfilter` line (never a rule itself)
+// A success result may also carry `partialSkip: reason` when part of the filter was dropped.
 //
 // The lucky break of MV3: DNR's `urlFilter` grammar mirrors EasyList's own anchors
 // (`||` domain anchor, `^` separator, `|` boundary, `*` wildcard), so the pattern
 // usually passes through untouched. The work is mapping the *options*.
 
 import { createRequire } from 'node:module';
-import { PRIORITY } from './limits.mjs';
-import { REDIRECT_RESOURCES } from './redirects.mjs';
+import { PRIORITY, REDIRECT_PRIORITY_MAX_OFFSET } from './limits.mjs';
+import { resolveRedirect } from './redirects.mjs';
 
 const require = createRequire(import.meta.url);
 const { RE2 } = require('@adguard/re2-wasm');
@@ -23,11 +26,18 @@ const MAX_URL_FILTER_LEN = 2000;
  * (Chrome 118+ defaults that to false).
  *
  * `@adguard/re2-wasm` is Unicode-only, so we cannot mirror Latin1 exactly. We:
- * 1. Validate with `iu` when the emitted rule will be case-insensitive (default),
- *    and `u` when `$match-case` / `isUrlFilterCaseSensitive: true`.
+ * 1. Emulate Latin1 case folding for case-insensitive rules (the default): expand every
+ *    ASCII letter to both cases (`expandAsciiCase`) and compile with `u`, never `iu`.
+ *    Unicode `i` also folds `s`/`k` onto U+017F/U+212A, multi-byte partners Latin1 never
+ *    sees, and that inflated [a-z]-heavy rules far past what Chrome builds — 61 rules
+ *    Chrome accepts (EasyList's `/\/[0-9a-f]{32}\/invoke\.js/` among them) were dropped.
+ *    `$match-case` / `isUrlFilterCaseSensitive: true` compiles the pattern as written.
  * 2. Use a tighter budget than AdGuard's 1990 — Unicode underestimates Latin1
  *    Prog size for dense character classes (e.g. ubo-filters id 4247 needs ~1980
- *    in Unicode/`u` but still trips Chrome's 2KB Latin1 limit).
+ *    in Unicode/`u` but still trips Chrome's 2KB Latin1 limit). Checked against Chrome's
+ *    own `isRegexSupported` over every regex in the lists (2026-09): no false accepts; about
+ *    a dozen rules Chrome would take are still refused — `.` and negated classes compile
+ *    larger in Unicode than in Latin1, and that direction is the safe one.
  *
  * @see https://source.chromium.org/chromium/chromium/src/+/main:extensions/browser/api/declarative_net_request/utils.cc
  * @see https://developer.chrome.com/docs/extensions/reference/api/declarativeNetRequest#regex-rules
@@ -39,12 +49,16 @@ function isAscii(s) {
   return /^[\x00-\x7F]*$/.test(s);
 }
 
+/** Four octets, each 0-255 with no leading zero: the only IPv4 spelling a URL host keeps. */
+const CANONICAL_IPV4 = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
+
 /**
  * Chrome DNR `initiatorDomains`/`requestDomains` (and their excluded* variants) accept
  * only canonical lowercase hostnames or IPv4 literals. Filter lists routinely use forms
  * DNR rejects: entity wildcards (`example.*`), bracketed IPv6 (`[::1]`, `[::]`), ports,
  * or paths. Chrome silently drops such a rule (and older Chromium could reject the whole
- * ruleset), so the filter never fires. Mirror src/shared/hostname.ts:isValidMatchPatternHost.
+ * ruleset), so the filter never fires. The IPv4 and numeric-label rules mirror
+ * src/shared/hostname.ts:isValidMatchPatternHost (which also refuses IPv6, by policy).
  */
 export function isValidDnrDomain(host) {
   if (!host || typeof host !== 'string') return false;
@@ -56,7 +70,12 @@ export function isValidDnrDomain(host) {
     return host.length > 2 && !host.slice(1, -1).includes('[');
   }
   if (host.includes(':')) return false;
-  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return true; // IPv4
+  if (CANONICAL_IPV4.test(host)) return true;
+  // A numeric (or `0x`) last label makes the URL parser read the host as IPv4: `10.0.0`,
+  // `256.1.1.1` and `010.0.0.1` canonicalize to other addresses or fail to parse, so as a
+  // request or initiator domain they can never equal a real request's host.
+  const last = host.slice(host.lastIndexOf('.') + 1);
+  if (/^(\d+|0x[0-9a-f]*)$/i.test(last)) return false;
   return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/i.test(host);
 }
 
@@ -201,6 +220,16 @@ export function stripPublicSuffixDomains(domains) {
 }
 
 /**
+ * uBO's pseudo-hostnames for pages of another scheme (`domain=chrome-extension-scheme`).
+ * DNR never sees requests other extensions make, and no initiator is ever named
+ * `chrome-extension-scheme`, so such a scope can never match. As an include entry it is
+ * dropped; a list with nothing else in it means the whole filter is dead (see toDnrRule).
+ */
+function isSchemePseudoHost(d) {
+  return /-scheme$/.test(d);
+}
+
+/**
  * True when a DNR `urlFilter` matches essentially every http(s) URL — anchors,
  * separators, wildcards, scheme-only prefixes, or a lone `/` with no host/path meat.
  * Used to keep allow / allowAllRequests from becoming a global unblock.
@@ -342,10 +371,11 @@ export function regexFilterHasLiteralScope(pattern) {
  * Filter lists routinely use JS-only features (lookarounds, backrefs) that must
  * be dropped at compile time.
  *
- * Memory check uses AdGuard's RE2 WASM. Flags must match Chrome's case-sensitivity
- * for the emitted rule: default DNR matching is case-insensitive (`iu`); `$match-case`
- * uses `u`. Validating only with `u` underestimates Prog size and ships rules Chrome
- * then skips (e.g. ubo-badware hex.sbs patterns).
+ * Memory check uses AdGuard's RE2 WASM. Case handling must match Chrome for the emitted
+ * rule: default DNR matching is case-insensitive, which Chrome's Latin1 RE2 builds by
+ * folding ASCII letters only — emulated with `expandAsciiCase` + `u`. `$match-case` uses
+ * `u` on the pattern as written. Validating the case-insensitive rule as written
+ * underestimates Prog size and ships rules Chrome then skips (e.g. ubo-badware hex.sbs).
  *
  * @param {string} pattern
  * @param {{ caseSensitive?: boolean }} [options]
@@ -387,19 +417,162 @@ export function re2UnsupportedReason(pattern, options = {}) {
   }
 
   // Enforce Chrome's ~2KB compiled-size budget so oversized rules are never shipped.
-  // re2-wasm requires Unicode (`u` / `iu`); Chromium uses Latin1 — prefer dropping a
+  // re2-wasm requires Unicode (`u`); Chromium uses Latin1 — prefer dropping a
   // borderline rule over load-time "exceeded the 2KB memory limit" warnings.
-  const flags = caseSensitive ? 'u' : 'iu';
-  try {
-    // RE2 constructor throws when the pattern cannot be compiled within maxMem.
-    new RE2(pattern, flags, CHROME_REGEX_MAX_MEM);
-  } catch (err) {
-    const msg = String(err?.message ?? err);
-    if (/too large|memory|compile failed/i.test(msg)) return 'regex-memory';
-    return 'regex-syntax';
-  }
+  const compile = (source, flags) => {
+    try {
+      // RE2 constructor throws when the pattern cannot be compiled within maxMem.
+      new RE2(source, flags, CHROME_REGEX_MAX_MEM);
+      return null;
+    } catch (err) {
+      const msg = String(err?.message ?? err);
+      if (/too large|memory|compile failed/i.test(msg)) return 'regex-memory';
+      return 'regex-syntax';
+    }
+  };
+  if (caseSensitive) return compile(pattern, 'u');
+  const folded = compile(expandAsciiCase(pattern), 'u');
+  // An expansion RE2 cannot parse is our bug, not the rule's: fall back to Unicode folding,
+  // which overestimates the size and so can only reject, never wrongly accept.
+  return folded === 'regex-syntax' ? compile(pattern, 'iu') : folded;
+}
 
-  return null;
+/**
+ * Rewrite a regex so that a case-sensitive compile has the program a Latin1 case-insensitive
+ * compile would: each ASCII letter becomes both cases (`a` → `[aA]`, `[a-f]` → `[a-fA-F]`).
+ * Escapes (`\d`, `\x41`, `\p{L}`), group headers (`(?:`, `(?P<name>`) and counted
+ * repetitions pass through unchanged. Only used to size the program; the rule ships as written.
+ * @param {string} pattern
+ * @returns {string}
+ */
+export function expandAsciiCase(pattern) {
+  const n = pattern.length;
+  const partner = (c) => (c >= 'a' && c <= 'z' ? c.toUpperCase() : c.toLowerCase());
+  const isAsciiLetter = (c) => /^[A-Za-z]$/.test(c);
+
+  /** Length of the escape sequence starting at `pattern[i] === '\\'`. */
+  const escapeLength = (i) => {
+    const c = pattern[i + 1];
+    if (c === undefined) return 1;
+    if ((c === 'x' || c === 'p' || c === 'P') && pattern[i + 2] === '{') {
+      const end = pattern.indexOf('}', i + 2);
+      return end === -1 ? n - i : end + 1 - i;
+    }
+    if (c === 'x') return 4;
+    if (c === 'p' || c === 'P') return 3;
+    if (c === 'Q') {
+      const end = pattern.indexOf('\\E', i + 2);
+      return end === -1 ? n - i : end + 2 - i;
+    }
+    return 2;
+  };
+
+  /** Code point of a single-character class atom (`a`, `\.`, `\x41`), or null for `\d` etc. */
+  const atomCodePoint = (text) => {
+    if (text.length === 1) return text.charCodeAt(0);
+    if (/^\\x[0-9a-f]{2}$/i.test(text)) return parseInt(text.slice(2), 16);
+    if (/^\\x\{[0-9a-f]+\}$/i.test(text)) return parseInt(text.slice(3, -1), 16);
+    if (/^\\[^A-Za-z0-9]$/.test(text)) return text.charCodeAt(1);
+    return null;
+  };
+
+  /** Case partners of the ASCII letters in [lo, hi], as class text. */
+  const partnerRanges = (lo, hi) => {
+    let extra = '';
+    for (const [from, to, shift] of [
+      [65, 90, 32],
+      [97, 122, -32],
+    ]) {
+      const a = Math.max(lo, from);
+      const b = Math.min(hi, to);
+      if (a > b) continue;
+      const x = String.fromCharCode(a + shift);
+      const y = String.fromCharCode(b + shift);
+      extra += a === b ? x : `${x}-${y}`;
+    }
+    return extra;
+  };
+
+  /** Copy a character class starting at `pattern[i] === '['`; returns [text, nextIndex]. */
+  const copyClass = (i) => {
+    let out = '[';
+    let j = i + 1;
+    if (pattern[j] === '^') out += pattern[j++];
+    // RE2: a `]` first in the class is a literal.
+    let first = true;
+    while (j < n && (pattern[j] !== ']' || first)) {
+      first = false;
+      // POSIX class `[:lower:]`.
+      if (pattern[j] === '[' && pattern[j + 1] === ':') {
+        const end = pattern.indexOf(':]', j + 2);
+        if (end !== -1) {
+          const name = pattern.slice(j + 2, end);
+          out += pattern.slice(j, end + 2);
+          if (name === 'lower') out += 'A-Z';
+          else if (name === 'upper') out += 'a-z';
+          j = end + 2;
+          continue;
+        }
+      }
+      const len = pattern[j] === '\\' ? escapeLength(j) : 1;
+      const atom = pattern.slice(j, j + len);
+      j += len;
+      const lo = atomCodePoint(atom);
+      // Range `lo-hi` (a `-` right before `]` is a literal).
+      if (lo !== null && pattern[j] === '-' && j + 1 < n && pattern[j + 1] !== ']') {
+        const hiLen = pattern[j + 1] === '\\' ? escapeLength(j + 1) : 1;
+        const hiAtom = pattern.slice(j + 1, j + 1 + hiLen);
+        const hi = atomCodePoint(hiAtom);
+        if (hi !== null) {
+          out += `${atom}-${hiAtom}${partnerRanges(lo, hi)}`;
+          j += 1 + hiLen;
+          continue;
+        }
+      }
+      out += atom;
+      if (atom.length === 1 && isAsciiLetter(atom)) out += partner(atom);
+    }
+    if (j < n) out += ']';
+    return [out, j + 1];
+  };
+
+  let out = '';
+  let i = 0;
+  while (i < n) {
+    const c = pattern[i];
+    if (c === '\\') {
+      const len = escapeLength(i);
+      out += pattern.slice(i, i + len);
+      i += len;
+      continue;
+    }
+    if (c === '[') {
+      const [text, next] = copyClass(i);
+      out += text;
+      i = next;
+      continue;
+    }
+    if (c === '(' && pattern[i + 1] === '?') {
+      // Group header: `(?:`, `(?i)`, `(?i:`, `(?P<name>`, `(?<name>`.
+      const named = /^\(\?P?<[A-Za-z_][A-Za-z0-9_]*>/.exec(pattern.slice(i));
+      const flags = /^\(\?[A-Za-z-]*[:)]/.exec(pattern.slice(i));
+      const header = named?.[0] ?? flags?.[0] ?? '(?';
+      out += header;
+      i += header.length;
+      continue;
+    }
+    if (c === '{') {
+      const rep = /^\{\d+(?:,\d*)?\}/.exec(pattern.slice(i));
+      if (rep) {
+        out += rep[0];
+        i += rep[0].length;
+        continue;
+      }
+    }
+    out += isAsciiLetter(c) ? `[${c}${partner(c)}]` : c;
+    i++;
+  }
+  return out;
 }
 
 /**
@@ -411,7 +584,6 @@ const HARD_UNSUPPORTED = new Set([
   'csp',
   'removeparam',
   'removeparam-rule',
-  'method',
   'header',
   'permissions',
   'cookie',
@@ -437,9 +609,20 @@ function unsupportedReason(tokens) {
   return `unsupported:${names[0] || 'option'}`;
 }
 
+/** Option token as written, normalized for identity: name lowercased, value kept. */
+function normalizeOptionToken(token) {
+  const t = String(token).trim();
+  const eq = t.indexOf('=');
+  return eq === -1 ? t.toLowerCase() : `${t.slice(0, eq).toLowerCase()}=${t.slice(eq + 1)}`;
+}
+
 /**
  * Identity for `$badfilter` matching: pattern + options minus the badfilter token.
  * Two filters cancel when their identities are equal.
+ *
+ * Every option that changes what a filter does is part of the identity — the cosmetic kind
+ * (`$ehide`), `$redirect-rule`, and the options the parser leaves unconverted (`$csp=…`,
+ * `$popup`, `$method=…`). Without them `||x^$csp=…,badfilter` would cancel a plain `||x^`.
  */
 export function networkFilterIdentity(f) {
   const o = f.options || {};
@@ -457,20 +640,147 @@ export function networkFilterIdentity(f) {
     thirdParty: o.thirdParty ?? null,
     matchCase: !!o.matchCase,
     important: !!o.important,
-    redirect: f.redirect || null,
+    redirect: f.redirect ?? null,
+    redirectRule: !!f.redirectRule,
+    cosmeticException: f.cosmeticException || null,
+    other: [...(f.unsupported || [])].map(normalizeOptionToken).sort(),
   });
 }
 
+/** DNR `requestMethods` values that uBO's `$method` can name (DNR wants lowercase). */
+const DNR_METHODS = new Set(['connect', 'delete', 'get', 'head', 'options', 'patch', 'post', 'put']);
+
+/** DNR's resource types; mirrors parse-filter.mjs, which applies this to `$all`/`$removeparam`. */
+const ALL_RESOURCE_TYPES = [
+  'main_frame', 'sub_frame', 'stylesheet', 'script', 'image',
+  'font', 'object', 'xmlhttprequest', 'ping', 'media', 'websocket', 'other',
+];
+
+/**
+ * Options the parser leaves in `unsupported` that DNR can express after all:
+ * - `$method=get|~post`            → requestMethods / excludedRequestMethods
+ * - `$rewrite=abp-resource:<name>` → ABP's spelling of `$redirect=<name>`
+ * - bare `$removeparam`            → strip the whole query (`transform.query: ''`)
+ * @returns {{ rest: string[], methods: {include: string[], exclude: string[]} | null,
+ *   rewrite: string | null, clearQuery: boolean } | { skip: string }}
+ */
+function extractConvertibleOptions(tokens) {
+  const rest = [];
+  let methods = null;
+  let rewrite = null;
+  let clearQuery = false;
+  for (const raw of tokens || []) {
+    const token = String(raw).trim();
+    const neg = token.startsWith('~');
+    const key = neg ? token.slice(1) : token;
+    const eq = key.indexOf('=');
+    const name = (eq === -1 ? key : key.slice(0, eq)).toLowerCase();
+    const value = eq === -1 ? '' : key.slice(eq + 1).trim();
+    if (name === 'method' && !neg && value) {
+      methods ||= { include: [], exclude: [] };
+      for (const part of value.split('|')) {
+        const m = part.trim().toLowerCase();
+        const off = m.startsWith('~');
+        const verb = off ? m.slice(1) : m;
+        if (!DNR_METHODS.has(verb)) return { skip: 'unsupported:method' };
+        (off ? methods.exclude : methods.include).push(verb);
+      }
+      continue;
+    }
+    if (name === 'rewrite' && !neg && value.startsWith('abp-resource:')) {
+      rewrite = value;
+      continue;
+    }
+    if ((name === 'removeparam' || name === 'queryprune') && !neg && eq === -1) {
+      clearQuery = true;
+      continue;
+    }
+    rest.push(raw);
+  }
+  return { rest, methods, rewrite, clearQuery };
+}
+
+/**
+ * Include lists from `domain=` and `to=` both constrain the request host of a top-level
+ * document, so it must fall under an entry of each. Chrome matches a listed domain and its
+ * subdomains; the intersection is the deeper entry of every overlapping pair.
+ * @returns {string[] | null} null when no host can satisfy both
+ */
+function intersectDomainIncludes(a, b) {
+  if (!a.length) return b;
+  if (!b.length) return a;
+  const under = (host, parent) => host === parent || host.endsWith(`.${parent}`);
+  const out = new Set();
+  for (const x of a) {
+    for (const y of b) {
+      if (under(x, y)) out.add(x);
+      else if (under(y, x)) out.add(y);
+    }
+  }
+  return out.size ? [...out] : null;
+}
+
+/**
+ * uBO filters a top-level document request in the context of the document being opened: its
+ * filtering context takes the document origin from the request URL. So for `main_frame`,
+ * `domain=` names the page being navigated to, `$1p` always holds and `$3p` never does. DNR's
+ * `initiatorDomains` / `domainType` instead look at the page the navigation came from — none
+ * at all for a typed URL or a bookmark — so the plain mapping blocks outbound links from a
+ * listed site and misses the site itself.
+ *
+ * A filter whose context options would differ therefore splits into a `main_frame` part
+ * (context mapped onto the request host) and a part for its other types (unchanged; a
+ * subresource's context is the page that loads it, which is what DNR's initiator is).
+ * @returns {{ parts: object[], skip: string | null } | null} null when no split is needed
+ */
+function splitDocumentContext(f) {
+  const o = f.options;
+  if (!o.resourceTypes.includes('main_frame')) return null;
+  const hasContext =
+    o.initiatorDomains.length > 0 || o.excludedInitiatorDomains.length > 0 || o.thirdParty !== null;
+  if (!hasContext) return null;
+
+  const parts = [];
+  let skip = null;
+  if (o.thirdParty === true) {
+    // A document is always first-party to itself: this part can never match.
+    skip = 'document-third-party';
+  } else {
+    const include = intersectDomainIncludes(o.initiatorDomains, o.requestDomains);
+    if (include === null) {
+      skip = 'document-domain-disjoint';
+    } else {
+      parts.push({
+        ...f,
+        options: {
+          ...o,
+          resourceTypes: ['main_frame'],
+          thirdParty: null,
+          initiatorDomains: [],
+          excludedInitiatorDomains: [],
+          requestDomains: include,
+          excludedRequestDomains: dedup([...o.excludedInitiatorDomains, ...o.excludedRequestDomains]),
+        },
+      });
+    }
+  }
+  const rest = o.resourceTypes.filter((t) => t !== 'main_frame');
+  if (rest.length) parts.push({ ...f, options: { ...o, resourceTypes: rest } });
+  return { parts, skip };
+}
+
 export function toDnrRule(f) {
+  // $badfilter cancels another filter; never emit it as a DNR rule — and check it first:
+  // `@@||x^$ehide,badfilter` exists to REMOVE an element-hiding exception, so reading it
+  // as a cosmetic exception would switch off every cosmetic filter on that site.
+  if (f.options?.badfilter) {
+    return { badfilter: true, identity: networkFilterIdentity(f) };
+  }
+
   // Cosmetic-only exceptions are never network actions — even when they carry a URL
   // pattern (`@@||example.com^$generichide`). Emitting `allow` would unblock traffic.
   if (f.cosmeticException) {
     return { cosmeticException: f.cosmeticException, pattern: f.pattern, isException: f.isException };
-  }
-
-  // $badfilter cancels another filter; never emit it as a DNR rule.
-  if (f.options?.badfilter) {
-    return { badfilter: true, identity: networkFilterIdentity(f) };
   }
 
   // $redirect-rule means "redirect only if the request would otherwise be blocked".
@@ -479,17 +789,67 @@ export function toDnrRule(f) {
     return { skip: 'redirect-rule' };
   }
 
+  // `@@…$redirect[=X]` only cancels the redirect in uBO; the block still applies. A plain
+  // allow would unblock the request, so drop the exception instead.
+  if (f.isException && f.redirect != null) {
+    return { skip: 'exception-redirect' };
+  }
+
+  const extracted = extractConvertibleOptions(f.unsupported);
+  if (extracted.skip) return { skip: extracted.skip };
   // Remaining unsupported options must not silently become block/allow.
-  if (f.unsupported?.length) {
-    return { skip: unsupportedReason(f.unsupported) };
+  if (extracted.rest.length) {
+    return { skip: unsupportedReason(extracted.rest) };
   }
+  if (extracted.rewrite && f.isException) return { skip: 'exception-redirect' };
+  if (extracted.rewrite && f.redirect != null) return { skip: 'redirect-conflict' };
 
-  // @@…$removeparam can't be narrowly exempted in DNR (it would need to allow only the param
-  // transform); a broad allow would over-unblock the request. Drop the exception instead.
-  if (f.isException && f.options?.removeParams?.length) {
-    return { skip: 'exception-removeparam' };
-  }
+  // Negated types subtract from listed ones (`$all,~doc`): DNR takes one list or the other.
+  let listed = dedup(f.options.resourceTypes || []);
+  const negated = dedup(f.options.excludedResourceTypes || []);
+  // A typeless bare `$removeparam` must reach the address bar too, like the named form
+  // (parse-filter.mjs adds every type for that one).
+  if (extracted.clearQuery && !listed.length) listed = [...ALL_RESOURCE_TYPES];
+  const resourceTypes = listed.filter((t) => !negated.includes(t));
+  if (listed.length && !resourceTypes.length) return { skip: 'no-resource-types' };
+  // uBO fills a negated-only list (`$~script`, `$~image,3p`) from its network types, and the
+  // top-level document is not one of them. DNR leaves main_frame out by default only when
+  // neither type list is given: `-banner-ads-$~script` blocked any page with that slug in its
+  // address, and `$~image,3p,domain=…` every link leaving those sites.
+  const excludedResourceTypes =
+    resourceTypes.length || !negated.length ? [] : dedup([...negated, 'main_frame']);
 
+  const g = {
+    ...f,
+    redirect: extracted.rewrite ?? f.redirect,
+    methods: extracted.methods,
+    clearQuery: extracted.clearQuery,
+    options: {
+      ...f.options,
+      resourceTypes,
+      excludedResourceTypes,
+      initiatorDomains: f.options.initiatorDomains || [],
+      excludedInitiatorDomains: f.options.excludedInitiatorDomains || [],
+      requestDomains: f.options.requestDomains || [],
+      excludedRequestDomains: f.options.excludedRequestDomains || [],
+    },
+  };
+
+  const split = splitDocumentContext(g);
+  if (!split) return convertFilter(g);
+
+  const results = split.parts.map(convertFilter);
+  const rules = results.filter((r) => r.rule).map((r) => r.rule);
+  // split.skip names a part that can never match, so nothing is lost when others convert.
+  const lost = results.map((r) => r.skip).filter(Boolean);
+  if (!rules.length) return { skip: lost[0] || split.skip || 'document-context' };
+  const out = rules.length === 1 ? { rule: rules[0] } : { rules };
+  if (lost.length) out.partialSkip = lost[0];
+  return out;
+}
+
+/** Convert a filter whose options are already normalized by toDnrRule into one DNR rule. */
+function convertFilter(f) {
   const condition = {};
 
   if (f.isRegex) {
@@ -511,7 +871,7 @@ export function toDnrRule(f) {
   }
   // An empty/`*` pattern is a valid "match every URL" condition (omit urlFilter).
 
-  // Resource types.
+  // Resource types (toDnrRule already subtracted negated types from listed ones).
   const rt = dedup(f.options.resourceTypes);
   const ert = dedup(f.options.excludedResourceTypes);
   if (rt.length) condition.resourceTypes = rt;
@@ -521,11 +881,19 @@ export function toDnrRule(f) {
   if (f.options.thirdParty === true) condition.domainType = 'thirdParty';
   else if (f.options.thirdParty === false) condition.domainType = 'firstParty';
 
+  // `domain=chrome-extension-scheme` can never match in DNR (see isSchemePseudoHost). Dropping
+  // it from a list with real hosts changes nothing; a list of nothing else is a dead filter.
+  const liveIncludes = (list) => {
+    const all = dedup(list);
+    const live = all.filter((d) => !isSchemePseudoHost(d));
+    return all.length && !live.length ? null : live;
+  };
+  const initIncludes = liveIncludes(f.options.initiatorDomains);
+  const reqIncludes = liveIncludes(f.options.requestDomains);
+  if (!initIncludes || !reqIncludes) return { skip: 'scheme-domain' };
+
   // Initiator (document) domain constraints ($domain / $from).
-  const initSan = sanitizeDnrDomainLists(
-    dedup(f.options.initiatorDomains),
-    dedup(f.options.excludedInitiatorDomains),
-  );
+  const initSan = sanitizeDnrDomainLists(initIncludes, dedup(f.options.excludedInitiatorDomains));
   if (initSan.skip) return { skip: initSan.skip };
   const initDomains = initSan.include;
   const exInitDomains = initSan.exclude;
@@ -533,29 +901,39 @@ export function toDnrRule(f) {
   if (exInitDomains.length) condition.excludedInitiatorDomains = exInitDomains;
 
   // Destination host constraints ($to / $denyallow).
-  const reqSan = sanitizeDnrDomainLists(
-    dedup(f.options.requestDomains),
-    dedup(f.options.excludedRequestDomains),
-  );
+  const reqSan = sanitizeDnrDomainLists(reqIncludes, dedup(f.options.excludedRequestDomains));
   if (reqSan.skip) return { skip: reqSan.skip };
   const reqDomains = reqSan.include;
   const exReqDomains = reqSan.exclude;
   if (reqDomains.length) condition.requestDomains = reqDomains;
   if (exReqDomains.length) condition.excludedRequestDomains = exReqDomains;
 
+  // $method. uBO `method=get|~post`: the request's method must be listed and not negated.
+  if (f.methods) {
+    const include = dedup(f.methods.include).filter((m) => !f.methods.exclude.includes(m));
+    if (f.methods.include.length) {
+      if (!include.length) return { skip: 'no-request-methods' };
+      condition.requestMethods = include;
+    } else if (f.methods.exclude.length) {
+      condition.excludedRequestMethods = dedup(f.methods.exclude);
+    }
+  }
+
   if (f.options.matchCase) condition.isUrlFilterCaseSensitive = true;
 
-  // $removeparam=<name> → strip query params via DNR redirect + queryTransform. A global
-  // param strip (no url/domain) is legitimate — unlike a global block — so emit it before
-  // the too-broad guard. removeParams no-ops when the param is absent (no redirect loop).
-  if (f.options.removeParams && f.options.removeParams.length) {
+  const removeParams = dedup(f.options.removeParams || []);
+  const isRemoveparam = removeParams.length > 0 || !!f.clearQuery;
+
+  // $removeparam=<name> → strip query params via DNR redirect + queryTransform; a bare
+  // $removeparam clears the whole query (`transform.query: ''`). A global param strip
+  // (no url/domain) is legitimate — unlike a global block — so emit it before the
+  // too-broad guard. Neither form redirects when there is nothing to strip (no loop).
+  if (isRemoveparam && !f.isException) {
+    const transform = f.clearQuery ? { query: '' } : { queryTransform: { removeParams } };
     return {
       rule: {
-        priority: f.options.important ? PRIORITY.IMPORTANT_REDIRECT : PRIORITY.REDIRECT,
-        action: {
-          type: 'redirect',
-          redirect: { transform: { queryTransform: { removeParams: dedup(f.options.removeParams) } } },
-        },
+        priority: f.options.important ? PRIORITY.IMPORTANT_REDIRECT : PRIORITY.REMOVEPARAM,
+        action: { type: 'redirect', redirect: { transform } },
         condition,
       },
     };
@@ -586,25 +964,19 @@ export function toDnrRule(f) {
     // Mixed include lists (`to=example.com|com`) still pass hasMeaningfulDomainScope
     // because example.com is real — but Chrome OR-matches every entry, so leaving
     // `com` in the emitted rule TLD-unblocks *.com. Strip suffixes before the guard
-    // and rewrite the condition (under-match is safe; public-suffix-only → skip).
+    // and rewrite the condition (under-match is safe).
     const scopedInit = stripPublicSuffixDomains(initDomains);
     const scopedReq = stripPublicSuffixDomains(reqDomains);
-    // Narrowing an exception is safe; silently *removing* its only scope is not. Deleting a
-    // suffix-only list turns `@@$script,domain=com` into an unscoped global script allow —
-    // the exact outcome these guards exist to prevent. Remember that the scope was destroyed
-    // so the emit guards below can refuse it; a rule that still has other scope (a real
-    // `from=` host, a scoped urlFilter) keeps emitting as before.
-    const scopeWasStripped =
+    // A list made only of suffixes is never stripped: deleting it widens the exception to
+    // every site. `@@||stats.wp.com/w.js$script,domain=wordpress.com` became a global allow
+    // for the Jetpack tracker that way. Such a list stays verbatim — exactly what the filter
+    // says — when something else scopes the rule, and the emit guards below skip the rule
+    // when nothing does (`@@$script,domain=com` must not become a global script allow).
+    const suffixOnlyScope =
       (initDomains.length > 0 && scopedInit.length === 0) ||
       (reqDomains.length > 0 && scopedReq.length === 0);
-    if (scopedInit.length !== initDomains.length) {
-      if (scopedInit.length) condition.initiatorDomains = scopedInit;
-      else delete condition.initiatorDomains;
-    }
-    if (scopedReq.length !== reqDomains.length) {
-      if (scopedReq.length) condition.requestDomains = scopedReq;
-      else delete condition.requestDomains;
-    }
+    if (scopedInit.length) condition.initiatorDomains = scopedInit;
+    if (scopedReq.length) condition.requestDomains = scopedReq;
     const hasDomainScope = hasMeaningfulDomainScope(scopedInit, scopedReq);
     // `||com^` / `||github.io^` look like hostname scope but Chrome matches every
     // subdomain of that public / multi-tenant suffix — same over-unblock as to=com.
@@ -622,6 +994,20 @@ export function toDnrRule(f) {
         // by requiring the regex to contain some literal text it is actually scoped to.
         regexFilterHasLiteralScope(condition.regexFilter));
     const hasAnyUrlConstraint = !!(condition.urlFilter || condition.regexFilter);
+
+    if (isRemoveparam) {
+      // `@@…$removeparam[=name]` cancels query stripping only. It sits in its own band just
+      // above the strips and below BLOCK, so it can never unblock anything. DNR cannot cancel
+      // one parameter's strip alone: a named exception stops every strip on that request.
+      if (!hasDomainScope && !hasScopedUrl) return { skip: 'too-broad-allow' };
+      return {
+        rule: {
+          priority: PRIORITY.REMOVEPARAM_ALLOW,
+          action: { type: 'allow' },
+          condition,
+        },
+      };
+    }
 
     if (rt.includes('main_frame')) {
       // Resource types alone are not enough scope here: `@@$document` / `@@*$document`
@@ -650,9 +1036,9 @@ export function toDnrRule(f) {
     // urlFilter/regexFilter with no real host scope (`@@|http*`, `@@/.*/`, …)
     // disables network blocking globally — skip those. Type-only allows (no URL
     // constraint) still emit.
-    // `scopeWasStripped` closes the type-only hole: with no URL constraint at all this guard
+    // `suffixOnlyScope` closes the type-only hole: with no URL constraint at all this guard
     // used to fall through, so `@@$script,domain=com` emitted a global allow for every script.
-    if ((hasAnyUrlConstraint || scopeWasStripped) && !hasScopedUrl && !hasDomainScope) {
+    if ((hasAnyUrlConstraint || suffixOnlyScope) && !hasScopedUrl && !hasDomainScope) {
       return { skip: 'too-broad-allow' };
     }
     return {
@@ -666,14 +1052,20 @@ export function toDnrRule(f) {
 
   // Redirect rules ($redirect=noopjs etc.) — supported for our bundled resource set only.
   if (f.redirect) {
-    const resource = REDIRECT_RESOURCES[f.redirect];
-    if (!resource) return { skip: `redirect:${f.redirect}` };
+    const resolved = resolveRedirect(f.redirect);
+    if (!resolved) return { skip: `redirect:${f.redirect}` };
+    // uBO's `:N` suffix ranks redirects matching the same request; it moves the rule within
+    // its band only, so it still beats the block it replaces and loses to any allow.
+    const offset = Math.max(
+      -REDIRECT_PRIORITY_MAX_OFFSET,
+      Math.min(REDIRECT_PRIORITY_MAX_OFFSET, resolved.priority),
+    );
     return {
       rule: {
-        priority: important ? PRIORITY.IMPORTANT_REDIRECT : PRIORITY.REDIRECT,
+        priority: (important ? PRIORITY.IMPORTANT_REDIRECT : PRIORITY.REDIRECT) + offset,
         action: {
           type: 'redirect',
-          redirect: { extensionPath: `/redirects/${resource.file}` },
+          redirect: { extensionPath: `/redirects/${resolved.resource.file}` },
         },
         condition,
       },

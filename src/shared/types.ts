@@ -166,6 +166,16 @@ export interface CosmeticData {
     elemhide: Record<string, string[]>;
     specifichide: Record<string, string[]>;
   };
+  /**
+   * The same exceptions limited to one page of a site, as `host/path-glob` entries keyed by
+   * list id (`bing.com/search?*`, or `google.*` + `/search?*`). The glob is tested against
+   * the page's path and query, as a Chrome match pattern's path is.
+   */
+  pathExceptions?: {
+    generichide: Record<string, string[]>;
+    elemhide: Record<string, string[]>;
+    specifichide: Record<string, string[]>;
+  };
 }
 
 /** A scriptlet invocation targeted at some domains. */

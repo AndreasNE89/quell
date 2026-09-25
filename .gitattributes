@@ -13,3 +13,10 @@ filters/easyprivacy.txt     linguist-generated=true
 filters/easylist-cookie.txt linguist-generated=true
 filters/ubo-filters.txt     linguist-generated=true
 filters/ubo-badware.txt     linguist-generated=true
+
+# Redirect stand-ins that DNR serves byte for byte (regenerate with scripts/gen-redirect-media.mjs).
+# Git already detects these as binary; this keeps autocrlf and diff away from them regardless.
+src/redirects/*.gif binary
+src/redirects/*.png binary
+src/redirects/*.mp3 binary
+src/redirects/*.mp4 binary

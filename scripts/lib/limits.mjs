@@ -37,6 +37,11 @@ export const DNR = {
 // priorities tie does it fall back to action order (allow > block > redirect). We use
 // disjoint bands so intent is unambiguous regardless of action tiebreak rules.
 export const PRIORITY = {
+  // `$removeparam` query strips sit BELOW block, with their `@@…$removeparam` exceptions
+  // just above them. DNR has no "allow only the transform" action, so an exception is a
+  // plain allow — placed here it cancels the strip and can never out-rank a block.
+  REMOVEPARAM: 500,
+  REMOVEPARAM_ALLOW: 600,
   BLOCK: 1000,
   // Redirects must outrank plain block: a broad domain block and a specific
   // `$redirect` to our neutered stub can both match a script URL, and DNR's
@@ -51,6 +56,11 @@ export const PRIORITY = {
   IMPORTANT_REDIRECT: 3500,
   IMPORTANT_ALLOW: 4000, // @@ ...$important beats important blocks/redirects
 };
+
+// uBO's redirect priority suffix (`redirect=noopjs:10`) ranks redirects that match the same
+// request. It is added to REDIRECT / IMPORTANT_REDIRECT, clamped so a redirect never leaves
+// its band: always above the block it replaces, always below the allow that cancels it.
+export const REDIRECT_PRIORITY_MAX_OFFSET = 499;
 
 // Reserve dynamic-rule ID ranges so runtime subsystems never collide.
 export const DYNAMIC_ID_RANGES = {

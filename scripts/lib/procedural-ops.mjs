@@ -37,3 +37,27 @@ const PROCEDURAL_BODY_RE = new RegExp(
 export function isProceduralCosmeticBody(body) {
   return typeof body === 'string' && PROCEDURAL_BODY_RE.test(body);
 }
+
+/**
+ * Rewrite ABP extended-selector names to the ones the runtime evaluates, as uBO does when it
+ * reads an ABP list.
+ *
+ * - `:-abp-has()` is `:has()`. The runtime has no `-abp-has` operator, so without this 149 of
+ *   EasyList China's 166 procedural rules matched nothing.
+ * - `:-abp-contains()` is `:has-text()`.
+ * - `:-abp-properties()` matches elements by the declarations of the *stylesheet rules* that
+ *   style them. `:matches-css()` tests computed style instead, which is not the same test
+ *   (`:-abp-properties(base64)` has no computed-style equivalent), and uBO does not implement
+ *   it either. Such rules, and any other `:-abp-` operator, are reported as unsupported.
+ *
+ * @param {string} body
+ * @returns {{ selector: string, unsupported: string | null }}
+ */
+export function normalizeAbpSelector(body) {
+  if (typeof body !== 'string' || !body.includes(':-abp-')) {
+    return { selector: body, unsupported: null };
+  }
+  const selector = body.replace(/:-abp-has\(/g, ':has(').replace(/:-abp-contains\(/g, ':has-text(');
+  const left = /:(-abp-[a-z-]+)/.exec(selector);
+  return { selector, unsupported: left ? left[1] : null };
+}

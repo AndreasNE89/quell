@@ -360,6 +360,15 @@
   "options_settings_imported": {
     "message": "Settings imported."
   },
+  "options_site_rule_invalid": {
+    "message": "“$HOST$” cannot be used for a site rule. Enter a site name such as example.com, or a full IP address such as 192.168.1.1.",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "10.0.0"
+      }
+    }
+  },
   "options_site_rules": {
     "message": "Site rules"
   },

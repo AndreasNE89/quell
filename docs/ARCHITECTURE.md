@@ -30,8 +30,10 @@ On wake / settings change it:
 
 1. `updateEnabledRulesets` for each list in `meta.json`
 2. Rebuilds dynamic allowlist (`allowAllRequests`, ids ≥ `ALLOWLIST_ID_START`)
-3. Registers generic cosmetic CSS via `chrome.scripting` (excludes allowlisted hosts)
+3. Registers generic cosmetic CSS and the YouTube MAIN hooks via `chrome.scripting` (excludes allowlisted hosts and page-scoped `$generichide` paths; YouTube top frames and embeds are separate registrations)
 4. Handles `Message` RPC from content / popup / options
+
+The allowlist and breakage fixes belong to the tab's top-level page, as in uBO: subframe requests for cosmetics, scriptlets and YouTube options are decided by `sender.tab.url` (`policyHost`), while rules still match the frame's own host. Registered `excludeMatches` are tested against each frame's own URL, so the generic sheet cannot follow the top page.
 
 ### Network blocking
 
@@ -62,7 +64,7 @@ All cross-context messages live in `src/shared/types.ts` as a discriminated unio
 
 See `scripts/lib/limits.mjs` and `src/shared/constants.ts`.
 
-- Compile-time priorities: block 1000 → redirect 1500 → allow 2000 → important 3000/4000
+- Compile-time priorities: removeparam 500 → removeparam exception 600 → block 1000 → redirect 1500 (±499 for uBO `:N`) → allow 2000 → important 3000/3500/4000
 - Runtime allowlist priority: `1_000_000`
 - Dynamic id ranges: allowlist `1_000_000+`, custom reserved `2_000_000+`
 

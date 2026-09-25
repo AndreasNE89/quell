@@ -16,6 +16,8 @@ import {
   entityDomainKeys,
   normalizeHostname,
   isValidMatchPatternHost,
+  pathExceptionMatches,
+  pathExceptionMatchPatterns,
 } from '../shared/hostname.js';
 
 export interface CosmeticMatch {
@@ -112,26 +114,70 @@ export function mergeNetworkExceptions(
   return { generichide, elemhide, specifichide };
 }
 
+/** Union of the enabled lists' page-scoped (`host/path-glob`) exceptions. */
+export function mergePathExceptions(
+  data: CosmeticData,
+  enabledListIds: string[],
+): { generichide: string[]; elemhide: string[]; specifichide: string[] } {
+  const out = { generichide: [] as string[], elemhide: [] as string[], specifichide: [] as string[] };
+  const src = data.pathExceptions;
+  if (!src) return out;
+  for (const id of enabledListIds) {
+    out.generichide.push(...(src.generichide[id] ?? []));
+    out.elemhide.push(...(src.elemhide[id] ?? []));
+    out.specifichide.push(...(src.specifichide[id] ?? []));
+  }
+  return out;
+}
+
+/** Path and query of `pageUrl` when it is a page on `hostname`; null otherwise. */
+function pagePathOn(hostname: string, pageUrl: string | undefined): string | null {
+  if (!pageUrl) return null;
+  try {
+    const u = new URL(pageUrl);
+    if (normalizeHostname(u.hostname) !== normalizeHostname(hostname)) return null;
+    return u.pathname + u.search;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * `pageUrl` is the frame's own address. Without it, page-scoped exceptions (EasyList's
+ * search-results `generichide`) cannot apply and only whole-host ones do.
+ */
 export function matchCosmetic(
   hostname: string,
   data: CosmeticData,
   enabledListIds: string[],
+  pageUrl?: string,
 ): CosmeticMatch {
   const merged = mergeCosmeticLists(data, enabledListIds);
   const suffixes = domainSuffixes(hostname);
   const netEx = mergeNetworkExceptions(data, enabledListIds);
+  const path = pagePathOn(hostname, pageUrl);
+  const pathEx = mergePathExceptions(data, enabledListIds);
+  const onThisPage = (entries: string[]): string[] =>
+    path === null ? [] : entries.filter((e) => pathExceptionMatches(e, hostname, path));
+  const genericPaths = [...onThisPage(pathEx.generichide), ...onThisPage(pathEx.elemhide)];
 
-  const disableGeneric = matchesExceptionHost(hostname, netEx.generichide);
-  const disableAll = matchesExceptionHost(hostname, netEx.elemhide);
-  const disableSpecific = matchesExceptionHost(hostname, netEx.specifichide);
+  const disableGeneric =
+    matchesExceptionHost(hostname, netEx.generichide) || genericPaths.length > 0;
+  const disableAll =
+    matchesExceptionHost(hostname, netEx.elemhide) || onThisPage(pathEx.elemhide).length > 0;
+  const disableSpecific =
+    matchesExceptionHost(hostname, netEx.specifichide) ||
+    onThisPage(pathEx.specifichide).length > 0;
 
   // The registered generic stylesheet is excluded (syncRegisteredScripts) for hosts matching
-  // a *concrete* (match-patternable) generichide/elemhide entry, so those need no per-page
-  // revert. Only entity-domain (example.*) exceptions — which can't be a match pattern —
-  // still receive the sheet and require the content-script revert below.
+  // a *concrete* (match-patternable) generichide/elemhide entry, and for the pages a concrete
+  // page-scoped entry covers, so those need no per-page revert. Only entity-domain
+  // (example.*) exceptions — which can't be a match pattern — still receive the sheet and
+  // require the content-script revert below.
   const genericExcludedAtRegistration =
     matchesExceptionHost(hostname, concreteExceptionHosts(netEx.generichide)) ||
-    matchesExceptionHost(hostname, concreteExceptionHosts(netEx.elemhide));
+    matchesExceptionHost(hostname, concreteExceptionHosts(netEx.elemhide)) ||
+    genericPaths.some((e) => pathExceptionMatchPatterns(e).length > 0);
 
   if (disableAll) {
     return {

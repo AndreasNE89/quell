@@ -18,7 +18,7 @@ before(async () => {
   await build({
     stdin: {
       contents: `
-        export { domainSuffixes, hostMatchesDomain, domainSpecMatches, normalizeHostname, isAllowlistedHost, isValidMatchPatternHost, isSafeAllowlistHost, isPublicSuffixHost, isMultiTenantPublicSuffix, allowlistMatchPatterns } from './src/shared/hostname.js';
+        export { domainSuffixes, hostMatchesDomain, domainSpecMatches, normalizeHostname, isAllowlistedHost, isValidMatchPatternHost, isSafeAllowlistHost, isPublicSuffixHost, isMultiTenantPublicSuffix, allowlistMatchPatterns, pathExceptionMatchPatterns, pathExceptionMatches } from './src/shared/hostname.js';
         export { matchCosmetic, matchScriptlets, mergeCosmeticLists, mergeNetworkExceptions } from './src/engine/cosmetic-match.js';
         export { parseProcedural, trailingSelectorMode, proceduralMutationObserverInit, PROCEDURAL_OP_NAMES } from './src/engine/procedural.js';
       `,
@@ -225,6 +225,98 @@ test('should apply trailing-dot generichide entity keys to matching sites only',
   assert.equal(mod.matchCosmetic('asd.homes', data, ['seed']).disableGeneric, true);
   assert.equal(mod.matchCosmetic('evil.asd', data, ['seed']).disableGeneric, false);
   assert.equal(mod.matchCosmetic('example.com', data, ['seed']).disableGeneric, false);
+});
+
+test('page-scoped generichide switches generic hiding off on that page only', () => {
+  // EasyList exempts the search results of Google, Bing, DuckDuckGo and Yandex from generic
+  // hiding (`@@||www.google.*/search?$generichide`). Dropping the path left generic hiding on
+  // those pages; keying by host alone switched it off across google.* (News, Maps, …).
+  const data = {
+    byList: {
+      seed: {
+        hideGeneric: ['.ad-slot'],
+        unhideGeneric: [],
+        hideSpecific: {},
+        unhideSpecific: {},
+        procedural: [],
+      },
+    },
+    networkExceptions: { generichide: {}, elemhide: {}, specifichide: {} },
+    pathExceptions: {
+      generichide: { seed: ['google.*/search?*', 'bing.com/search?*', 'duckduckgo.com/?q=*'] },
+      elemhide: {},
+      specifichide: {},
+    },
+  };
+  const at = (url) => mod.matchCosmetic(new URL(url).hostname, data, ['seed'], url);
+
+  // Entity host: no match pattern exists, so the page gets the per-page revert.
+  const serp = at('https://www.google.co.uk/search?q=shoes');
+  assert.equal(serp.disableGeneric, true);
+  assert.ok(serp.unhide.includes('.ad-slot'));
+  for (const url of ['https://news.google.com/topics/x', 'https://www.google.com/maps?q=x']) {
+    const m = at(url);
+    assert.equal(m.disableGeneric, false, url);
+    assert.ok(!m.unhide.includes('.ad-slot'), url);
+  }
+
+  // Concrete host: the registration already excludes the page, so no revert travels.
+  const bing = at('https://www.bing.com/search?q=shoes');
+  assert.equal(bing.disableGeneric, true);
+  assert.ok(!bing.unhide.includes('.ad-slot'));
+  assert.equal(at('https://www.bing.com/news').disableGeneric, false);
+  assert.equal(at('https://duckduckgo.com/?q=shoes').disableGeneric, true);
+  assert.equal(at('https://duckduckgo.com/about').disableGeneric, false);
+
+  // Without the page address only whole-host exceptions can apply.
+  assert.equal(mod.matchCosmetic('www.google.com', data, ['seed']).disableGeneric, false);
+  // A disabled list's exceptions do not apply.
+  assert.equal(mod.matchCosmetic('www.bing.com', data, [], 'https://www.bing.com/search?q=x').disableGeneric, false);
+});
+
+test('page-scoped elemhide and specifichide follow the page too', () => {
+  const data = {
+    byList: {
+      seed: {
+        hideGeneric: ['.g'],
+        unhideGeneric: [],
+        hideSpecific: { 'example.com': ['.specific'] },
+        unhideSpecific: {},
+        procedural: [],
+      },
+    },
+    networkExceptions: { generichide: {}, elemhide: {}, specifichide: {} },
+    pathExceptions: {
+      generichide: {},
+      elemhide: { seed: ['example.com/embed/*'] },
+      specifichide: { seed: ['example.com/share.php*'] },
+    },
+  };
+  const embed = mod.matchCosmetic('example.com', data, ['seed'], 'https://example.com/embed/1');
+  assert.equal(embed.disableSpecific, true);
+  assert.deepEqual(embed.hide, []);
+  const share = mod.matchCosmetic('example.com', data, ['seed'], 'https://example.com/share.php?u=1');
+  assert.equal(share.disableSpecific, true);
+  assert.equal(share.disableGeneric, false);
+  const home = mod.matchCosmetic('example.com', data, ['seed'], 'https://example.com/');
+  assert.deepEqual(home.hide, ['.specific']);
+});
+
+test('page-scoped exceptions become path-limited match patterns', () => {
+  assert.deepEqual(mod.pathExceptionMatchPatterns('bing.com/search?*'), [
+    '*://bing.com/search?*',
+    '*://*.bing.com/search?*',
+    '*://www.bing.com/search?*',
+  ]);
+  assert.deepEqual(mod.pathExceptionMatchPatterns('google.*/search?*'), [], 'no pattern for an entity');
+  assert.deepEqual(mod.pathExceptionMatchPatterns('bing.com'), [], 'a whole-host entry has no path');
+  // The glob is literal apart from `*`: `?` and `.` are not wildcards, as in a match pattern.
+  assert.equal(mod.pathExceptionMatches('yandex.com/search/?*', 'yandex.com', '/search/?text=a'), true);
+  assert.equal(mod.pathExceptionMatches('yandex.com/search/?*', 'yandex.com', '/search/x'), false);
+  assert.equal(mod.pathExceptionMatches('a.com/x.php*', 'a.com', '/xyphp'), false);
+  assert.equal(mod.pathExceptionMatches('a.com/end', 'a.com', '/end/more'), false);
+  assert.equal(mod.pathExceptionMatches('a.com/p/*_c-*', 'sub.a.com', '/p/1_c-2'), true);
+  assert.equal(mod.pathExceptionMatches('a.com/p*', 'b.com', '/p'), false);
 });
 
 test('matchScriptlets applies exceptions and dedupes', () => {

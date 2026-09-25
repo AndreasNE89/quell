@@ -21,7 +21,7 @@ import {
 } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseLine, hostsFromPattern } from './lib/parse-filter.mjs';
+import { parseLine, cosmeticExceptionScope, preprocessFilterText } from './lib/parse-filter.mjs';
 import {
   toDnrRule,
   ruleKey,
@@ -77,6 +77,22 @@ function emptyCosmeticBucket() {
   };
 }
 
+/**
+ * `!#include` target → its text, or null. uBO resolves includes against the including list's
+ * URL; update-lists does not fetch sub-lists, so only a plain file name already committed under
+ * filters/ is used. Nothing is downloaded here, and no path can leave filters/.
+ */
+function resolveListInclude(name) {
+  if (!/^[\w.-]+\.txt$/i.test(name)) return null;
+  const p = join(FILTERS_DIR, name);
+  return existsSync(p) ? readFileSync(p, 'utf8') : null;
+}
+
+/** A list's lines after `!#if` / `!#include` preprocessing (see preprocessFilterText). */
+function preprocessList(text) {
+  return preprocessFilterText(text, { resolveInclude: resolveListInclude });
+}
+
 /** Reject selectors that could break out of a CSS rule (e.g. `a{}body{display:none}`). */
 function isSafeSelector(sel) {
   if (!sel || typeof sel !== 'string') return false;
@@ -95,7 +111,8 @@ function compileList(list, text, ctx) {
   const stats = { network: 0, converted: 0, deduped: 0, regexUsed: 0, cosmetic: 0, scriptlet: 0 };
   const skips = ctx.skips;
   const cos = ctx.byList[list.id];
-  const lines = text.split('\n');
+  const { lines, stats: preprocessed } = preprocessList(text);
+  ctx.preprocessor[list.id] = preprocessed;
 
   let nextId = 1;
   for (const raw of lines) {
@@ -110,10 +127,8 @@ function compileList(list, text, ctx) {
     // network
     stats.network++;
     const out = toDnrRule(parsed);
-    if (out.cosmeticException) {
-      applyNetworkCosmeticException(out, parsed, ctx.networkCosmeticExceptions, list.id);
-      continue;
-    }
+    // $badfilter before cosmetic exceptions: `@@||x^$ehide,badfilter` must cancel the
+    // exception, never become one — and a cancelled `@@||x^$ehide` must not apply either.
     if (out.badfilter) {
       skips['badfilter'] = (skips['badfilter'] || 0) + 1;
       continue;
@@ -122,56 +137,91 @@ function compileList(list, text, ctx) {
       skips['badfilter-cancelled'] = (skips['badfilter-cancelled'] || 0) + 1;
       continue;
     }
+    if (out.cosmeticException) {
+      applyNetworkCosmeticException(out, parsed, ctx.networkCosmeticExceptions, list.id);
+      continue;
+    }
     if (out.skip) {
       skips[out.skip] = (skips[out.skip] || 0) + 1;
       continue;
     }
-    const rule = out.rule;
+    // One filter can need two DNR rules (a top-level-document part and a subresource part;
+    // see splitDocumentContext in to-dnr.mjs). A part that was dropped counts as a skip.
+    if (out.partialSkip) skips[out.partialSkip] = (skips[out.partialSkip] || 0) + 1;
 
-    // Dedup within this list first — so budgets are only spent on rules we emit.
-    const key = ruleKey(rule);
-    if (seen.has(key)) {
-      stats.deduped++;
-      continue;
-    }
-
-    // Per-list static-rule budget (cap in-loop so regex counting matches what ships).
-    if (dnrRules.length >= DNR.MAX_STATIC_RULES_PER_LIST) {
-      skips['static-budget'] = (skips['static-budget'] || 0) + 1;
-      continue;
-    }
-
-    // Global regex-rule budget (shared across all enabled rulesets).
-    if (rule.condition.regexFilter) {
-      if (ctx.regexCount >= DNR.MAX_NUMBER_OF_REGEX_RULES) {
-        skips['regex-budget'] = (skips['regex-budget'] || 0) + 1;
+    for (const rule of out.rules ?? [out.rule]) {
+      // Dedup within this list first — so budgets are only spent on rules we emit.
+      const key = ruleKey(rule);
+      if (seen.has(key)) {
+        stats.deduped++;
         continue;
       }
-      ctx.regexCount++;
-      stats.regexUsed++;
-    }
 
-    seen.add(key);
-    rule.id = nextId++;
-    dnrRules.push(rule);
-    stats.converted++;
+      // Per-list static-rule budget (cap in-loop so regex counting matches what ships).
+      if (dnrRules.length >= DNR.MAX_STATIC_RULES_PER_LIST) {
+        skips['static-budget'] = (skips['static-budget'] || 0) + 1;
+        continue;
+      }
+
+      // Global regex-rule budget (shared across all enabled rulesets).
+      if (rule.condition.regexFilter) {
+        if (ctx.regexCount >= DNR.MAX_NUMBER_OF_REGEX_RULES) {
+          skips['regex-budget'] = (skips['regex-budget'] || 0) + 1;
+          continue;
+        }
+        ctx.regexCount++;
+        stats.regexUsed++;
+      }
+
+      seen.add(key);
+      rule.id = nextId++;
+      dnrRules.push(rule);
+      stats.converted++;
+    }
   }
 
   return { dnrRules, stats };
 }
 
+/**
+ * `bag` is ctx.networkCosmeticExceptions; its `skips` is ctx.skips, so a dropped exception is
+ * counted in the coverage report without widening this function's call site.
+ */
 function applyNetworkCosmeticException(out, parsed, bag, listId) {
   if (!parsed.isException) return; // only @@…$generichide etc.
   const kind = out.cosmeticException;
+  const byList = bag[kind];
+  if (!byList) return;
+  const count = (reason) => {
+    if (bag.skips) bag.skips[reason] = (bag.skips[reason] || 0) + 1;
+  };
+  // Runtime keys these exceptions by page host, plus a path for the ones EasyList limits to a
+  // page (the Google, Bing, DuckDuckGo and Yandex results pages). A pattern it can't express
+  // (a regex, a `^` in the path, `192.168.*.1`, `://10.0.0.`) is dropped whole — including its
+  // $domain hosts, which would otherwise widen it to every page on those sites.
+  const scope = cosmeticExceptionScope(parsed.pattern, parsed.isRegex);
+  if (scope.skip) {
+    count(`cosmetic-exception-${scope.skip}`);
+    return;
+  }
+  if (scope.path !== null) {
+    // `domain=` on a page-scoped exception narrows it further; never widen it to those hosts.
+    const o = parsed.options || {};
+    if (o.initiatorDomains?.length || o.requestDomains?.length) {
+      count('cosmetic-exception-path-scoped');
+      return;
+    }
+    const set = (bag.pathScoped[kind][listId] ||= new Set());
+    for (const h of scope.hosts) set.add(`${h}${scope.path}`);
+    return;
+  }
   // Page hosts for cosmetic exceptions come from the URL pattern, $domain/$from,
   // and $to (destination) — e.g. @@||asd.$generichide,to=asd.homes|asd.ink.
   const hosts = [
-    ...hostsFromPattern(parsed.pattern, parsed.isRegex),
+    ...scope.hosts,
     ...(parsed.options?.initiatorDomains || []),
     ...(parsed.options?.requestDomains || []),
   ];
-  const byList = bag[kind];
-  if (!byList) return;
   const set = (byList[listId] ||= new Set());
   for (const h of hosts) if (h) set.add(h);
 }
@@ -223,7 +273,13 @@ function applyCosmetic(c, cos, stats, skips) {
     stats.scriptlet++;
     return;
   }
-  if (c.kind === 'ignored') return;
+  if (c.kind === 'ignored') {
+    if (c.unsupported) {
+      const reason = `cosmetic-unsupported:${c.unsupported}`;
+      skips[reason] = (skips[reason] || 0) + 1;
+    }
+    return;
+  }
 
   if (c.kind === 'procedural') {
     if (!c.domains.include.length) return; // procedural generics are too risky/slow
@@ -432,10 +488,13 @@ function main() {
   mkdirSync(RULESET_DIR, { recursive: true });
   mkdirSync(GENERIC_CSS_DIR, { recursive: true });
 
+  const skips = {};
   const ctx = {
     regexCount: 0,
-    skips: {},
+    skips,
     byList: {},
+    /** @type {Record<string, ReturnType<typeof preprocessFilterText>['stats']>} */
+    preprocessor: {},
     /** @type {Set<string>} identities cancelled by $badfilter across all lists */
     badfilters: new Set(),
     networkCosmeticExceptions: {
@@ -443,6 +502,10 @@ function main() {
       generichide: {},
       elemhide: {},
       specifichide: {},
+      // Per-list `host/path-glob` entries for exceptions limited to one page of a site.
+      pathScoped: { generichide: {}, elemhide: {}, specifichide: {} },
+      // Not serialized: where applyNetworkCosmeticException counts exceptions it drops.
+      skips,
     },
   };
 
@@ -460,10 +523,13 @@ function main() {
   // so a $badfilter in any shipped list cancels the matching identity everywhere.
   // Cosmetic @@$generichide / $elemhide / $specifichide are the opposite: they are
   // stored per list and merged only for enabled lists at runtime.
+  //
+  // The pre-scan reads the same preprocessed lines as compileList: a $badfilter inside an
+  // inactive `!#if` branch must not cancel a rule that ships.
   for (const list of registry.lists) {
     const file = join(FILTERS_DIR, list.file);
     if (!existsSync(file)) continue;
-    for (const raw of readFileSync(file, 'utf8').split('\n')) {
+    for (const raw of preprocessList(readFileSync(file, 'utf8')).lines) {
       const parsed = parseLine(raw);
       if (!parsed || parsed.type !== 'network' || !parsed.options?.badfilter) continue;
       ctx.badfilters.add(networkFilterIdentity(parsed));
@@ -545,6 +611,11 @@ function main() {
       elemhide: serializeExceptionBag(ctx.networkCosmeticExceptions.elemhide),
       specifichide: serializeExceptionBag(ctx.networkCosmeticExceptions.specifichide),
     },
+    pathExceptions: {
+      generichide: serializeExceptionBag(ctx.networkCosmeticExceptions.pathScoped.generichide),
+      elemhide: serializeExceptionBag(ctx.networkCosmeticExceptions.pathScoped.elemhide),
+      specifichide: serializeExceptionBag(ctx.networkCosmeticExceptions.pathScoped.specifichide),
+    },
   };
   writeFileSync(join(OUT_DIR, 'cosmetic.json'), JSON.stringify(cosmeticOut));
   writeFileSync(
@@ -586,10 +657,37 @@ function main() {
   console.log(
     `  generichide hosts:  ${exceptionHostCount(ctx.networkCosmeticExceptions.generichide)}, elemhide: ${exceptionHostCount(ctx.networkCosmeticExceptions.elemhide)}, specifichide: ${exceptionHostCount(ctx.networkCosmeticExceptions.specifichide)}`,
   );
+  console.log(
+    `  page-scoped:        generichide ${exceptionHostCount(ctx.networkCosmeticExceptions.pathScoped.generichide)}, elemhide: ${exceptionHostCount(ctx.networkCosmeticExceptions.pathScoped.elemhide)}, specifichide: ${exceptionHostCount(ctx.networkCosmeticExceptions.pathScoped.specifichide)}`,
+  );
   const skipEntries = Object.entries(ctx.skips).sort((a, b) => b[1] - a[1]);
   if (skipEntries.length) {
     console.log('  skipped network filters (not representable in DNR):');
     for (const [reason, n] of skipEntries) console.log(`     ${String(n).padStart(6)}  ${reason}`);
+  }
+  reportPreprocessor(ctx.preprocessor);
+}
+
+/** Rules left out by `!#if` branches that don't apply to Chromium MV3, and unresolved includes. */
+function reportPreprocessor(byList) {
+  const rows = Object.entries(byList).filter(
+    ([, s]) => s.droppedRules || s.unknownConditions || s.includesUnresolved.length || s.includesResolved.length,
+  );
+  if (!rows.length) return;
+  console.log('  preprocessor (!#if / !#include):');
+  for (const [id, s] of rows) {
+    const byCond = Object.entries(s.droppedByCondition)
+      .sort((a, b) => b[1] - a[1])
+      .map(([cond, n]) => `${cond} ${n}`)
+      .join(', ');
+    console.log(`     ${String(s.droppedRules).padStart(6)}  ${id}: rules in inactive branches${byCond ? ` (${byCond})` : ''}`);
+    if (s.unknownConditions) {
+      console.log(`     ${String(s.unknownConditions).padStart(6)}  ${id}: unknown !#if conditions (both branches dropped)`);
+    }
+    for (const name of s.includesUnresolved) {
+      console.log(`     ${'1'.padStart(6)}  ${id}: include-unresolved ${name} (not in filters/)`);
+    }
+    for (const name of s.includesResolved) console.log(`            ${id}: included ${name}`);
   }
 }
 
