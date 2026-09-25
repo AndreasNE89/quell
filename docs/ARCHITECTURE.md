@@ -10,7 +10,9 @@ scripts/compile-filters.mjs
         │
         ├─► src/generated/rulesets/<id>.json   (DNR static rules)
         ├─► src/generated/cosmetic.json
-        ├─► src/generated/scriptlets.json
+        ├─► src/generated/scriptlets.json          (all scriptlet rules; tests and tooling)
+        ├─► src/generated/scriptlets/*.js          (the same rules as MAIN-world files, by host)
+        ├─► src/generated/scriptlet-shards.json    (host index the SW registers them from)
         ├─► src/generated/generic-cosmetic.css
         └─► src/generated/meta.json
         │
@@ -30,10 +32,10 @@ On wake / settings change it:
 
 1. `updateEnabledRulesets` for each list in `meta.json`
 2. Rebuilds dynamic allowlist (`allowAllRequests`, ids ≥ `ALLOWLIST_ID_START`)
-3. Registers generic cosmetic CSS and the YouTube MAIN hooks via `chrome.scripting` (excludes allowlisted hosts and page-scoped `$generichide` paths; YouTube top frames and embeds are separate registrations)
+3. Registers generic cosmetic CSS, the YouTube MAIN hooks and the list scriptlets via `chrome.scripting` (excludes allowlisted hosts and page-scoped `$generichide` paths; YouTube top frames and embeds are separate registrations; see [Scriptlets](#scriptlets))
 4. Handles `Message` RPC from content / popup / options
 
-The allowlist and breakage fixes belong to the tab's top-level page, as in uBO: subframe requests for cosmetics, scriptlets and YouTube options are decided by `sender.tab.url` (`policyHost`), while rules still match the frame's own host. Registered `excludeMatches` are tested against each frame's own URL, so the generic sheet cannot follow the top page.
+The allowlist and breakage fixes belong to the tab's top-level page, as in uBO: subframe requests for cosmetics, scriptlets and YouTube options are decided by `sender.tab.url` (`policyHost`), while rules still match the frame's own host. Registered `excludeMatches` are tested against each frame's own URL, so the generic sheet cannot follow the top page; the scriptlet runtime works around it by acting only where the frame's host is the top page's.
 
 ### Network blocking
 
@@ -49,7 +51,14 @@ Chrome evaluates static DNR rulesets. StampStack does **not** reimplement a full
 
 ### Scriptlets
 
-`scriptlets.js` runs in the **MAIN** world at `document_start`. Only domain-scoped scriptlet rules from the compiler are applied.
+List scriptlets (`##+js(...)`) only work if they run before the page's own scripts, so they are registered content scripts, the uBO Lite approach. Only domain-scoped rules ship; the compiler drops global ones.
+
+1. **Build.** `compile-filters` (`scripts/lib/scriptlet-shards.mjs`) writes each list's rules as MAIN-world data files under `generated/scriptlets/`, keyed by host. Hosts go to one of 16 buckets by site (the smallest suffix that is not a public suffix), so everything a page can match sits in one bucket file per list. Entity keys (`example.*`) and public-suffix keys, which no match pattern can name, go to one broad file per list. File names carry a content hash.
+2. **Registration.** The SW registers one script per bucket (`quell-sl-<n>`) plus `quell-sl-broad`: `world: 'MAIN'`, `runAt: 'document_start'`, `allFrames`, `matchOriginAsFallback` (so a page's about:blank / srcdoc frames get them), persisted across sessions. `js` is the enabled lists' files for that bucket, then the runtime. `matches` is one `*://*.host/*` per host (`*://*/*` for the broad script, whose file checks the host before parsing anything). `excludeMatches` carries the allowlist and `injection` site fixes; Pause unregisters them. Registrations are compared by file name, and what the last sync wrote is kept in `storage.session`, so a wake where nothing changed neither writes nor reads the ~22k patterns back (the first wake after a browser start or an update asks Chrome once).
+3. **Runtime.** `src/content/scriptlets-runtime.ts` takes the data the files handed over, picks the host's rules exactly as `matchScriptlets` does (suffixes, entities, `~domain` exclusions, `#@#+js` exceptions from any enabled list, each name+args once) and runs them. The hand-off property is deleted before any page script runs, and nothing else is left on `window`. The broad script ends with a copy, `scriptlets-runtime-broad.js`: Chrome injects a given file only once per document, so a shared runtime would never run after the second registration's data on a page that both match.
+4. **Frames the registrations cannot serve.** `excludeMatches` sees the frame's own URL, while the switches belong to the top page, so the runtime acts only in the top frame and in frames on the top page's host (`src/shared/frame-scope.ts`). In every other frame the content script sends `scriptlets:get`; the SW decides against the top page (`policyHost`) and, if the host has rules, injects the same data files, a fallback marker and the runtime with one `executeScript` targeted at `documentIds: [sender.documentId]`. It also fills in for a registered frame whose registration is missing. This path runs after the frame's first scripts.
+
+Measured in Chromium 131 with `worldfreeware.com##+js(aopr, require)`: the first inline `<head>` script is aborted in 3 of 3 loads, also with a cold SW and 50 iframes (before: the rule landed 25–38 ms after navigation start, after `load`, and 300–350 ms with the cold SW and iframes). The cost: in the store build the first script of a page with no rules starts about 1.5 ms later, nearly all of it Chrome testing the ~22k registration patterns against each frame's URL (the time grows with the pattern count, not the number of registrations).
 
 ### UI
 

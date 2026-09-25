@@ -3,7 +3,9 @@
 // Inputs:  filters/lists.json  (list registry) + the referenced .txt files
 // Outputs: src/generated/rulesets/<id>.json   one DNR ruleset per list
 //          src/generated/cosmetic.json         per-list element-hiding + network cosmetic exceptions
-//          src/generated/scriptlets.json        per-list scriptlet-injection data
+//          src/generated/scriptlets.json        per-list scriptlet rules (tests and tooling)
+//          src/generated/scriptlets/*.js        the same rules as MAIN-world files keyed by host
+//          src/generated/scriptlet-shards.json  host index the service worker registers them from
 //          src/generated/generic-cosmetic/<id>.css
 //          src/generated/meta.json              list metadata for runtime + manifest
 //
@@ -35,6 +37,8 @@ import { DNR } from './lib/limits.mjs';
 import { scriptletLooksObfuscated, scriptletUnsupported } from './lib/scriptlet-safe.mjs';
 import { trackerDomainMap } from './lib/trackers.mjs';
 import { readLock } from './lib/list-lock.mjs';
+import { buildScriptletShards, SHARD_DIR } from './lib/scriptlet-shards.mjs';
+import { build as esbuild } from 'esbuild';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -42,6 +46,7 @@ const FILTERS_DIR = join(ROOT, 'filters');
 const OUT_DIR = join(ROOT, 'src', 'generated');
 const RULESET_DIR = join(OUT_DIR, 'rulesets');
 const GENERIC_CSS_DIR = join(OUT_DIR, 'generic-cosmetic');
+const SHARD_OUT_DIR = join(OUT_DIR, SHARD_DIR.slice('generated/'.length));
 
 function loadRegistry() {
   const p = join(FILTERS_DIR, 'lists.json');
@@ -475,7 +480,42 @@ function listsRefreshedAt() {
   return newest ? new Date(Math.floor(newest / 1000) * 1000).toISOString() : null;
 }
 
-function main() {
+/**
+ * src/shared/hostname.ts, bundled on the fly. The scriptlet shards must key hosts exactly the way
+ * the runtime matches them, and a hand-kept .mjs copy would drift.
+ */
+async function loadHostnameHelpers() {
+  const out = await esbuild({
+    entryPoints: [join(ROOT, 'src', 'shared', 'hostname.ts')],
+    bundle: true,
+    write: false,
+    format: 'esm',
+    platform: 'neutral',
+    logLevel: 'silent',
+  });
+  const code = out.outputFiles[0].text;
+  return import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
+}
+
+/**
+ * List scriptlets as MAIN-world files keyed by host (scripts/lib/scriptlet-shards.mjs), plus
+ * the index the service worker registers them from and the hand-off key the runtime reads.
+ */
+function writeScriptletShards(byList, listOrder, host) {
+  const { index, runtimeKey, files, stats } = buildScriptletShards(byList, listOrder, host);
+  if (existsSync(SHARD_OUT_DIR)) rmSync(SHARD_OUT_DIR, { recursive: true });
+  mkdirSync(SHARD_OUT_DIR, { recursive: true });
+  for (const f of files) writeFileSync(join(OUT_DIR, f.path.slice('generated/'.length)), f.content);
+  writeFileSync(join(OUT_DIR, 'scriptlet-shards.json'), JSON.stringify(index));
+  writeFileSync(join(OUT_DIR, 'scriptlet-runtime.json'), JSON.stringify(runtimeKey));
+  const kb = Math.round(files.reduce((n, f) => n + f.content.length, 0) / 1024);
+  console.log(
+    `  scriptlet shards:   ${files.length} files, ${kb} KB, ${stats.rules} rules ` +
+      `(host keys ${stats.concreteKeys}, broad ${stats.broadKeys}, unmatchable dropped ${stats.deadKeys})`,
+  );
+}
+
+async function main() {
   const registry = loadRegistry();
 
   // Fresh output dirs.
@@ -622,7 +662,13 @@ function main() {
     join(OUT_DIR, 'trackers.json'),
     JSON.stringify(buildTrackerIndex(emittedRulesets)),
   );
+  // The whole rule set, for tests and tooling. What ships is the per-host shards below.
   writeFileSync(join(OUT_DIR, 'scriptlets.json'), JSON.stringify({ byList: scriptletsByList }));
+  writeScriptletShards(
+    scriptletsByList,
+    metaLists.map((l) => l.id),
+    await loadHostnameHelpers(),
+  );
 
   // Legacy combined sheet kept for older loaders / docs; runtime prefers per-list files.
   let combinedCss = '/* StampStack combined generic element-hiding — generated, do not edit. */\n';
@@ -691,4 +737,4 @@ function reportPreprocessor(byList) {
   }
 }
 
-main();
+await main();

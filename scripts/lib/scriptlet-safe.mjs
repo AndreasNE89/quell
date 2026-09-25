@@ -2,7 +2,7 @@
  * CWS Code Readability (Red Titanium) rejects packages that contain `atob("…")`
  * / long base64 blobs. uBO scriptlet args sometimes embed site JS that does
  * exactly that (e.g. zefoy.com `rpnt` payloads). Drop those at compile time so
- * they never land in `background.js` via `scriptlets.json`.
+ * they never land in the package (the `generated/scriptlets/` data files).
  */
 
 const LONG_BASE64 = /[A-Za-z0-9+/]{80,}={0,2}/;
@@ -27,7 +27,7 @@ export function scriptletLooksObfuscated(scriptlet) {
  *
  * Filter lists reference far more scriptlets than we implement. Shipping a rule whose name has
  * no handler costs package size and runtime work for nothing: `runScriptlet` looks the name up,
- * finds no function, and returns — but the rule was still bundled into `scriptlets.json` and
+ * finds no function, and returns — but the rule was still bundled into the scriptlet data and
  * still caused the domain to receive a MAIN-world injection. Dropping them at compile time is
  * purely a saving; behavior is identical.
  *

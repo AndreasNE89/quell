@@ -1,8 +1,9 @@
 // StampStack content script (ISOLATED world, document_start).
 //
 // Generic element-hiding arrives as a browser-injected stylesheet (registered by the
-// service worker, allowlist-aware). This script handles site-specific hide selectors,
-// procedural cosmetic filters, and asks the SW to inject list-scoped MAIN scriptlets.
+// service worker, allowlist-aware). This script handles site-specific hide selectors and
+// procedural cosmetic filters. List scriptlets are registered MAIN-world content scripts; this
+// script only reports the frame to the SW, which fills in the frames those cannot serve.
 
 import type {
   Message,
@@ -23,6 +24,7 @@ import {
 import { refreshSponsorBlock, startSponsorBlock } from './sponsorblock.js';
 import type { SponsorSegment } from '../shared/sponsorblock.js';
 import { startDarkModeSmart } from './dark-mode-smart.js';
+import { frameScope } from '../shared/frame-scope.js';
 
 if (location.protocol === 'http:' || location.protocol === 'https:' || location.protocol === 'about:') {
   void start();
@@ -107,17 +109,19 @@ async function start(): Promise<void> {
   // flight, and a listener registered later would make the report read "reload the page".
   startPageReport();
 
-  // Kick scriptlets immediately — do not wait on cosmetics. YouTube/player
-  // pages need MAIN-world hooks as early as the SW round-trip allows. Use the same
-  // SW-wake retry as cosmetics: a bare send() that races SW cold-start would otherwise
-  // silently drop scriptlets (anti-adblock defusers) for that page load with no retry.
-  const scriptletsP = sendWithRetry<ScriptletsResponse>({
-    type: 'scriptlets:get',
-    hostname: host,
-  }).then((s) => {
-    if (!s || s.allowlisted || !s.scriptlets.length) return;
-    return send({ type: 'scriptlets:inject', scriptlets: s.scriptlets });
-  });
+  // List scriptlets already ran at document_start where the registered scripts serve this
+  // frame. The SW injects them here when they cannot: a frame on another host than the top
+  // page, which follows that page's switch, or a registration that is missing. Sent before
+  // waiting on cosmetics, with the same SW-wake retry, since this path is late by nature.
+  const scope = frameScope();
+  const scriptletsP = scope.host
+    ? sendWithRetry<ScriptletsResponse>({
+        type: 'scriptlets:get',
+        hostname: scope.host,
+        topHost: scope.top,
+        registered: scope.registered,
+      })
+    : Promise.resolve(null);
 
   const ytOptsP = refreshYoutubeOpts(host);
 

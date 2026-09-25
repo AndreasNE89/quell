@@ -6,6 +6,8 @@
 // work unchanged. Each implementation is defensive: a throwing scriptlet must never
 // break the page beyond what the filter author intended.
 
+import { frameHostOf } from '../shared/frame-scope.js';
+
 type Scriptlet = (args: string[]) => void;
 
 const ALIASES: Record<string, string> = {
@@ -502,7 +504,7 @@ function ownScriptUrl(): string {
  * with tabs behind a `stackDepth:N` header. A raw V8 stack never contains `inlineScript`, and its
  * newlines stop `.*` in the `^(?!.*\.js)` style needles at the first line.
  *
- * This library's own frames are dropped: they carry the extension's `scriptlets.js` URL, which
+ * This library's own frames are dropped: they carry the extension's `scriptlets-runtime.js` URL, which
  * uBO's page-injected scriptlets never show, and would satisfy every `.js` needle. N still counts
  * the frames uBO's own trap contributes (`ownFrames`), so `stackDepth:` needles line up.
  */
@@ -686,14 +688,19 @@ function periodic(fn: () => void): void {
       run();
     });
   };
+  // `document`, not documentElement: the registered runtime runs at document_start, before the
+  // parser has created <html>, and an observer that fails to attach would leave only the
+  // DOMContentLoaded pass. Every behavior keeps observing, as all rules did when injection
+  // came late (uBO stops after one pass unless `stay`); cutting that back would lose
+  // elements that 2.2.x removed.
   try {
-    new MutationObserver(schedule).observe(document.documentElement, {
+    new MutationObserver(schedule).observe(document, {
       childList: true,
       subtree: true,
       attributes: true,
     });
   } catch {
-    /* documentElement not ready */
+    /* not a Node: nothing to observe */
   }
 }
 
@@ -1952,10 +1959,25 @@ const SCRIPTLETS: Record<string, Scriptlet> = {
   'popads-dummy': () => popadsDummy(),
 };
 
-/** Resolve an alias and run the scriptlet. Unknown names are ignored. */
-export function runScriptlet(name: string, args: string[]): void {
+/** This frame's host as the runtime matches rules against it (see frame-scope.ts). */
+function currentFrameHost(): string {
+  if (typeof location === 'undefined') return '';
+  let origin: string | null = null;
+  try {
+    origin = self.origin;
+  } catch {
+    /* no origin: treat as opaque */
+  }
+  return frameHostOf(location.hostname ?? '', origin);
+}
+
+/**
+ * Resolve an alias and run the scriptlet. Unknown names are ignored. `host` is the host the
+ * rule was matched against; an about:blank or srcdoc frame has no hostname of its own and
+ * carries its creator's, so the YouTube guard below must see that one too.
+ */
+export function runScriptlet(name: string, args: string[], host: string = currentFrameHost()): void {
   const canonical = ALIASES[name] || ALIASES[name.replace(/\.js$/, '')];
-  const host = typeof location !== 'undefined' ? location.hostname : '';
   const onYoutube = /(^|\.)youtube\.com$|(^|\.)youtube-nocookie\.com$|(^|\.)youtu\.be$|(^|\.)youtubekids\.com$/i.test(
     host,
   );

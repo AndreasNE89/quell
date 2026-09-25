@@ -98,14 +98,19 @@ async function bootServiceWorker({
   license,
   dynamicRules: seedRules = [],
   registered: seedScripts = [],
+  session: seedSession = {},
 }) {
   const store = {};
+  const sessionStore = structuredClone(seedSession);
+  let fullReads = 0;
   if (settings) store['stampstack.settings'] = settings;
   if (license) store['stampstack.license'] = license;
   let dynamicRules = seedRules.map((r) => structuredClone(r));
   let registered = seedScripts.map((r) => structuredClone(r));
   let enabledRulesets = [];
   let listener = null;
+  const executed = [];
+  const registerLog = [];
   let rejectNext = new Set();
   // Every fake chrome call bumps this, so settle() can tell when the worker has gone quiet.
   let activity = 0;
@@ -140,6 +145,22 @@ async function bootServiceWorker({
           for (const key of Array.isArray(k) ? k : [k]) delete store[key];
         },
       },
+      session: {
+        get: async (k) => {
+          activity++;
+          const out = {};
+          for (const key of Array.isArray(k) ? k : [k]) if (key in sessionStore) out[key] = structuredClone(sessionStore[key]);
+          return out;
+        },
+        set: async (o) => {
+          activity++;
+          Object.assign(sessionStore, structuredClone(o));
+        },
+        remove: async (k) => {
+          activity++;
+          for (const key of Array.isArray(k) ? k : [k]) delete sessionStore[key];
+        },
+      },
       onChanged: noopEvent(),
     },
     declarativeNetRequest: {
@@ -163,12 +184,14 @@ async function bootServiceWorker({
     scripting: {
       getRegisteredContentScripts: async ({ ids } = {}) => {
         activity++;
+        if (!ids) fullReads++;
         return registered
           .filter((r) => !ids || ids.includes(r.id))
           .map((r) => structuredClone(r));
       },
       registerContentScripts: async (s) => {
         activity++;
+        registerLog.push(...s.map((n) => n.id));
         rejectPayload(s);
         for (const n of s) {
           if (registered.some((r) => r.id === n.id)) {
@@ -198,7 +221,11 @@ async function bootServiceWorker({
           registered[i] = { ...registered[i], ...structuredClone(n) };
         }
       },
-      executeScript: async () => [],
+      executeScript: async (details) => {
+        activity++;
+        executed.push(structuredClone(details));
+        return [];
+      },
     },
     tabs: {
       query: async () => [{ id: 1, url: `https://${host}/a/page` }],
@@ -255,6 +282,11 @@ async function bootServiceWorker({
     settings: () => store['stampstack.settings'],
     rules: () => dynamicRules,
     script: (id) => registered.find((r) => r.id === id),
+    scripts: () => registered,
+    executed: () => executed,
+    registerLog: () => registerLog,
+    session: () => sessionStore,
+    fullReads: () => fullReads,
     failNext: (ids) => (rejectNext = new Set(ids)),
   };
 }
@@ -633,6 +665,183 @@ test('the 0.1.0 global scriptlet registration is removed on wake', async () => {
   await sw.settle();
   assert.equal(sw.script('quell-scriptlets'), undefined);
   assert.ok(sw.script('quell-generic-cosmetic'));
+});
+
+// ---------------------------------------------------------------------------
+// List scriptlets (REVIEW_2026-09-24 B2, B24, B26)
+// ---------------------------------------------------------------------------
+
+const SHARDS = JSON.parse(readFileSync('src/generated/scriptlet-shards.json', 'utf8'));
+const shardScripts = (sw) => sw.scripts().filter((s) => s.id.startsWith('quell-sl-'));
+/** The registration that carries worldfreeware.com, whose `aopr, require` the review tested. */
+const worldfreeware = (sw) =>
+  shardScripts(sw).find((s) => s.matches.includes('*://*.worldfreeware.com/*'));
+
+test('list scriptlets are registered to run at document start, before the page (B2)', async () => {
+  // They used to be fetched by message and injected with executeScript once the page had
+  // already run its inline <head> scripts, so `worldfreeware.com##+js(aopr, require)` never
+  // aborted the script it was written for.
+  const sw = await bootServiceWorker({ host: HOST });
+  await sw.settle();
+  const shards = shardScripts(sw);
+  assert.ok(shards.length > 2, 'no scriptlet registrations');
+  for (const s of shards) {
+    assert.equal(s.world, 'MAIN', s.id);
+    assert.equal(s.runAt, 'document_start', s.id);
+    assert.equal(s.allFrames, true, s.id);
+    // about:blank / srcdoc frames a page creates for itself (friendly-iframe ads).
+    assert.equal(s.matchOriginAsFallback, true, s.id);
+    assert.equal(s.persistAcrossSessions, true, s.id);
+    assert.deepEqual(s.matches.filter((p) => !patternIsValid(p)), [], s.id);
+    assert.match(s.js.at(-1), /^scriptlets-runtime(-broad)?\.js$/, `${s.id} ends with the runtime`);
+  }
+  const hit = worldfreeware(sw);
+  assert.ok(hit, 'worldfreeware.com is not matched by any registration');
+  assert.ok(hit.js.some((f) => f.startsWith('generated/scriptlets/ubo-filters.')));
+
+  // They follow the switches: the site's own switch, Pause, and the list toggle.
+  await sw.send({ type: 'popup:toggleSite', hostname: 'worldfreeware.com', enabled: false });
+  await sw.settle();
+  for (const s of shardScripts(sw)) {
+    assert.ok(s.excludeMatches?.includes('*://*.worldfreeware.com/*'), `${s.id} still runs there`);
+  }
+  await sw.send({ type: 'lists:setEnabled', id: 'ubo-filters', enabled: false });
+  await sw.settle();
+  for (const s of shardScripts(sw)) {
+    assert.ok(!s.js.some((f) => f.includes('/ubo-filters.')), `${s.id} still carries a disabled list`);
+  }
+  await sw.send({ type: 'popup:setPaused', paused: true });
+  await sw.settle();
+  assert.deepEqual(shardScripts(sw), []);
+});
+
+test('with every list on, the scriptlet registrations all parse and the runtime files differ', async () => {
+  const meta = JSON.parse(readFileSync('src/generated/meta.json', 'utf8'));
+  const sw = await bootServiceWorker({
+    host: HOST,
+    settings: { enabledLists: Object.fromEntries(meta.lists.map((l) => [l.id, true])) },
+  });
+  await sw.settle();
+  const shards = shardScripts(sw);
+  assert.ok(shards.some((s) => s.id === 'quell-sl-broad'), 'entity rules (`example.*`) need the broad script');
+  // Chrome injects a file once per document: a page matched by a bucket and by the broad script
+  // would otherwise never run the second one's data.
+  const broad = shards.find((s) => s.id === 'quell-sl-broad');
+  const bucket = shards.find((s) => s.id !== 'quell-sl-broad');
+  assert.notEqual(broad.js.at(-1), bucket.js.at(-1));
+  for (const s of shards) assert.deepEqual(s.matches.filter((p) => !patternIsValid(p)), [], s.id);
+});
+
+test('an unchanged wake neither rewrites nor reads back the scriptlet registrations', async () => {
+  // Every registerContentScripts call reloads the extension's scripts in every renderer, and
+  // reading them back returns all ~22k patterns.
+  const sw = await bootServiceWorker({ host: HOST });
+  await sw.settle();
+  const before = structuredClone(shardScripts(sw));
+
+  const wake = await bootServiceWorker({ host: HOST, registered: sw.scripts(), session: sw.session() });
+  await wake.settle();
+  assert.deepEqual(wake.registerLog().filter((id) => id.startsWith('quell-sl-')), []);
+  assert.equal(wake.fullReads(), 0, 'the state the last sync stored is enough');
+  assert.deepEqual(shardScripts(wake), before);
+  // …and a top frame's request is answered from it too.
+  const top = { frameId: 0, documentId: 'D', url: 'https://worldfreeware.com/', tab: { id: 1, url: 'https://worldfreeware.com/' } };
+  await wake.send({ type: 'scriptlets:get', hostname: 'worldfreeware.com', topHost: 'worldfreeware.com', registered: true }, top);
+  assert.equal(wake.fullReads(), 0);
+  assert.equal(wake.executed().length, 0);
+
+  // After a browser restart storage.session is empty: Chrome is asked, and nothing is rewritten.
+  const restart = await bootServiceWorker({ host: HOST, registered: sw.scripts() });
+  await restart.settle();
+  assert.deepEqual(restart.registerLog().filter((id) => id.startsWith('quell-sl-')), []);
+  assert.deepEqual(shardScripts(restart), before);
+
+  // A settings change is not hidden by the stored state.
+  await wake.send({ type: 'popup:toggleSite', hostname: 'news.example', enabled: false });
+  await wake.settle();
+  assert.ok(shardScripts(wake).every((s) => s.excludeMatches?.includes('*://*.news.example/*')));
+});
+
+/** A frame on `frameUrl` inside a tab showing `topUrl`, as chrome.runtime reports it. */
+const frameSender = (frameUrl, topUrl, extra = {}) => ({
+  frameId: 7,
+  documentId: 'DOC-7',
+  url: frameUrl,
+  origin: new URL(frameUrl).origin,
+  tab: { id: 1, url: topUrl },
+  ...extra,
+});
+
+test('a frame the registrations cannot serve gets one injection, into its own document (B26)', async () => {
+  const sw = await bootServiceWorker({ host: HOST });
+  await sw.settle();
+  const resp = await sw.send(
+    { type: 'scriptlets:get', hostname: 'worldfreeware.com', topHost: 'news.example', registered: false },
+    frameSender('https://worldfreeware.com/embed', 'https://news.example/a'),
+  );
+  assert.deepEqual(resp, { allowlisted: false, injected: true });
+  const calls = sw.executed();
+  assert.equal(calls.length, 1, 'data and runtime land in one executeScript');
+  const [call] = calls;
+  // documentIds, not frameIds: a frame that navigated away since it asked, or a prerendered page
+  // activated in between (its frameId changes, its documentId does not), must not get these.
+  assert.deepEqual(call.target, { tabId: 1, documentIds: ['DOC-7'] });
+  assert.equal(call.world, 'MAIN');
+  assert.equal(call.injectImmediately, true);
+  assert.equal(call.files.at(-1), 'scriptlets-runtime.js');
+  assert.equal(call.files.at(-2), SHARDS.fallback, 'the runtime is told it is the fallback');
+  assert.ok(call.files.some((f) => worldfreeware(sw).js.includes(f)), 'the host\'s own bucket data');
+});
+
+test('a frame on a switched-off or paused page gets nothing from the worker (B24)', async () => {
+  const sw = await bootServiceWorker({ host: HOST, settings: { allowlist: ['news.example'] } });
+  await sw.settle();
+  const ask = (sender, topHost = 'news.example') =>
+    sw.send({ type: 'scriptlets:get', hostname: 'worldfreeware.com', topHost, registered: false }, sender);
+
+  assert.equal((await ask(frameSender('https://worldfreeware.com/e', 'https://news.example/a'))).allowlisted, true);
+  // A prerendered page is not the tab's page yet; its frames say which page they are on.
+  const prerendered = frameSender('https://worldfreeware.com/e', 'https://elsewhere.example/', {
+    documentLifecycle: 'prerender',
+  });
+  assert.equal((await ask(prerendered)).allowlisted, true);
+  assert.equal(sw.executed().length, 0);
+
+  // The same embed on a page that is on is served.
+  await ask(frameSender('https://worldfreeware.com/e', 'https://other.example/'), 'other.example');
+  assert.equal(sw.executed().length, 1);
+});
+
+test('a frame the registrations serve gets nothing more, unless its registration is missing', async () => {
+  const top = { frameId: 0, documentId: 'TOP', url: 'https://worldfreeware.com/', tab: { id: 1, url: 'https://worldfreeware.com/' } };
+  const msg = { type: 'scriptlets:get', hostname: 'worldfreeware.com', topHost: 'worldfreeware.com', registered: true };
+
+  const sw = await bootServiceWorker({ host: HOST });
+  await sw.settle();
+  assert.deepEqual(await sw.send(msg, top), { allowlisted: false, injected: false });
+  assert.equal(sw.executed().length, 0, 'Chrome already ran them at document start');
+
+  // Chrome refused the registrations: the worker fills the gap for that page.
+  const origError = console.error;
+  console.error = () => {};
+  try {
+    const broken = await bootServiceWorker({ host: HOST, failRegistration: true });
+    await broken.settle();
+    assert.deepEqual(await broken.send(msg, top), { allowlisted: false, injected: true });
+    assert.deepEqual(broken.executed()[0].target, { tabId: 1, documentIds: ['TOP'] });
+  } finally {
+    console.error = origError;
+  }
+});
+
+test('a host without scriptlet rules costs no injection', async () => {
+  const sw = await bootServiceWorker({ host: HOST });
+  await sw.settle();
+  await sw.send(
+    { type: 'scriptlets:get', hostname: 'nothing-listed.example', topHost: 'news.example', registered: false },
+    frameSender('https://nothing-listed.example/', 'https://news.example/'),
+  );
+  assert.equal(sw.executed().length, 0);
 });
 
 test.after(() => rmSync(stubDir, { recursive: true, force: true }));

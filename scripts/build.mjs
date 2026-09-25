@@ -46,7 +46,11 @@ const COMMON = {
 const ENTRIES = [
   ['background/service-worker.ts', 'background.js', 'esm'],
   ['content/content.ts', 'content.js', 'iife'],
-  ['content/scriptlets-main.ts', 'scriptlets.js', 'iife'],
+  // List scriptlets: the last file of every generated/scriptlets/ registration and fallback.
+  // Built twice because Chrome injects one file only once per document, and a page can match a
+  // host bucket and the broad (entity) registration at once (src/engine/scriptlet-shards.ts).
+  ['content/scriptlets-runtime.ts', 'scriptlets-runtime.js', 'iife'],
+  ['content/scriptlets-runtime.ts', 'scriptlets-runtime-broad.js', 'iife'],
   ['content/scriptlets-youtube.ts', 'scriptlets-youtube.js', 'iife'],
   ['content/scriptlets-youtube-frames.ts', 'scriptlets-youtube-frames.js', 'iife'],
   ['content/extpay-bridge.ts', 'extpay-bridge.js', 'iife'],
@@ -209,6 +213,13 @@ function copyStatic() {
       copyText(join(genericDir, f), join(DIST, 'generated', 'generic-cosmetic', f));
     }
   }
+  // Per-host list scriptlet data, registered as MAIN-world content scripts by the SW.
+  const shardDir = join(GEN, 'scriptlets');
+  if (!existsSync(join(GEN, 'scriptlet-shards.json')) || !existsSync(shardDir)) {
+    console.error('Missing src/generated/scriptlets/. Run `npm run compile-filters` first.');
+    process.exit(1);
+  }
+  copyTree(shardDir, join(DIST, 'generated', 'scriptlets'));
   // NOT copied: generated/generic-cosmetic.css. syncRegisteredScripts injects the per-list
   // sheets under generated/generic-cosmetic/, so the combined file is ~530 KB of package
   // weight nothing ever loads. It stays in src/generated for local inspection.

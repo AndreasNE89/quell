@@ -3,7 +3,8 @@
 // Responsibilities:
 //   - Sync per-list static rulesets with user settings (updateEnabledRulesets).
 //   - Maintain the per-site allowlist as dynamic allowAllRequests rules.
-//   - Register/update generic cosmetic CSS (+ MAIN scriptlets) excluding allowlisted sites.
+//   - Register/update generic cosmetic CSS, the YouTube hooks and the per-host list scriptlets
+//     (MAIN world, document_start) excluding allowlisted sites.
 //   - Answer cosmetic/popup/options messages with list-scoped data.
 //   - Count blocked requests per tab and drive the toolbar badge (dev builds).
 //
@@ -19,8 +20,6 @@ import type {
   StatsData,
   Settings,
   CosmeticData,
-  ScriptletData,
-  ScriptletRule,
   GeneratedMeta,
   YoutubeOptionsData,
   SponsorBlockSegmentsData,
@@ -62,7 +61,11 @@ import {
   buildSettingsExportDocument,
   applyImportedSettings,
 } from './settings.js';
-import { syncOneRegisteredScript } from './registered-scripts.js';
+import {
+  syncOneRegisteredScript,
+  syncRegisteredScriptGroup,
+  type LazyContentScript,
+} from './registered-scripts.js';
 import {
   defaultLicense,
   initLicense,
@@ -107,10 +110,16 @@ import {
 } from '../shared/dark-mode.js';
 import {
   matchCosmetic,
-  matchScriptlets,
   mergeNetworkExceptions,
   mergePathExceptions,
 } from '../engine/cosmetic-match.js';
+import {
+  SCRIPTLET_SHARD_ID_PREFIX,
+  SCRIPTLET_RUNTIME_FILE,
+  shardRegistrations,
+  planShardInjection,
+  type ShardIndex,
+} from '../engine/scriptlet-shards.js';
 import {
   normalizeHostname,
   isAllowlistedHost,
@@ -122,12 +131,13 @@ import {
 } from '../shared/hostname.js';
 
 import cosmeticJson from '../generated/cosmetic.json';
-import scriptletJson from '../generated/scriptlets.json';
+import scriptletShardJson from '../generated/scriptlet-shards.json';
 import metaJson from '../generated/meta.json';
 import trackerJson from '../generated/trackers.json';
 
 const COSMETIC = cosmeticJson as unknown as CosmeticData;
-const SCRIPTLETS = scriptletJson as ScriptletData;
+// Only the host index: the rules themselves ship as MAIN-world files (scriptlet-shards.ts).
+const SHARDS = scriptletShardJson as ShardIndex;
 const META = metaJson as GeneratedMeta;
 const TRACKERS = trackerJson as TrackerIndex;
 
@@ -264,13 +274,15 @@ async function syncAllowlist(settings: Settings): Promise<void> {
 }
 
 /**
- * Register (or update / unregister) generic cosmetic CSS and YouTube MAIN hooks.
- * Both honor pause + allowlist excludes. List-scoped scriptlets still inject on demand.
+ * Register (or update / unregister) generic cosmetic CSS, the YouTube MAIN hooks and the list
+ * scriptlet shards. All honor pause + allowlist excludes.
  *
  * The allowlist and breakage fixes belong to the top-level page (see policyHost), but
  * excludeMatches is tested against each frame's own URL. The YouTube hooks get that right by
- * splitting top frames from embeds. The generic sheet cannot: an allowlisted page's third-party
- * iframes still get it, and an embed from an allowlisted host goes without it on other sites.
+ * splitting top frames from embeds, and the scriptlet runtime by acting only where the frame's
+ * host is the top page's (frame-scope.ts), leaving other frames to handleScriptlets. The generic
+ * sheet cannot: an allowlisted page's third-party iframes still get it, and an embed from an
+ * allowlisted host goes without it on other sites.
  */
 async function syncRegisteredScripts(settings: Settings): Promise<void> {
   const shouldExist = !settings.paused;
@@ -370,7 +382,106 @@ async function syncRegisteredScripts(settings: Settings): Promise<void> {
     // Sponsored scrub runs only when the YouTube sponsored toggle is on.
     [youtube.id, syncOneRegisteredScript(youtube, youtubeOn)],
     [youtubeFrames.id, syncOneRegisteredScript(youtubeFrames, youtubeOn)],
+    ['scriptlet shards', syncScriptletShards(ids, allowlistExclude)],
   ]);
+}
+
+/**
+ * Data files Chrome injects per scriptlet shard registration (id → js), as of the last sync or
+ * lookup. null whenever it is not known (every wake, and during a sync), so handleScriptlets
+ * looks it up rather than trust a guess. `liveShardsGen` stops a lookup that started before a
+ * sync from overwriting what the sync found.
+ */
+let liveShards: Map<string, string[]> | null = null;
+let liveShardsGen = 0;
+
+/**
+ * What the last successful shard sync left registered, in storage.session. Reading the
+ * registrations back from Chrome returns all ~22k patterns (about 10 ms, measured); a wake only
+ * needs to know whether anything changed. storage.session is emptied by everything else that
+ * can touch the registrations (browser restart, extension update or reload), so a stored state
+ * is always one Chrome still holds.
+ */
+const SHARD_STATE_KEY = 'stampstack.scriptletShards';
+
+interface ShardState {
+  shape: string;
+  live: Record<string, string[]>;
+}
+
+async function readShardState(): Promise<ShardState | null> {
+  try {
+    const got = await chrome.storage.session?.get(SHARD_STATE_KEY);
+    const state = got?.[SHARD_STATE_KEY] as ShardState | undefined;
+    return state && typeof state.shape === 'string' && state.live ? state : null;
+  } catch {
+    return null;
+  }
+}
+
+async function writeShardState(state: ShardState | null): Promise<void> {
+  try {
+    if (state) await chrome.storage.session?.set({ [SHARD_STATE_KEY]: state });
+    else await chrome.storage.session?.remove(SHARD_STATE_KEY);
+  } catch {
+    /* no session storage: every wake asks Chrome instead */
+  }
+}
+
+async function liveShardFiles(): Promise<Map<string, string[]>> {
+  if (liveShards) return liveShards;
+  const gen = liveShardsGen;
+  const state = await readShardState();
+  const live = state
+    ? new Map(Object.entries(state.live))
+    : new Map(
+        (await chrome.scripting.getRegisteredContentScripts())
+          .filter((s) => s.id.startsWith(SCRIPTLET_SHARD_ID_PREFIX))
+          .map((s) => [s.id, s.js ?? []]),
+      );
+  if (gen === liveShardsGen) liveShards = live;
+  return live;
+}
+
+/**
+ * List scriptlets as document_start MAIN-world content scripts (REVIEW_2026-09-24 B2): one per
+ * host bucket plus one broad script for entity rules, each carrying the enabled lists' data
+ * files and the runtime. Before this they were fetched by message and injected with
+ * executeScript, which landed after the page's inline <head> scripts, too late for most
+ * anti-adblock defusers. `ids` is empty while paused, which unregisters them all.
+ */
+async function syncScriptletShards(ids: string[], excludeMatches: string[]): Promise<void> {
+  const desired = shardRegistrations(SHARDS, ids).map(
+    (r): LazyContentScript => ({
+      id: r.id,
+      js: r.js,
+      matches: r.matches,
+      excludeMatches,
+      runAt: 'document_start',
+      // about:blank / srcdoc frames a page makes for itself (friendly-iframe ads) run as their
+      // creator's origin, so they match and get their host's rules.
+      matchOriginAsFallback: true,
+      allFrames: true,
+      world: 'MAIN',
+      persistAcrossSessions: true,
+    }),
+  );
+  // `matches` is a function and drops out; the js names already pin it (content-addressed).
+  const shape = JSON.stringify(desired);
+  const state = await readShardState();
+  if (state?.shape === shape) {
+    liveShardsGen++;
+    liveShards = new Map(Object.entries(state.live));
+    return;
+  }
+  liveShardsGen++;
+  liveShards = null;
+  // Forget the old state first: a sync that dies halfway must not leave one a wake would trust.
+  await writeShardState(null);
+  const live = await syncRegisteredScriptGroup(SCRIPTLET_SHARD_ID_PREFIX, desired);
+  liveShardsGen++;
+  liveShards = live;
+  await writeShardState({ shape, live: Object.fromEntries(live) });
 }
 
 /**
@@ -387,9 +498,9 @@ async function settleEach(label: string, jobs: [string, Promise<void>][]): Promi
 }
 
 /**
- * 0.1.0 registered list scriptlets globally (MAIN world, <all_urls>, persisted); they now inject
- * on demand. unregisterContentScripts rejects the whole call when any id is not registered, so
- * remove only what is actually there.
+ * 0.1.0 registered list scriptlets globally (MAIN world, <all_urls>, persisted); they are now
+ * registered per host bucket (syncScriptletShards). unregisterContentScripts rejects the whole
+ * call when any id is not registered, so remove only what is actually there.
  */
 async function removeLegacyScriptlets(): Promise<void> {
   const live = await chrome.scripting.getRegisteredContentScripts({ ids: [SCRIPTLETS_SCRIPT_ID] });
@@ -732,10 +843,7 @@ async function handleMessage(msg: Message, sender: chrome.runtime.MessageSender)
       return handleCosmetic(msg.hostname, sender);
 
     case 'scriptlets:get':
-      return handleScriptlets(msg.hostname, sender);
-
-    case 'scriptlets:inject':
-      return handleScriptletsInject(msg.scriptlets, sender);
+      return handleScriptlets(msg, sender);
 
     case 'popup:get':
       return handlePopupGet();
@@ -863,12 +971,19 @@ async function handleMessage(msg: Message, sender: chrome.runtime.MessageSender)
  * news.example follows news.example's switch, not youtube.com's, and a comment iframe on a
  * switched-off page is off too. Rules are still matched against the frame's own host.
  *
- * A prerendered page is not yet the tab's page, so its subframes fall back to their own host.
+ * A prerendered page is not yet the tab's page (`sender.tab.url` is the page on screen), so its
+ * subframes use the top host they report themselves (location.ancestorOrigins) when they do,
+ * and their own host otherwise.
  */
-function policyHost(frameHost: string, sender: chrome.runtime.MessageSender): string {
+function policyHost(
+  frameHost: string,
+  sender: chrome.runtime.MessageSender,
+  reportedTopHost?: string | null,
+): string {
   const topUrl = sender.tab?.url;
-  if (!sender.frameId || !topUrl || sender.documentLifecycle === 'prerender') return frameHost;
-  if (!isHttpOrHttpsUrl(topUrl)) return frameHost;
+  if (!sender.frameId) return frameHost;
+  if (sender.documentLifecycle === 'prerender') return reportedTopHost || frameHost;
+  if (!topUrl || !isHttpOrHttpsUrl(topUrl)) return frameHost;
   try {
     return new URL(topUrl).hostname || frameHost;
   } catch {
@@ -918,57 +1033,79 @@ async function handleCosmetic(
   };
 }
 
+/**
+ * The fallback for list scriptlets; the document_start registrations (syncScriptletShards) are
+ * the main path. Every frame asks once, and gets an injection only when:
+ *   - it is a frame the registrations do not serve: its host differs from the top page's, so
+ *     the switch that governs it is the top page's (B24), which only this worker knows;
+ *   - or it is one they do serve, but the registration for its host is missing or behind (a
+ *     failed sync, a list switched on a moment ago).
+ * A single executeScript lands the data files and the runtime together, targeted at the
+ * document that asked rather than its frame slot (B26).
+ */
 async function handleScriptlets(
-  hostname: string,
+  msg: Extract<Message, { type: 'scriptlets:get' }>,
   sender: chrome.runtime.MessageSender,
 ): Promise<ScriptletsResponse> {
   const settings = await loadSettings();
-  const site = policyHost(hostname, sender);
+  const frameHost = String(msg.hostname ?? '').toLowerCase();
+  // A registered frame is the top page or shares its host (frame-scope.ts), so its own host is
+  // the page's, and matches what the registrations' excludeMatches saw.
+  const site = msg.registered ? frameHost : policyHost(frameHost, sender, msg.topHost);
   if (
     settings.paused ||
     isAllowlistedHost(site, settings.allowlist) ||
     fixDisablesScriptlets(resolveSiteFix(site, settings.siteFixes))
   ) {
-    return { allowlisted: true, scriptlets: [] };
+    return { allowlisted: true, injected: false };
   }
-  return {
-    allowlisted: false,
-    scriptlets: matchScriptlets(hostname, SCRIPTLETS, enabledListIds(settings)),
-  };
+  const ids = enabledListIds(settings);
+  const live = msg.registered ? await liveShardFiles() : null;
+  // The usual case for a top frame: every registration is in place, so there is nothing to
+  // look up (the host index is only built when a frame actually needs it).
+  if (
+    live &&
+    shardRegistrations(SHARDS, ids).every((r) => (live.get(r.id) ?? []).join('\n') === r.js.join('\n'))
+  ) {
+    return { allowlisted: false, injected: false };
+  }
+  const plan = frameHost ? planShardInjection(SHARDS, frameHost, ids) : null;
+  if (!plan) return { allowlisted: false, injected: false };
+  let groups = plan.registrations;
+  if (live) {
+    groups = groups.map((g) => ({
+      id: g.id,
+      files: g.files.filter((f) => !(live.get(g.id) ?? []).includes(f)),
+    }));
+  }
+  const files = groups.flatMap((g) => g.files);
+  if (!files.length) return { allowlisted: false, injected: false };
+  return { allowlisted: false, injected: await injectScriptletFallback(files, sender) };
 }
 
-async function handleScriptletsInject(
-  scriptlets: ScriptletRule[],
+async function injectScriptletFallback(
+  files: string[],
   sender: chrome.runtime.MessageSender,
-): Promise<{ ok: boolean }> {
+): Promise<boolean> {
   const tabId = sender.tab?.id;
-  if (tabId == null || !scriptlets.length) return { ok: false };
-  const frameIds = sender.frameId != null ? [sender.frameId] : undefined;
+  if (tabId == null) return false;
+  // The document, not the frame: a frame that navigated since it asked would otherwise get the
+  // previous site's scriptlets, and a prerendered page changes frameId when it is activated.
+  const target: chrome.scripting.InjectionTarget = sender.documentId
+    ? { tabId, documentIds: [sender.documentId] }
+    : { tabId, frameIds: [sender.frameId ?? 0] };
   try {
     await chrome.scripting.executeScript({
-      target: { tabId, frameIds },
+      target,
       world: 'MAIN',
       injectImmediately: true,
-      files: ['scriptlets.js'],
+      files: [...files, SHARDS.fallback, SCRIPTLET_RUNTIME_FILE],
     });
-    await chrome.scripting.executeScript({
-      target: { tabId, frameIds },
-      world: 'MAIN',
-      injectImmediately: true,
-      func: (rules) => {
-        const g = globalThis as unknown as {
-          __quellApplyScriptlets?: (r: typeof rules) => void;
-          __quellPendingScriptlets?: typeof rules;
-        };
-        if (typeof g.__quellApplyScriptlets === 'function') g.__quellApplyScriptlets(rules);
-        else g.__quellPendingScriptlets = rules;
-      },
-      args: [scriptlets],
-    });
-    return { ok: true };
+    return true;
   } catch (e) {
-    console.error('[StampStack] scriptlets inject failed', e);
-    return { ok: false };
+    // Usually the document is already gone (navigated or closed), which needs nothing.
+    console.warn('[StampStack] scriptlet injection failed', e);
+    return false;
   }
 }
 

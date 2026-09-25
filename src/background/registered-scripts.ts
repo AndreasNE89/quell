@@ -14,6 +14,7 @@ export function registrationShape(s: Partial<chrome.scripting.RegisteredContentS
     excludeMatches: arr(s.excludeMatches),
     runAt: s.runAt ?? 'document_idle',
     allFrames: s.allFrames ?? false,
+    matchOriginAsFallback: s.matchOriginAsFallback ?? false,
     world: s.world ?? 'ISOLATED',
   });
 }
@@ -77,5 +78,89 @@ export async function syncOneRegisteredScript(
       }
     }
     throw err;
+  }
+}
+
+/** A registration whose `matches` is only built when it has to be written. */
+export interface LazyContentScript extends Omit<chrome.scripting.RegisteredContentScript, 'matches'> {
+  matches: () => string[];
+}
+
+function shapeWithoutMatches(s: Partial<chrome.scripting.RegisteredContentScript>): string {
+  return registrationShape({ ...s, matches: [] });
+}
+
+/** Unregister ids, one at a time if the batch is refused (it is all or nothing). */
+async function unregisterAll(ids: string[]): Promise<void> {
+  if (!ids.length) return;
+  try {
+    await chrome.scripting.unregisterContentScripts({ ids });
+  } catch {
+    for (const id of ids) {
+      await chrome.scripting.unregisterContentScripts({ ids: [id] }).catch(() => {});
+    }
+  }
+}
+
+/**
+ * Bring every registration whose id starts with `prefix` to `desired`, and remove the others,
+ * ids an older build used included. Resolves to what is live afterwards, id → js.
+ *
+ * Built for the scriptlet shards: thousands of `matches` each, re-checked on every
+ * service-worker wake. Building and sorting those arrays just to find nothing changed would be
+ * the expensive part of a wake, so the caller guarantees that `js` decides `matches`
+ * (content-addressed file names) and they are compared without it.
+ *
+ * Changes go to Chrome as one unregister and one register call, because every call makes
+ * Chrome reload the extension's scripts in each renderer. If Chrome refuses the batch, each
+ * script is retried alone so one bad payload costs only itself, and one that still fails gets
+ * its previous registration back (B4); the first error is then rethrown for the caller to log.
+ */
+export async function syncRegisteredScriptGroup(
+  prefix: string,
+  desired: LazyContentScript[],
+): Promise<Map<string, string[]>> {
+  const all = await chrome.scripting.getRegisteredContentScripts();
+  const live = new Map(all.filter((s) => s.id.startsWith(prefix)).map((s) => [s.id, s]));
+  const wanted = new Set(desired.map((s) => s.id));
+  const stale = [...live.keys()].filter((id) => !wanted.has(id));
+  const changed = desired.filter((s) => {
+    const previous = live.get(s.id);
+    return !previous || shapeWithoutMatches(previous) !== shapeWithoutMatches({ ...s, matches: [] });
+  });
+  const result = new Map<string, string[]>();
+  for (const [id, s] of live) if (wanted.has(id)) result.set(id, s.js ?? []);
+  if (!stale.length && !changed.length) return result;
+
+  const replaced = changed.filter((s) => live.has(s.id)).map((s) => s.id);
+  await unregisterAll([...stale, ...replaced]);
+  for (const id of replaced) result.delete(id);
+  if (!changed.length) return result;
+
+  const payloads = changed.map((s) => forApi({ ...s, matches: s.matches() }));
+  try {
+    await chrome.scripting.registerContentScripts(payloads);
+    for (const p of payloads) result.set(p.id, p.js ?? []);
+    return result;
+  } catch {
+    let firstError: unknown = null;
+    for (const p of payloads) {
+      try {
+        await chrome.scripting.registerContentScripts([p]);
+        result.set(p.id, p.js ?? []);
+      } catch (err) {
+        firstError ??= err;
+        const previous = live.get(p.id);
+        if (!previous) continue;
+        try {
+          await chrome.scripting.registerContentScripts([forApi(previous)]);
+          result.set(p.id, previous.js ?? []);
+        } catch (restoreErr) {
+          console.error(`[StampStack] could not restore ${p.id}`, restoreErr);
+        }
+      }
+    }
+    if (firstError) throw firstError;
+    return result;
   }
 }

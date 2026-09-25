@@ -25,7 +25,8 @@ const LONG_BASE64 = /[A-Za-z0-9+/]{80,}={0,2}/;
 /** Bundles where scriptlet args / ExtPay payloads must not look obfuscated. */
 const LONG_BASE64_TARGETS = new Set([
   'background.js',
-  'scriptlets.js',
+  'scriptlets-runtime.js',
+  'scriptlets-runtime-broad.js',
   'scriptlets-youtube.js',
   'scriptlets-youtube-frames.js',
   'content.js',
@@ -55,7 +56,9 @@ for (const file of walkJs(DIST)) {
     hits.push(`${rel} (atob/btoa)`);
     continue;
   }
-  if (LONG_BASE64_TARGETS.has(basename(file)) && LONG_BASE64.test(text)) {
+  // generated/scriptlets/ holds the scriptlet args themselves (MAIN-world rule data).
+  const target = LONG_BASE64_TARGETS.has(basename(file)) || rel.includes('/generated/scriptlets/');
+  if (target && LONG_BASE64.test(text)) {
     hits.push(`${rel} (long base64)`);
   }
 }

@@ -16,6 +16,16 @@ Written for users, not for the commit log. Internal refactors and test-only work
   Chinese), or after adding a site such as `10.0.0` in Settings. The Chinese list's broken
   entry is now skipped, and if Chrome ever turns down an update, the previous working setup
   stays in place.
+- **Fixed: script patches now run before the page does.** Filter-list script patches that stop
+  anti-adblock walls and popups, such as the one for worldfreeware.com, used to arrive 30 to
+  200 milliseconds after a page started, and often after it had finished loading. By then most
+  had nothing left to stop. Chrome now runs them before the page's first script, including in
+  frames a page creates for itself and on pages opened while StampStack's background worker
+  was asleep. Rules written for a site name across all its endings, such as `yts.*`, work this
+  way too. Patches for frames from other sites still arrive a little later, because StampStack
+  first checks whether you switched off the page they are on.
+- Script patches no longer leave anything behind on the page that a site could use to spot
+  StampStack or switch its patches off.
 - Settings > Add a site now says why it cannot use an entry, such as an incomplete address
   like `10.0.0` or `192.168.1`, and keeps what you typed so you can correct it. It used to
   clear the field and do nothing. A pasted web address now adds its site.

@@ -110,7 +110,7 @@ before(async () => {
   const outfile = join(tmpdir(), `quell-regscripts-${process.pid}.mjs`);
   await build({
     stdin: {
-      contents: `export { syncOneRegisteredScript, registrationShape, forApi }
+      contents: `export { syncOneRegisteredScript, syncRegisteredScriptGroup, registrationShape, forApi }
                  from './src/background/registered-scripts.js';`,
       resolveDir: ROOT,
       loader: 'ts',
@@ -270,4 +270,98 @@ test('forApi drops empty arrays but keeps populated ones', () => {
   assert.equal('js' in out, false);
   assert.equal('css' in out, false);
   assert.deepEqual(out.excludeMatches, ['e']);
+});
+
+test('registrationShape notices matchOriginAsFallback', () => {
+  assert.equal(
+    mod.registrationShape({ matches: ['x'] }),
+    mod.registrationShape({ matches: ['x'], matchOriginAsFallback: false }),
+  );
+  assert.notEqual(
+    mod.registrationShape({ matches: ['x'] }),
+    mod.registrationShape({ matches: ['x'], matchOriginAsFallback: true }),
+  );
+});
+
+// The list-scriptlet shards (REVIEW_2026-09-24 B2) are a group of registrations with thousands of
+// patterns each, re-checked on every service-worker wake.
+
+const shard = (id, over = {}) => {
+  const built = { count: 0 };
+  const s = {
+    id,
+    js: [`generated/scriptlets/list.${id}.v1.js`, 'scriptlets-runtime.js'],
+    matches: () => {
+      built.count++;
+      return [`*://*.${id}.example/*`];
+    },
+    excludeMatches: [],
+    runAt: 'document_start',
+    allFrames: true,
+    matchOriginAsFallback: true,
+    world: 'MAIN',
+    persistAcrossSessions: true,
+    ...over,
+  };
+  return Object.assign(s, { built });
+};
+
+test('a script group registers what is missing and removes ids an older build left', async () => {
+  store.set('quell-sl-99', { id: 'quell-sl-99', js: ['old.js'], matches: ['*://old.example/*'] });
+  store.set('quell-generic-cosmetic', { id: 'quell-generic-cosmetic', css: ['a.css'], matches: ['<all_urls>'] });
+
+  const live = await mod.syncRegisteredScriptGroup('quell-sl-', [shard('quell-sl-0'), shard('quell-sl-1')]);
+
+  assert.deepEqual([...store.keys()].sort(), ['quell-generic-cosmetic', 'quell-sl-0', 'quell-sl-1']);
+  assert.deepEqual(store.get('quell-sl-0').matches, ['*://*.quell-sl-0.example/*']);
+  assert.equal(store.get('quell-sl-0').matchOriginAsFallback, true);
+  assert.deepEqual([...live.keys()].sort(), ['quell-sl-0', 'quell-sl-1']);
+  assert.deepEqual(live.get('quell-sl-1'), ['generated/scriptlets/list.quell-sl-1.v1.js', 'scriptlets-runtime.js']);
+});
+
+test('an unchanged script group is not rewritten, and its patterns are never built', async () => {
+  await mod.syncRegisteredScriptGroup('quell-sl-', [shard('quell-sl-0'), shard('quell-sl-1')]);
+  const before = calls.length;
+  const again = [shard('quell-sl-0'), shard('quell-sl-1')];
+  const live = await mod.syncRegisteredScriptGroup('quell-sl-', again);
+  assert.deepEqual(calls.slice(before).map((c) => c[0]), ['get']);
+  assert.deepEqual(again.map((s) => s.built.count), [0, 0]);
+  assert.equal(live.size, 2);
+});
+
+test('script group changes reach Chrome as one unregister and one register call', async () => {
+  // Each call makes Chrome reload the extension's scripts in every renderer.
+  await mod.syncRegisteredScriptGroup('quell-sl-', [shard('quell-sl-0'), shard('quell-sl-1')]);
+  const before = calls.length;
+  const allowlisted = { excludeMatches: ['*://*.news.example/*'] };
+  await mod.syncRegisteredScriptGroup('quell-sl-', [
+    shard('quell-sl-0', allowlisted),
+    shard('quell-sl-1', allowlisted),
+    shard('quell-sl-2', allowlisted),
+  ]);
+  assert.deepEqual(calls.slice(before), [
+    ['get', undefined],
+    ['unregister', ['quell-sl-0', 'quell-sl-1']],
+    ['register', ['quell-sl-0', 'quell-sl-1', 'quell-sl-2']],
+  ]);
+  for (const id of ['quell-sl-0', 'quell-sl-1', 'quell-sl-2']) {
+    assert.deepEqual(store.get(id).excludeMatches, ['*://*.news.example/*']);
+  }
+});
+
+test('a refused script group keeps what Chrome accepts, restores the rest, and reports why', async () => {
+  const BAD = '*://www.192.168/*';
+  installFakeChrome({ rejectPattern: BAD });
+  await mod.syncRegisteredScriptGroup('quell-sl-', [shard('quell-sl-0'), shard('quell-sl-1')]);
+
+  await assert.rejects(
+    mod.syncRegisteredScriptGroup('quell-sl-', [
+      shard('quell-sl-0', { js: ['generated/scriptlets/list.quell-sl-0.v2.js', 'scriptlets-runtime.js'] }),
+      shard('quell-sl-1', { excludeMatches: [BAD] }),
+    ]),
+    (err) => err.message === INVALID_HOST,
+  );
+  assert.deepEqual(store.get('quell-sl-0').js[0], 'generated/scriptlets/list.quell-sl-0.v2.js');
+  assert.ok(store.get('quell-sl-1'), 'the refused script lost its working registration');
+  assert.equal('excludeMatches' in store.get('quell-sl-1'), false);
 });

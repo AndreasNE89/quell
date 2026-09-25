@@ -915,7 +915,7 @@ test('aost matches the uBO stack form: injectedScript for eval/Function code', (
 });
 
 test("aost does not match against the scriptlet's own frames", () => {
-  // The trap's frames carry the bundle's URL (scriptlets.js in the extension); uBO's never show
+  // The trap's frames carry the bundle's URL (scriptlets-runtime.js in the extension); uBO's never show
   // up, so a needle like `/(?=^(?!.*\.js))/` or a file name must not see them.
   globalThis.window.probe = { value: 42 };
   mod.runScriptlet('aost', ['probe.value', 'quell-globals']);

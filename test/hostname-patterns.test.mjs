@@ -32,6 +32,7 @@ before(async () => {
           pathExceptionMatchPatterns,
         } from './src/shared/hostname.js';
         export { mergeNetworkExceptions, mergePathExceptions } from './src/engine/cosmetic-match.js';
+        export { shardRegistrations } from './src/engine/scriptlet-shards.js';
       `,
       resolveDir: ROOT,
       loader: 'ts',
@@ -381,4 +382,20 @@ test('generic-sheet excludes from the shipped lists are valid for every list com
   assert.deepEqual(failures.slice(0, 10), []);
   const shipped = mod.mergePathExceptions(cosmetic, ids).generichide.flatMap(mod.pathExceptionMatchPatterns);
   assert.ok(shipped.includes('*://*.duckduckgo.com/?q=*'), 'the page-scoped excludes are checked');
+});
+
+test('list scriptlet registrations only carry patterns Chrome accepts, for the host meant (B2)', () => {
+  // One refused pattern fails the whole registerContentScripts call, and the scriptlet shards
+  // carry some 22k of them, compiled from list hostnames.
+  const index = JSON.parse(readFileSync(join(ROOT, 'src/generated/scriptlet-shards.json'), 'utf8'));
+  const regs = mod.shardRegistrations(index, meta.lists.map((l) => l.id));
+  assert.ok(regs.length > 1);
+  const failures = [];
+  for (const r of regs) {
+    for (const pattern of r.matches()) {
+      const problem = patternProblem(pattern);
+      if (problem) failures.push(`${r.id} ${pattern}: ${problem}`);
+    }
+  }
+  assert.deepEqual(failures.slice(0, 10), []);
 });

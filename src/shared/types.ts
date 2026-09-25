@@ -200,8 +200,13 @@ export interface ScriptletData {
 
 export type Message =
   | { type: 'cosmetic:get'; hostname: string }
-  | { type: 'scriptlets:get'; hostname: string }
-  | { type: 'scriptlets:inject'; scriptlets: ScriptletRule[] }
+  /**
+   * Content script, every frame: list scriptlets for this document. `registered` and `topHost`
+   * are the frame's own view (src/shared/frame-scope.ts): registered frames already got theirs
+   * from the document_start content scripts, and the worker only fills a gap; for the others
+   * it decides against the top page and injects.
+   */
+  | { type: 'scriptlets:get'; hostname: string; topHost?: string | null; registered?: boolean }
   | { type: 'popup:get' }
   | { type: 'popup:toggleSite'; hostname: string; enabled: boolean }
   | { type: 'popup:setPaused'; paused: boolean }
@@ -265,7 +270,8 @@ export interface CosmeticResponse {
 
 export interface ScriptletsResponse {
   allowlisted: boolean;
-  scriptlets: ScriptletRule[];
+  /** The worker injected scriptlets into this document through chrome.scripting. */
+  injected: boolean;
 }
 
 export interface PopupData {
