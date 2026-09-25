@@ -32,12 +32,14 @@ import {
   isUniversallyMatchingUrlFilter,
   isUniversallyMatchingRegexFilter,
   regexFilterHasLiteralScope,
+  conditionMatchesMainFrame,
+  isAccidentalDocumentRule,
 } from './lib/to-dnr.mjs';
 import { DNR } from './lib/limits.mjs';
 import { scriptletLooksObfuscated, scriptletUnsupported } from './lib/scriptlet-safe.mjs';
 import { trackerDomainMap } from './lib/trackers.mjs';
 import { readLock } from './lib/list-lock.mjs';
-import { buildScriptletShards, SHARD_DIR } from './lib/scriptlet-shards.mjs';
+import { buildScriptletShards, planScriptletBundles, SHARD_DIR } from './lib/scriptlet-shards.mjs';
 import { build as esbuild } from 'esbuild';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -109,6 +111,9 @@ function isSafeSelector(sel) {
 /** Compile one list's lines into DNR rules + cosmetic/scriptlet contributions. */
 function compileList(list, text, ctx) {
   const dnrRules = [];
+  // Emitted rules that can reach a top-level page, with the filter each came from, for
+  // assertNoAccidentalDocumentRules. Only these few thousand keep their parsed source.
+  const documentRules = [];
   // Dedup is PER-LIST, not global: each list becomes an independently enable-able
   // static ruleset, so a rule shared by two lists must exist in both — otherwise
   // disabling one list would drop a rule the other still needs.
@@ -181,11 +186,12 @@ function compileList(list, text, ctx) {
       seen.add(key);
       rule.id = nextId++;
       dnrRules.push(rule);
+      if (conditionMatchesMainFrame(rule.condition)) documentRules.push({ rule, filter: parsed });
       stats.converted++;
     }
   }
 
-  return { dnrRules, stats };
+  return { dnrRules, documentRules, stats };
 }
 
 /**
@@ -404,6 +410,31 @@ function assertNoGlobalAllow(listId, rules) {
 }
 
 /**
+ * Build-time backstop against blocking whole pages by accident.
+ *
+ * A block or redirect rule may match `main_frame` only when its filter names the document
+ * (`$doc`, `$document`, `$all`) or is a `$removeparam`; see isAccidentalDocumentRule. 2.2.2
+ * shipped 141 rules that broke this: Chrome showed "This page has been blocked by an extension"
+ * on any address containing `/reklame/` or `-banner-ads-`, on every `ads.*` host, and more. The
+ * converter fix has tests, but like assertNoGlobalAllow this checks what is actually emitted,
+ * because the lists and the parser keep changing underneath those tests.
+ */
+function assertNoAccidentalDocumentRules(listId, documentRules) {
+  const bad = documentRules.filter(({ rule, filter }) => isAccidentalDocumentRule(rule, filter));
+  if (!bad.length) return;
+  console.error(
+    `\n  ✗ list "${listId}" emitted ${bad.length} rule(s) that would block whole pages although their filter only targets subresources:`,
+  );
+  for (const { rule, filter } of bad.slice(0, 5)) {
+    console.error(`      ${filter.raw}\n        → ${JSON.stringify(rule)}`);
+  }
+  console.error(
+    '    Fix the resource-type mapping in scripts/lib/to-dnr.mjs. Refusing to write this ruleset.',
+  );
+  process.exit(1);
+}
+
+/**
  * Build the page-report tracker index: curated domain → { label, blocked }.
  *
  * `blocked` is decided by looking for a real domain-anchored block rule in the emitted
@@ -481,12 +512,13 @@ function listsRefreshedAt() {
 }
 
 /**
- * src/shared/hostname.ts, bundled on the fly. The scriptlet shards must key hosts exactly the way
- * the runtime matches them, and a hand-kept .mjs copy would drift.
+ * A runtime module (src/shared/hostname.ts, src/engine/scriptlet-shards.ts), bundled on the fly.
+ * The scriptlet shards must key hosts exactly the way the runtime matches them, and bundles must
+ * hold exactly what the service worker would register; a hand-kept .mjs copy would drift.
  */
-async function loadHostnameHelpers() {
+async function loadRuntimeModule(...path) {
   const out = await esbuild({
-    entryPoints: [join(ROOT, 'src', 'shared', 'hostname.ts')],
+    entryPoints: [join(ROOT, 'src', ...path)],
     bundle: true,
     write: false,
     format: 'esm',
@@ -500,9 +532,15 @@ async function loadHostnameHelpers() {
 /**
  * List scriptlets as MAIN-world files keyed by host (scripts/lib/scriptlet-shards.mjs), plus
  * the index the service worker registers them from and the hand-off key the runtime reads.
+ * The index also names one bundle per registration of the default lists; scripts/build.mjs
+ * writes their bytes, because they end with the built runtime.
  */
-function writeScriptletShards(byList, listOrder, host) {
+function writeScriptletShards(byList, listOrder, defaultIds, host, engine) {
   const { index, runtimeKey, files, stats } = buildScriptletShards(byList, listOrder, host);
+  index.bundles = planScriptletBundles(
+    engine.shardRegistrations(index, defaultIds),
+    engine.SCRIPTLET_SHARD_ID_PREFIX,
+  );
   if (existsSync(SHARD_OUT_DIR)) rmSync(SHARD_OUT_DIR, { recursive: true });
   mkdirSync(SHARD_OUT_DIR, { recursive: true });
   for (const f of files) writeFileSync(join(OUT_DIR, f.path.slice('generated/'.length)), f.content);
@@ -511,7 +549,8 @@ function writeScriptletShards(byList, listOrder, host) {
   const kb = Math.round(files.reduce((n, f) => n + f.content.length, 0) / 1024);
   console.log(
     `  scriptlet shards:   ${files.length} files, ${kb} KB, ${stats.rules} rules ` +
-      `(host keys ${stats.concreteKeys}, broad ${stats.broadKeys}, unmatchable dropped ${stats.deadKeys})`,
+      `(host keys ${stats.concreteKeys}, broad ${stats.broadKeys}, unmatchable dropped ${stats.deadKeys}); ` +
+      `${Object.keys(index.bundles).length} default-list bundles for the build to join`,
   );
 }
 
@@ -584,7 +623,7 @@ async function main() {
     }
     ctx.byList[list.id] = emptyCosmeticBucket();
     const text = readFileSync(file, 'utf8');
-    const { dnrRules, stats } = compileList(list, text, ctx);
+    const { dnrRules, documentRules, stats } = compileList(list, text, ctx);
 
     // Bound a single ruleset file so it can't dominate the global pool by itself.
     if (dnrRules.length > DNR.MAX_STATIC_RULES_PER_LIST) {
@@ -595,6 +634,7 @@ async function main() {
     }
 
     assertNoGlobalAllow(list.id, dnrRules);
+    assertNoAccidentalDocumentRules(list.id, documentRules);
     emittedRulesets[list.id] = dnrRules;
 
     const rulesetPath = join(RULESET_DIR, `${list.id}.json`);
@@ -667,7 +707,9 @@ async function main() {
   writeScriptletShards(
     scriptletsByList,
     metaLists.map((l) => l.id),
-    await loadHostnameHelpers(),
+    metaLists.filter((l) => l.enabledByDefault).map((l) => l.id),
+    await loadRuntimeModule('shared', 'hostname.ts'),
+    await loadRuntimeModule('engine', 'scriptlet-shards.ts'),
   );
 
   // Legacy combined sheet kept for older loaders / docs; runtime prefers per-list files.

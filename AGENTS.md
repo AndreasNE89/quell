@@ -45,7 +45,7 @@ Load the extension: Chrome → `chrome://extensions` → Developer mode → **Lo
 
 1. **Network**: filter lines → DNR static rulesets (`scripts/compile-filters.mjs` + `scripts/lib/*`).
 2. **Cosmetics**: generic CSS registered via `chrome.scripting`; hostname-specific + procedural via content script messaging.
-3. **Scriptlets**: domain-scoped rules compiled to MAIN-world data files (`generated/scriptlets/`), registered per host bucket at `document_start` and run by `scriptlets-runtime.js`; see `docs/ARCHITECTURE.md`.
+3. **Scriptlets**: domain-scoped rules compiled to MAIN-world data files (`generated/scriptlets/`), registered per host bucket at `document_start` and run by `scriptlets-runtime.js` (with the default lists, each registration injects one build-time bundle of its files); see `docs/ARCHITECTURE.md`.
 4. **Settings**: `chrome.storage.local` key `stampstack.settings` (`paused`, `enabledLists`, `allowlist`, `blockedTotal`). Migrates from `quell.settings` / intermediate rename keys.
 5. **Allowlist**: dynamic DNR `allowAllRequests` rules with ids ≥ `1_000_000`.
 6. **Paid dark mode** (optional): registered invert CSS + smart content script; ExtPay-gated; pause/allowlist do not disable it.

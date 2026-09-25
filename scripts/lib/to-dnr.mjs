@@ -1106,3 +1106,48 @@ export function sanitizeDnrDomainLists(include, exclude) {
 export function ruleKey(rule) {
   return JSON.stringify([rule.priority, rule.action, rule.condition]);
 }
+
+/**
+ * Whether a DNR condition can match a top-level navigation. Chrome leaves `main_frame` out by
+ * default only when NEITHER type list is given; a condition with just `excludedResourceTypes`
+ * matches documents unless that list names `main_frame`.
+ */
+export function conditionMatchesMainFrame(condition = {}) {
+  if (condition.resourceTypes) return condition.resourceTypes.includes('main_frame');
+  if (condition.excludedResourceTypes) {
+    return !condition.excludedResourceTypes.includes('main_frame');
+  }
+  return false;
+}
+
+/**
+ * Whether the parsed filter asks to act on top-level documents: it names them (`$doc`,
+ * `$document`, `$all` — the only tokens parse-filter.mjs maps to `main_frame`) and does not
+ * negate them, or it is a `$removeparam`, which has to reach the address bar to strip anything.
+ */
+function filterTargetsDocuments(filter) {
+  const o = filter?.options ?? {};
+  if (o.removeParams?.length) return true;
+  // A bare `$removeparam` stays in `unsupported` until toDnrRule turns it into a query clear.
+  const bare = /^(?:removeparam|queryprune)$/i;
+  if ((filter?.unsupported ?? []).some((t) => bare.test(String(t).trim()))) return true;
+  const named = (o.resourceTypes ?? []).includes('main_frame');
+  return named && !(o.excludedResourceTypes ?? []).includes('main_frame');
+}
+
+/**
+ * A block or redirect rule that can stop a whole page from loading although its source filter
+ * never asked for that. uBO applies a filter to the top-level document only when the filter
+ * names it; every other filter is a subresource filter, whatever types it leaves out.
+ *
+ * 2.2.2 shipped 141 such rules (`-banner-ads-$~script`, `/reklame/*$~xmlhttprequest`,
+ * `://ads.$~image,…`): a negated-only type list reached DNR as `excludedResourceTypes` alone,
+ * which Chrome reads as "and main_frame too", so matching pages showed "blocked by an
+ * extension". compile-filters.mjs refuses to write a ruleset containing one.
+ */
+export function isAccidentalDocumentRule(rule, filter) {
+  const type = rule?.action?.type;
+  if (type !== 'block' && type !== 'redirect') return false;
+  if (!conditionMatchesMainFrame(rule.condition)) return false;
+  return !filterTargetsDocuments(filter);
+}

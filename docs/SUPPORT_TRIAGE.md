@@ -42,6 +42,8 @@ draft or a note in `docs/AD_AUDIT.md` / `docs/DARK_MODE_SITES.md`:
 Hostname:
 Symptom (ad visible / page broken / dark wrong / purchase):
 StampStack paused? (yes/no):
+Still fails while paused? (yes/no):
+VPN or DNS ad blocker? (NetShield / NextDNS / Pi-hole / AdGuard DNS / none):
 Site allowlisted? (yes/no):
 Dark mode only? (yes/no):
 Repro steps:
@@ -55,12 +57,21 @@ Next action: fix-in-seed | fix-in-code | document-wontfix | need-more-info
 | Signal | Likely cause | First response |
 |--------|--------------|----------------|
 | Ads on one site, pause clears them | Missing rule / first-party HTML | Seed cosmetic or DNR; log in `AD_AUDIT.md` |
+| Images or pages still missing with StampStack paused (or the site switched off) | DNS filter or VPN blocker outside the browser: ProtonVPN NetShield, NextDNS, Pi-hole, AdGuard DNS. The failed requests show `ERR_NAME_NOT_RESOLVED`, not `ERR_BLOCKED_BY_CLIENT` | Ask them to retest with it off, or to allow the host there (tek.no photos: `shared.cdn.smp.schibsted.com`, which NetShield blocks). Not ours: uBO or no extension fails the same. When retesting yourself on a machine behind such a resolver, use DNS over HTTPS, or the baseline fails too |
+| Chrome says "This page has been blocked by an extension" | A filter that blocks the whole page. On 2.2.x, about 135 filters that should only block scripts or images did this (`/reklame/`, `-banner-ads-`, `ads.*` hosts); fixed in 2.3.0 | Ask for the version and the exact address. On 2.2.x: update. On 2.3.0 or later: find the `$doc`/`$all` rule that matched |
+| Console shows "Blocked script execution in 'about:blank' because the document's frame is sandboxed and the 'allow-scripts' permission is not set", only with StampStack on (2.3.0+) | Ours, and harmless. The script-patch registrations use `matchOriginAsFallback` so friendly-iframe ads in a page's own blank frames get patched, and Chrome also tries them in sandboxed blank frames that may not run scripts, logging one line per registration (`chrome.scripting` cannot skip those frames). Expect 2 per such frame on YouTube (its bucket + broad), 1 on sites matched only by the broad script. More than that means a non-default list set, whose registrations inject their files one by one | No action; nothing is blocked or broken. Reply with the snippet below. Treat it as a real problem only if the page also misbehaves, and then triage that symptom as usual |
 | Site broken only when StampStack on | Overblock | Ask them to allowlist; add exception if confirmed |
 | Dark looks wrong / inverted logos | Dark engine / already-dark | `DARK_MODE_SITES.md` + smallest CSS/detection tweak |
 | Buy / Restore fails | ExtPay / Stripe / email | Confirm published build; check ExtPay ↔ CWS link; see `RELEASE_CHECKLIST.md` |
 | Dev unlock missing | Store build in `dist/` | Expected in production; local: `npm run build` then reload |
 
 ## Reply snippets
+
+**Something missing or won't load (ask this first):**
+> Does it still happen with StampStack paused, or with the site switched off in the StampStack popup? If it does, something outside StampStack is blocking it. VPN and DNS ad blockers such as ProtonVPN NetShield, NextDNS, Pi-hole or AdGuard DNS are the usual cause, so please try again with that turned off, or allow the site there. On tek.no, for example, the photos come from `shared.cdn.smp.schibsted.com`, which NetShield blocks. If it only fails with StampStack on, reply with the exact address, whether Chrome says "blocked by an extension", and whether dark mode is on.
+
+**"Blocked script execution in 'about:blank'" in the console:**
+> That line comes from StampStack and is harmless. Since 2.3.0 its script patches also reach the blank frames a page creates for itself, which is where some ads hide. Some of those frames are not allowed to run scripts at all, and Chrome logs this line when it declines to run the patch there. Nothing is blocked or broken by it. If the page itself misbehaves, tell us the address and what goes wrong.
 
 **Broken site (ask allowlist):**
 > Sorry about the breakage. In the StampStack popup, turn off blocking for that site (or pause StampStack), reload, and reply with the hostname if it still fails — we’ll add a fix in the next update.

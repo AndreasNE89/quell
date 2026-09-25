@@ -19,6 +19,8 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import {
   buildScriptletShards,
+  planScriptletBundles,
+  joinScriptletBundle,
   bucketOf,
   classifyKey,
   siteOf,
@@ -96,7 +98,7 @@ function servedBy(compiled, enabled) {
     }
     const out = [];
     for (const r of regs.filter((x) => hit.has(x))) {
-      const datas = r.js.slice(0, -1).map((f) => compiled.data.get(f));
+      const datas = r.parts.slice(0, -1).map((f) => compiled.data.get(f));
       for (const s of engine.matchShards(pageHost, datas)) out.push([s.name, ...s.args].join('\0'));
     }
     return out;
@@ -275,6 +277,107 @@ test('frame scope: the registrations serve the top page and frames on its host, 
 });
 
 // ---------------------------------------------------------------------------
+// Bundles: one file per registration
+// ---------------------------------------------------------------------------
+//
+// The registrations reach sandboxed about:blank frames (matchOriginAsFallback), and in one
+// without `allow-scripts` Chrome logs "Blocked script execution in 'about:blank'…" once for
+// every file it may not run. With each registration carrying its data files and runtime
+// separately that was 8 errors on every YouTube page, against none with 2.2.3.
+// chrome.scripting cannot skip sandboxed frames, so a registration now injects one file.
+
+/** The index with bundles for `defaults`, as compile-filters writes it. */
+function withBundles(compiled, defaults) {
+  const index = structuredClone(compiled.index);
+  index.bundles = planScriptletBundles(
+    engine.shardRegistrations(index, defaults),
+    engine.SCRIPTLET_SHARD_ID_PREFIX,
+  );
+  return index;
+}
+
+test('bundles: the default lists get one file per registration, any other set its parts', () => {
+  const byList = {
+    a: { scriptlets: [rule(['a.com'], 'aopr', ['x']), rule(['film.*'], 'nowoif')], exceptions: [] },
+    b: { scriptlets: [rule(['a.com'], 'aopr', ['y'])], exceptions: [rule(['film.*'], 'nowoif')] },
+  };
+  const c = compile(byList);
+  const index = withBundles(c, ['a', 'b']);
+  const regs = engine.shardRegistrations(index, ['a', 'b']);
+  assert.deepEqual(
+    regs.map((r) => r.id),
+    [`${engine.SCRIPTLET_SHARD_ID_PREFIX}${bucketOf('a.com', host.isPublicSuffixHost)}`, engine.SCRIPTLET_BROAD_ID],
+  );
+  for (const r of regs) {
+    assert.deepEqual(r.js, [index.bundles[r.id].file], r.id);
+    assert.deepEqual(index.bundles[r.id].parts, r.parts, r.id);
+    // The worker still knows which data files a registered bundle has already run.
+    assert.deepEqual(engine.shardParts(index, r.js), r.parts, r.id);
+  }
+  // A list switched off: the bundle no longer holds exactly what is on, so the parts go in.
+  for (const r of engine.shardRegistrations(index, ['a'])) {
+    assert.deepEqual(r.js, r.parts, r.id);
+    assert.ok(r.parts.every((f) => !f.includes('/b.')), r.id);
+  }
+  // Same registrations either way, only the files Chrome is handed differ.
+  const plain = engine.shardRegistrations(c.index, ['a', 'b']);
+  assert.deepEqual(
+    regs.map((r) => [r.id, r.parts, r.matches()]),
+    plain.map((r) => [r.id, r.parts, r.matches()]),
+  );
+  assert.deepEqual(plain.map((r) => r.js), plain.map((r) => r.parts), 'no bundles, no stand-ins');
+});
+
+test('bundles: a name follows its parts', () => {
+  const regs = [{ id: 'quell-sl-3', parts: ['generated/scriptlets/a.3.v1.js', 'scriptlets-runtime.js'] }];
+  const one = planScriptletBundles(regs, 'quell-sl-');
+  assert.match(one['quell-sl-3'].file, /^generated\/scriptlets\/bundle\.3\.[0-9a-f]{12}\.js$/);
+  assert.deepEqual(planScriptletBundles(structuredClone(regs), 'quell-sl-'), one);
+  // New data means new part names, and so a new bundle name: the worker compares by name.
+  const two = planScriptletBundles(
+    [{ id: 'quell-sl-3', parts: ['generated/scriptlets/a.3.v2.js', 'scriptlets-runtime.js'] }],
+    'quell-sl-',
+  );
+  assert.notEqual(two['quell-sl-3'].file, one['quell-sl-3'].file);
+});
+
+test('bundles: joined, the parts run as Chrome runs them back to back, the runtime still strict', () => {
+  const byList = {
+    a: { scriptlets: [rule(['a.com'], 'aopr', ['x'])], exceptions: [] },
+    b: { scriptlets: [rule(['a.com'], 'set', ['y', 'true'])], exceptions: [] },
+  };
+  const c = compile(byList);
+  const [r] = engine.shardRegistrations(c.index, ['a', 'b']);
+  const texts = r.parts.slice(0, -1).map((p) => c.files.find((f) => f.path === p).content);
+  assert.equal(texts.length, 2);
+  // A stand-in with esbuild's shape: the directive, then an IIFE that reads the hand-off.
+  const runtime =
+    '"use strict";\n(() => {\n  globalThis.out = {\n' +
+    '    strict: (function () { return this; })() === undefined,\n' +
+    `    queue: globalThis[${JSON.stringify(c.index.key)}],\n  };\n})();\n`;
+  const run = (scripts) => {
+    const ctx = vm.createContext({});
+    for (const s of scripts) vm.runInContext(s, ctx);
+    return JSON.parse(JSON.stringify(ctx.out));
+  };
+  const separate = run([...texts, runtime]);
+  assert.equal(separate.strict, true);
+  assert.equal(separate.queue.length, 2);
+  for (const rt of [runtime, runtime.replace(/\n\s*/g, '')]) {
+    const joined = joinScriptletBundle([...texts, rt]);
+    assert.ok(joined.startsWith('"use strict";\n'), 'the directive only counts at the top');
+    assert.deepEqual(run([joined]), separate);
+  }
+});
+
+test('bundles: a part without its closing semicolon keeps to itself; only the runtime may be strict', () => {
+  const ctx = vm.createContext({ log: [] });
+  vm.runInContext(joinScriptletBundle(['log.push(1)', '(function () { log.push(2); })()']), ctx);
+  assert.deepEqual([...ctx.log], [1, 2]);
+  assert.throws(() => joinScriptletBundle(["'use strict';\nlog.push(1);", 'log.push(2);']), /strict/);
+});
+
+// ---------------------------------------------------------------------------
 // The shipped lists
 // ---------------------------------------------------------------------------
 
@@ -361,15 +464,36 @@ test('shipped lists: registrations stay inside the limits page load and Chrome a
     assert.ok(m.length < 4000, `${r.id} has ${m.length} patterns`);
     // Runtimes are separate files: Chrome injects one file once per document, so a shared
     // runtime would never run after the second registration's data.
-    assert.equal(r.js.filter((f) => !c.data.has(f)).length, 1, `${r.id} ends with its own runtime`);
-    assert.ok(!c.data.has(r.js.at(-1)));
+    assert.equal(r.parts.filter((f) => !c.data.has(f)).length, 1, `${r.id} ends with its own runtime`);
+    assert.ok(!c.data.has(r.parts.at(-1)));
   }
   assert.ok(patterns < 40000, `${patterns} patterns in total`);
-  const runtimes = new Set(regs.map((r) => r.js.at(-1)));
+  const runtimes = new Set(regs.map((r) => r.parts.at(-1)));
   assert.equal(runtimes.size, 2, 'bucket and broad registrations need different runtime files');
   // Every data file is parsed whole on a matching page (broad ones on every page).
   for (const f of c.files) {
     assert.ok(f.content.length < 160 * 1024, `${f.path} is ${f.content.length} bytes`);
     assert.match(f.content, /^[\x20-\x7e\n]*$/, `${f.path} must be plain ASCII`);
   }
+});
+
+test('shipped lists: with the default lists on, every scriptlet registration injects one file', () => {
+  const index = JSON.parse(readFileSync(join(ROOT, 'src/generated/scriptlet-shards.json'), 'utf8'));
+  const { lists } = shipped();
+  const defaults = lists.filter((l) => l.enabledByDefault).map((l) => l.id);
+  const regs = engine.shardRegistrations(index, defaults);
+  assert.ok(regs.length > 2, 'no scriptlet registrations');
+  for (const r of regs) {
+    assert.deepEqual(r.js, [index.bundles?.[r.id]?.file], `${r.id} injects ${r.js.length} files`);
+    assert.match(r.js[0], /^generated\/scriptlets\/bundle\.[^/]+\.js$/);
+    assert.deepEqual(engine.shardParts(index, r.js), r.parts, r.id);
+  }
+  // www.youtube.com is matched by its bucket and by the broad registration. In a sandboxed
+  // frame there, Chrome logged 8 "Blocked script execution" errors (5 + 3 files); now 2.
+  const onYouTube = regs.filter((r) =>
+    r.matches().some((p) => p === '*://*/*' || p === '*://*.youtube.com/*'),
+  );
+  assert.equal(onYouTube.length, 2);
+  assert.equal(onYouTube.flatMap((r) => r.js).length, 2);
+  assert.ok(onYouTube.flatMap((r) => r.parts).length > 2, 'the parts are what it used to inject');
 });

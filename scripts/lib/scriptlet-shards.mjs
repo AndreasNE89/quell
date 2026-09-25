@@ -21,6 +21,11 @@
 // another, as matchScriptlets does. Exceptions are copied into every file whose rules they can
 // meet, since a bucket registration and the broad one run separately.
 //
+// With the default lists on, each registration injects one bundle instead: its data files and
+// runtime joined into a single file (planScriptletBundles, joinScriptletBundle). The registrations
+// reach sandboxed about:blank frames too, and there Chrome logs an error for every file it may
+// not run, so fewer files means less console noise on pages that make such frames (YouTube).
+//
 // Keys and semantics are those of src/shared/hostname.ts (passed in as `host`), so a page gets
 // what matchScriptlets would give it: www-stripped suffix matching, entity matching, and
 // per-rule `~domain` exclusions.
@@ -289,4 +294,53 @@ export function buildScriptletShards(byList, listOrder, host, opts = {}) {
   files.push({ path: index.fallback, content: pushScript(runtimeKey, '{fallback:1}') });
 
   return { index, runtimeKey: { key: runtimeKey, version }, files, stats };
+}
+
+/**
+ * Bundle names for the registrations the default lists produce: `registrations` is what
+ * shardRegistrations (src/engine/scriptlet-shards.ts) gives for them. The service worker uses a
+ * bundle only for the exact `parts` it was made from, so any other set of lists falls back to
+ * registering the parts. A name is derived from its parts, whose own names are content-addressed,
+ * so the worker can still tell registrations apart by file name alone.
+ *
+ * @param {{ id: string, parts: string[] }[]} registrations
+ * @param {string} idPrefix registration id prefix, left out of the file name
+ * @returns {Record<string, { file: string, parts: string[] }>}
+ */
+export function planScriptletBundles(registrations, idPrefix) {
+  const bundles = {};
+  for (const r of registrations) {
+    const label = r.id.startsWith(idPrefix) ? r.id.slice(idPrefix.length) : r.id;
+    const hash = createHash('sha256').update(r.parts.join('\n')).digest('hex').slice(0, 12);
+    bundles[r.id] = { file: `${SHARD_DIR}/bundle.${label}.${hash}.js`, parts: [...r.parts] };
+  }
+  return bundles;
+}
+
+const STRICT_DIRECTIVE = /^\s*(['"])use strict\1;?[ \t]*\r?\n?/;
+
+/**
+ * One classic script that runs `texts` (data files, then the runtime) exactly as Chrome runs
+ * them back to back. The runtime starts with a "use strict" directive, which only counts at the
+ * start of a script, so it moves to the top: the data files are plain calls that behave the
+ * same either way. A data file cannot bring its own directive, since the runtime after it would
+ * then be strict in one form and not in the other.
+ *
+ * @param {string[]} texts
+ * @returns {string}
+ */
+export function joinScriptletBundle(texts) {
+  if (!texts.length) throw new Error('a bundle needs at least the runtime');
+  const last = texts.length - 1;
+  texts.forEach((t, i) => {
+    if (i < last && STRICT_DIRECTIVE.test(t)) throw new Error(`bundle part ${i} is strict; only the runtime may be`);
+  });
+  const directive = STRICT_DIRECTIVE.exec(texts[last]);
+  const body = texts.map((t, i) => {
+    let s = i === last && directive ? t.slice(directive[0].length) : t;
+    s = s.replace(/\s+$/, '');
+    // A part that does not end its last statement would swallow the next one's `(`.
+    return i < last && s && !s.endsWith(';') ? `${s};` : s;
+  });
+  return `${directive ? '"use strict";\n' : ''}${body.filter(Boolean).join('\n')}\n`;
 }

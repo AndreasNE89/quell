@@ -19,6 +19,7 @@ import {
 } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { joinScriptletBundle } from './lib/scriptlet-shards.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -46,7 +47,8 @@ const COMMON = {
 const ENTRIES = [
   ['background/service-worker.ts', 'background.js', 'esm'],
   ['content/content.ts', 'content.js', 'iife'],
-  // List scriptlets: the last file of every generated/scriptlets/ registration and fallback.
+  // List scriptlets: the last file of every generated/scriptlets/ registration and fallback, and
+  // the tail of every bundle (writeScriptletBundles).
   // Built twice because Chrome injects one file only once per document, and a page can match a
   // host bucket and the broad (entity) registration at once (src/engine/scriptlet-shards.ts).
   ['content/scriptlets-runtime.ts', 'scriptlets-runtime.js', 'iife'],
@@ -225,6 +227,41 @@ function copyStatic() {
   // weight nothing ever loads. It stays in src/generated for local inspection.
 }
 
+/**
+ * The scriptlet bundles compile-filters named in scriptlet-shards.json: each default-list
+ * registration's data files and runtime as one file, so Chrome logs one "Blocked script
+ * execution" error per registration in a script-less sandboxed frame instead of one per file
+ * (scripts/lib/scriptlet-shards.mjs). Written here because they end with this build's runtime,
+ * minified for the store. `lenient` skips a bundle whose runtime is not built yet: in watch mode
+ * each runtime entry rewrites the bundles once its own file is out.
+ */
+function writeScriptletBundles({ lenient = false } = {}) {
+  const index = JSON.parse(readFileSync(join(GEN, 'scriptlet-shards.json'), 'utf8'));
+  for (const bundle of Object.values(index.bundles ?? {})) {
+    const paths = bundle.parts.map((p) => (p.startsWith('generated/') ? join(SRC, p) : join(DIST, p)));
+    if (lenient && !paths.every((p) => existsSync(p))) continue;
+    const texts = paths.map((p) => readFileSync(p, 'utf8').split('\r\n').join('\n'));
+    const out = join(DIST, bundle.file);
+    mkdirSync(dirname(out), { recursive: true });
+    writeFileSync(out, joinScriptletBundle(texts));
+  }
+}
+
+/** Watch mode: a rebuilt runtime must reach the bundles that carry it. */
+const scriptletBundlesOnRebuild = {
+  name: 'scriptlet-bundles',
+  setup(b) {
+    b.onEnd((result) => {
+      if (result.errors.length) return;
+      try {
+        writeScriptletBundles({ lenient: true });
+      } catch (e) {
+        console.error('[scriptlet-bundles]', e);
+      }
+    });
+  },
+};
+
 async function run() {
   assertGenerated();
   ensureExtPayLocalConfig();
@@ -237,6 +274,7 @@ async function run() {
     entryPoints: [join(SRC, src)],
     outfile: join(DIST, out),
     format,
+    ...(watch && src === 'content/scriptlets-runtime.ts' ? { plugins: [scriptletBundlesOnRebuild] } : {}),
   }));
 
   if (watch) {
@@ -249,6 +287,7 @@ async function run() {
     await Promise.all(configs.map((c) => build(c)));
     buildManifest();
     copyStatic();
+    writeScriptletBundles();
     const mode = store ? 'store' : 'dev';
     console.log(
       `\nBuilt unpacked extension → dist/  [${mode}]  (chrome://extensions → Load unpacked)`,

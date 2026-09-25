@@ -16,6 +16,7 @@ import type {
   CosmeticResponse,
   ScriptletsResponse,
   PopupData,
+  SiteToggleData,
   ListsData,
   StatsData,
   Settings,
@@ -117,6 +118,7 @@ import {
   SCRIPTLET_SHARD_ID_PREFIX,
   SCRIPTLET_RUNTIME_FILE,
   shardRegistrations,
+  shardParts,
   planShardInjection,
   type ShardIndex,
 } from '../engine/scriptlet-shards.js';
@@ -266,11 +268,11 @@ async function syncAllowlist(settings: Settings): Promise<void> {
   const wantBand = addRules.map(bandKey).sort().join(',');
   if (liveBand === wantBand) return;
 
-  try {
-    await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds, addRules });
-  } catch (e) {
-    console.error('[StampStack] updateDynamicRules (allowlist) failed', e);
-  }
+  // Rejects rather than logs: Chrome applies an update whole or not at all, so a failure means
+  // network blocking for these hosts is unchanged, and a caller that just changed the allowlist
+  // must say so (handleToggleSite). A long profile path on Windows (MAX_PATH under
+  // `DNR Extension Rules/`) is one way to get "Internal error while updating dynamic rules."
+  await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds, addRules });
 }
 
 /**
@@ -446,9 +448,10 @@ async function liveShardFiles(): Promise<Map<string, string[]>> {
 /**
  * List scriptlets as document_start MAIN-world content scripts (REVIEW_2026-09-24 B2): one per
  * host bucket plus one broad script for entity rules, each carrying the enabled lists' data
- * files and the runtime. Before this they were fetched by message and injected with
- * executeScript, which landed after the page's inline <head> scripts, too late for most
- * anti-adblock defusers. `ids` is empty while paused, which unregisters them all.
+ * files and the runtime, as one bundled file when the default lists are on. Before this they
+ * were fetched by message and injected with executeScript, which landed after the page's inline
+ * <head> scripts, too late for most anti-adblock defusers. `ids` is empty while paused, which
+ * unregisters them all.
  */
 async function syncScriptletShards(ids: string[], excludeMatches: string[]): Promise<void> {
   const desired = shardRegistrations(SHARDS, ids).map(
@@ -459,7 +462,9 @@ async function syncScriptletShards(ids: string[], excludeMatches: string[]): Pro
       excludeMatches,
       runAt: 'document_start',
       // about:blank / srcdoc frames a page makes for itself (friendly-iframe ads) run as their
-      // creator's origin, so they match and get their host's rules.
+      // creator's origin, so they match and get their host's rules. Sandboxed ones without
+      // `allow-scripts` match too, and Chrome logs one "Blocked script execution" error there
+      // per file: hence the bundles (shardRegistrations).
       matchOriginAsFallback: true,
       allFrames: true,
       world: 'MAIN',
@@ -612,7 +617,10 @@ async function applyAll(
   const lic = license ?? (await loadLicense());
   await Promise.all([
     syncRulesets(settings),
-    syncAllowlist(settings),
+    // A resync has no one to tell; the next wake tries again.
+    syncAllowlist(settings).catch((e) =>
+      console.error('[StampStack] updateDynamicRules (allowlist) failed', e),
+    ),
     syncRegisteredScripts(settings),
     syncDarkModeScripts(settings, lic),
   ]);
@@ -1073,10 +1081,11 @@ async function handleScriptlets(
   if (!plan) return { allowlisted: false, injected: false };
   let groups = plan.registrations;
   if (live) {
-    groups = groups.map((g) => ({
-      id: g.id,
-      files: g.files.filter((f) => !(live.get(g.id) ?? []).includes(f)),
-    }));
+    groups = groups.map((g) => {
+      // A registered bundle already ran every data file inside it.
+      const ran = shardParts(SHARDS, live.get(g.id) ?? []);
+      return { id: g.id, files: g.files.filter((f) => !ran.includes(f)) };
+    });
   }
   const files = groups.flatMap((g) => g.files);
   if (!files.length) return { allowlisted: false, injected: false };
@@ -1248,37 +1257,48 @@ async function handleSponsorCategorySet(
   return handleSponsorCategoriesGet();
 }
 
-async function handleToggleSite(hostname: string, enabled: boolean): Promise<PopupData> {
+/** The allowlist after switching blocking on (`enabled`) or off for `host`. */
+function toggledAllowlist(allowlist: string[], host: string, enabled: boolean): string[] {
+  const set = new Set(allowlist.map(normalizeHostname).filter((h) => isSafeAllowlistHost(h)));
+  if (enabled) {
+    // Deleting the exact host is not enough: a parent entry (example.com) also allowlists
+    // sub.example.com, so the toggle would spring straight back with no explanation. Drop
+    // every entry that covers this host.
+    for (const h of [...set]) {
+      if (isAllowlistedHost(host, [h])) set.delete(h);
+    }
+  } else if (isSafeAllowlistHost(host)) set.add(host);
+  return [...set];
+}
+
+async function handleToggleSite(hostname: string, enabled: boolean): Promise<SiteToggleData> {
   const host = normalizeHostname(hostname);
-  await mutateSettings((s) => {
-    const set = new Set(
-      s.allowlist.map(normalizeHostname).filter((h) => isSafeAllowlistHost(h)),
-    );
-    if (enabled) {
-      // Deleting the exact host is not enough: a parent entry (example.com) also allowlists
-      // sub.example.com, so the toggle would spring straight back with no explanation. Drop
-      // every entry that covers this host.
-      for (const h of [...set]) {
-        if (isAllowlistedHost(host, [h])) set.delete(h);
-      }
-    } else if (isSafeAllowlistHost(host)) set.add(host);
-    s.allowlist = [...set];
+  // Chrome first, storage second, in one settings-chain step. Stored first, a refused
+  // updateDynamicRules left the popup saying blocking was off for the site while every request
+  // was still blocked, and each wake retried the refused change. Now a refusal stores nothing
+  // and the answer says the switch did not take effect.
+  const applied = await withSettings(async (s) => {
+    const next = toggledAllowlist(s.allowlist, host, enabled);
+    try {
+      await syncAllowlist({ ...s, allowlist: next });
+    } catch (e) {
+      console.error('[StampStack] allowlist DNR sync failed; the site switch did not apply', e);
+      return false;
+    }
+    s.allowlist = next;
+    await saveSettings(s);
+    return true;
   });
-  // Settle these independently: they are unrelated layers, and one failing should not cost the
-  // user the other. Defensive rather than load-bearing — syncRegisteredScripts and syncAllowlist
-  // both swallow their own errors today, so neither can reject and reach the caller. Kept so
-  // that stops being something the caller has to rely on, and so a failure is attributed to the
-  // layer it came from instead of vanishing into one shared catch.
-  const [allowlistResult, scriptsResult] = await withSettings((s) =>
-    Promise.allSettled([syncAllowlist(s), syncRegisteredScripts(s)]),
-  );
-  if (allowlistResult.status === 'rejected') {
-    console.error('[StampStack] allowlist DNR sync failed', allowlistResult.reason);
+  if (applied) {
+    // Element hiding and script patches follow the stored allowlist. syncRegisteredScripts
+    // keeps a working registration when Chrome refuses one; the catch attributes anything else.
+    try {
+      await withSettings((s) => syncRegisteredScripts(s));
+    } catch (e) {
+      console.error('[StampStack] cosmetic registration sync failed', e);
+    }
   }
-  if (scriptsResult.status === 'rejected') {
-    console.error('[StampStack] cosmetic registration sync failed', scriptsResult.reason);
-  }
-  return handlePopupGet();
+  return { ...(await handlePopupGet()), applied };
 }
 
 /**

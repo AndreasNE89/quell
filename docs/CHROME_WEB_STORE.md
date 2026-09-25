@@ -74,7 +74,7 @@ These steps require your Google account, developer registration, and (usually) p
 ### Product / listing
 
 - [ ] **Upload package:** `release/stampstack-<version>.zip` (Package tab) - the path `npm run package` printed
-- [ ] **Item name:** StampStack
+- [ ] **Item name:** StampStack — Ad & Tracker Blocker (from the package: `extName` in `src/_locales/*/messages.json`)
 - [ ] **Summary:** from [store/LISTING.md](../store/LISTING.md) (≤132 chars)
 - [ ] **Description:** from LISTING.md
 - [ ] **Category:** Privacy & Security

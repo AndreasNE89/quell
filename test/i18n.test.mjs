@@ -94,11 +94,38 @@ test('every __MSG_ key in the manifest exists in every locale', () => {
   // but not defined"); missing from another locale, users of that language quietly get the
   // English description instead.
   const keys = [...readFileSync('src/manifest.json', 'utf8').matchAll(/__MSG_(\w+)__/g)].map((m) => m[1]);
-  assert.ok(keys.length > 0, 'expected the manifest to use the catalog');
+  assert.ok(keys.includes('extName'), 'the manifest name must come from the catalog');
+  assert.ok(keys.includes('extDescription'), 'the manifest description must come from the catalog');
   for (const locale of locales) {
     const cat = catalog(locale);
     const missing = keys.filter((k) => !(k in cat));
     assert.deepEqual(missing, [], `${locale} is missing manifest messages`);
+  }
+});
+
+test('the store name comes from the package and matches the published listing', () => {
+  // The dashboard shows the manifest name as "Title from package"; there is no separate field to
+  // correct it in. 2.2.3 was uploaded with this English name, so a later package that drifted
+  // from it would rename the listing without anyone deciding to.
+  const man = JSON.parse(readFileSync('src/manifest.json', 'utf8'));
+  assert.equal(man.name, '__MSG_extName__');
+  assert.equal(catalog(DEFAULT_LOCALE).extName.message, 'StampStack — Ad & Tracker Blocker');
+  // The toolbar tooltip is not the store name: it stays the short brand.
+  assert.equal(man.action.default_title, 'StampStack');
+  for (const locale of locales) {
+    const name = catalog(locale).extName.message;
+    // Chrome and the Web Store refuse a name over 75 characters.
+    assert.ok([...name].length <= 75, `${locale}: extName is ${[...name].length} characters`);
+    assert.ok(name.startsWith('StampStack — '), `${locale}: extName must keep the brand prefix`);
+  }
+  // The listing docs quote the name for whoever fills in the dashboard; keep them in step.
+  const listing = { en: 'store/LISTING.md', zh_CN: 'store/LISTING-zh_CN.md', zh_TW: 'store/LISTING-zh_TW.md' };
+  for (const [locale, file] of Object.entries(listing)) {
+    if (!locales.includes(locale) || !existsSync(file)) continue;
+    const md = readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
+    const at = md.search(/\n## [^\n]*Item name[^\n]*\n/);
+    const quoted = at < 0 ? null : md.slice(at).match(/\n```[^\n]*\n([\s\S]*?)\n```/)?.[1];
+    assert.equal(quoted, catalog(locale).extName.message, `${file} quotes a different item name`);
   }
 });
 

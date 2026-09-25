@@ -56,6 +56,13 @@ export interface ShardIndexList {
   broad: { file: string; rules: boolean; keys: string } | null;
 }
 
+/** One file that holds a registration's data files and its runtime, joined at build time. */
+export interface ShardBundle {
+  file: string;
+  /** The files it stands in for, in injection order. */
+  parts: string[];
+}
+
 /** src/generated/scriptlet-shards.json */
 export interface ShardIndex {
   version: string;
@@ -63,6 +70,11 @@ export interface ShardIndex {
   buckets: number;
   fallback: string;
   lists: Record<string, ShardIndexList>;
+  /**
+   * Registration id → its bundle for the lists that are on by default (scripts/build.mjs joins
+   * the bytes). Absent in indexes built without one, which then register their parts.
+   */
+  bundles?: Record<string, ShardBundle>;
 }
 
 function splitKeys(keys: string): string[] {
@@ -155,10 +167,25 @@ export function shardMatchPattern(key: string): string {
 
 export interface ShardRegistration {
   id: string;
-  /** Enabled lists' data files, then the runtime. */
+  /** What Chrome is asked to inject: the registration's bundle when it holds exactly `parts`. */
   js: string[];
+  /** Enabled lists' data files, then the runtime. */
+  parts: string[];
   /** Built only when the registration has to be written. */
   matches: () => string[];
+}
+
+/**
+ * The bundle stands in for `parts` only when it holds exactly those files. Chrome runs a
+ * registration's files one by one, and in a sandboxed frame without `allow-scripts` every one
+ * of them fails with its own console error ("Blocked script execution in 'about:blank'…").
+ * matchOriginAsFallback is what reaches those frames, and chrome.scripting cannot leave
+ * sandboxed frames out, so one file per registration is the least noise a page can get.
+ * The bundle's name is derived from its parts, so `js` still decides `matches`.
+ */
+function injected(index: ShardIndex, id: string, parts: string[]): string[] {
+  const bundle = index.bundles?.[id];
+  return bundle && bundle.parts.join('\n') === parts.join('\n') ? [bundle.file] : parts;
 }
 
 /**
@@ -172,26 +199,37 @@ export function shardRegistrations(index: ShardIndex, enabled: string[]): ShardR
   for (let b = 0; b < index.buckets; b++) {
     const withFile = lists.filter((id) => index.lists[id].buckets[b]);
     if (!withFile.some((id) => index.lists[id].buckets[b].keys)) continue;
+    const id = `${SCRIPTLET_SHARD_ID_PREFIX}${b}`;
+    const parts = [...withFile.map((l) => index.lists[l].buckets[b].file), SCRIPTLET_RUNTIME_FILE];
     out.push({
-      id: `${SCRIPTLET_SHARD_ID_PREFIX}${b}`,
-      js: [...withFile.map((id) => index.lists[id].buckets[b].file), SCRIPTLET_RUNTIME_FILE],
+      id,
+      js: injected(index, id, parts),
+      parts,
       matches: () => [
         ...new Set(
-          withFile.flatMap((id) => splitKeys(index.lists[id].buckets[b].keys)).map(shardMatchPattern),
+          withFile.flatMap((l) => splitKeys(index.lists[l].buckets[b].keys)).map(shardMatchPattern),
         ),
       ],
     });
   }
   const broad = lists.filter((id) => index.lists[id].broad);
   if (broad.some((id) => index.lists[id].broad?.rules)) {
+    const parts = [...broad.map((l) => index.lists[l].broad!.file), SCRIPTLET_BROAD_RUNTIME_FILE];
     out.push({
       id: SCRIPTLET_BROAD_ID,
-      js: [...broad.map((id) => index.lists[id].broad!.file), SCRIPTLET_BROAD_RUNTIME_FILE],
+      js: injected(index, SCRIPTLET_BROAD_ID, parts),
+      parts,
       // Entities (`example.*`) have no match pattern; the file checks the host before parsing.
       matches: () => ['*://*/*'],
     });
   }
   return out;
+}
+
+/** The data and runtime files behind a registration's `js`, its bundle opened up. */
+export function shardParts(index: ShardIndex, js: string[]): string[] {
+  const bundles = Object.values(index.bundles ?? {});
+  return js.flatMap((f) => bundles.find((b) => b.file === f)?.parts ?? [f]);
 }
 
 interface ShardLookup {

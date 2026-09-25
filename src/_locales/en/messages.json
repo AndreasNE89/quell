@@ -2,6 +2,9 @@
   "extDescription": {
     "message": "Blocks ads and trackers. See which known trackers a page contacts, hide anything with a click, and keep blocking on if sites break."
   },
+  "extName": {
+    "message": "StampStack — Ad & Tracker Blocker"
+  },
   "options_add": {
     "message": "Add"
   },
@@ -366,6 +369,24 @@
       "host": {
         "content": "$1",
         "example": "10.0.0"
+      }
+    }
+  },
+  "options_site_rule_not_applied": {
+    "message": "Chrome did not accept the change, so blocking is still on for “$HOST$”. Nothing was saved. Try again.",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
+  },
+  "options_site_rule_remove_not_applied": {
+    "message": "Chrome did not accept the change, so blocking is still off for “$HOST$”. Try again.",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "example.com"
       }
     }
   },
@@ -806,6 +827,12 @@
   },
   "popup_site_toggle_failed": {
     "message": "Could not change this site — see Settings"
+  },
+  "popup_site_toggle_not_applied_off": {
+    "message": "Chrome did not accept that — blocking is still on"
+  },
+  "popup_site_toggle_not_applied_on": {
+    "message": "Chrome did not accept that — blocking is still off"
   },
   "popup_skip_sponsor_segments": {
     "message": "Skip sponsor segments"

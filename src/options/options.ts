@@ -10,6 +10,7 @@ import type {
   DarkModeSiteOverride,
   SiteRulesData,
   SiteFixLevel,
+  SiteToggleData,
   CustomFiltersData,
   SponsorCategoriesData,
 } from '../shared/types.js';
@@ -446,7 +447,15 @@ async function loadSiteRules(): Promise<void> {
     clear.textContent = msg('options_remove');
     clear.addEventListener('click', async () => {
       if (row.kind === 'allowlist') {
-        await send({ type: 'popup:toggleSite', hostname: row.host, enabled: true });
+        const r = (await send({
+          type: 'popup:toggleSite',
+          hostname: row.host,
+          enabled: true,
+        })) as SiteToggleData | null;
+        // The row stays: Chrome refused, so the site is still unblocked.
+        if (r?.applied === false) {
+          $('siteRuleError').textContent = msg('options_site_rule_remove_not_applied', [row.host]);
+        }
       } else {
         await send({ type: 'sitefix:set', hostname: row.host, level: null });
       }
@@ -476,7 +485,17 @@ $<HTMLFormElement>('siteRuleForm').addEventListener('submit', async (e) => {
   }
   const choice = $<HTMLSelectElement>('siteRuleLevel').value;
   if (choice === 'allowlist') {
-    await send({ type: 'popup:toggleSite', hostname: host, enabled: false });
+    const r = (await send({
+      type: 'popup:toggleSite',
+      hostname: host,
+      enabled: false,
+    })) as SiteToggleData | null;
+    if (r?.applied === false) {
+      // Nothing was stored. Keep the entry so trying again is one click.
+      error.textContent = msg('options_site_rule_not_applied', [host]);
+      input.focus();
+      return;
+    }
   } else {
     await send({ type: 'sitefix:set', hostname: host, level: choice as SiteFixLevel });
   }

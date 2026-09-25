@@ -208,6 +208,7 @@ export type Message =
    */
   | { type: 'scriptlets:get'; hostname: string; topHost?: string | null; registered?: boolean }
   | { type: 'popup:get' }
+  /** Popup switch and Options site rules. Answered with SiteToggleData. */
   | { type: 'popup:toggleSite'; hostname: string; enabled: boolean }
   | { type: 'popup:setPaused'; paused: boolean }
   | { type: 'report:get' }
@@ -295,6 +296,15 @@ export interface PopupData {
   youtubeBlockSponsored: boolean;
   youtubeBlockShorts: boolean;
   youtubeSponsorBlock: boolean;
+}
+
+/**
+ * Answer to `popup:toggleSite`. `applied: false` means Chrome refused the allowlist rule change,
+ * so the switch did not take effect: nothing was stored, and the rest of the data describes the
+ * site as it still is.
+ */
+export interface SiteToggleData extends PopupData {
+  applied: boolean;
 }
 
 export interface YoutubeOptionsData {

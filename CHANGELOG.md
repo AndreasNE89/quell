@@ -2,21 +2,27 @@
 
 Written for users, not for the commit log. Internal refactors and test-only work are omitted.
 
-## Unreleased
+## 2.3.0
 
+- **Pages that would not load now load.** Some filters are written to block one kind of
+  content, such as a page's scripts or images. About 135 of them also blocked the page itself,
+  so Chrome showed "This page has been blocked by an extension" instead. It happened on any
+  page with `/reklame/` (Norwegian for "advertising") or `-banner-ads-` in its address, on
+  advertiser sites such as ads.google.com, ads.microsoft.com and ads.tiktok.com, and on
+  newsletter links that pass through a click-counting address first. An EasyList China filter
+  for 57 sites also blocked every link leaving them. uBlock Origin does not block whole pages
+  for these filters, and StampStack no longer does either.
+- **Scam and malware blocks now stop the right page.** Some of them blocked links leaving a bad
+  site instead of the bad site itself, and did nothing when you typed its address or opened it
+  from a bookmark. A few blocked the real site they were written to protect: discord.gift would
+  not open when typed or clicked on discord.com.
 - **Fixed: many news sites broke because of StampStack.** A script patch meant to stop one ad
   script on arstechnica.com, nypost.com, nbcnews.com, howtogeek.com and about 2,400 other
   sites also took basic page functions away from every other script on the page, such as
   creating elements, reading cookies and listening for events. Those functions now keep
   working, and only the targeted script is stopped. Some rules also silently dropped a page's
   own "on load" handler. They no longer do.
-- **Fixed: element hiding and YouTube ad blocking could quietly switch off.** Chrome refused
-  all of StampStack's element hiding, and the YouTube ad blocking with it, in two cases: with
-  the Chinese filter list on (it is turned on automatically when the browser is set to
-  Chinese), or after adding a site such as `10.0.0` in Settings. The Chinese list's broken
-  entry is now skipped, and if Chrome ever turns down an update, the previous working setup
-  stays in place.
-- **Fixed: script patches now run before the page does.** Filter-list script patches that stop
+- **Script patches now run before the page does.** Filter-list script patches that stop
   anti-adblock walls and popups, such as the one for worldfreeware.com, used to arrive 30 to
   200 milliseconds after a page started, and often after it had finished loading. By then most
   had nothing left to stop. Chrome now runs them before the page's first script, including in
@@ -24,11 +30,35 @@ Written for users, not for the commit log. Internal refactors and test-only work
   was asleep. Rules written for a site name across all its endings, such as `yts.*`, work this
   way too. Patches for frames from other sites still arrive a little later, because StampStack
   first checks whether you switched off the page they are on.
-- Script patches no longer leave anything behind on the page that a site could use to spot
-  StampStack or switch its patches off.
-- Settings > Add a site now says why it cannot use an entry, such as an incomplete address
-  like `10.0.0` or `192.168.1`, and keeps what you typed so you can correct it. It used to
-  clear the field and do nothing. A pasted web address now adds its site.
+- Because script patches now also reach the blank frames a page makes for itself, Chrome's
+  developer console can show "Blocked script execution in 'about:blank' because the document's
+  frame is sandboxed" on pages whose blank frames are not allowed to run scripts: twice per such
+  frame on YouTube, once on most other sites. The message comes from StampStack. Nothing is
+  broken and nothing needs doing. Chrome gives extensions no way to skip those frames, so each
+  set of patches now reaches a page as a single file to keep the message to one line per set.
+- **Chinese installs keep their ad hiding.** With the Chinese filter list on, Chrome refused all
+  of StampStack's element hiding, and the YouTube ad blocking with it. StampStack turns that
+  list on by itself when the browser is set to Chinese. Adding a site such as `10.0.0` in
+  Settings did the same on any install. The Chinese list's broken entry is now skipped, and if
+  Chrome ever turns down an update, the previous working setup stays in place.
+- **A new look.** The icon is now a postage stamp with a postmark, in the same green as the rest
+  of StampStack. The old one was a small scene of "AD" cards under a "BLOCK" stamp, and at
+  toolbar size it turned into a smudge. The new one still reads as a stamp at 16 pixels, on
+  light and dark toolbars alike. The popup and Settings show it where the green dot used to be.
+  In the popup it goes grey whenever the current site is not being filtered, because StampStack
+  is paused or turned off for that site, just as the dot did. In Settings it goes grey while
+  StampStack is paused.
+- **Plainer words.** "Scriptlets" are now called script patches in the popup, in Settings and
+  in the breakage report email. The Settings subtitle says what StampStack is rather than how
+  it is built, and the filter-list notes say "element hiding" instead of "cosmetics". After the
+  first repair step, the panel used to say "Ads and scriptlets are still active". It meant ad
+  blocking, and now says so. Settings now calls the sponsor toggle "Skip sponsor segments", as
+  the popup already did, instead of "SponsorBlock skip".
+- The element picker highlights in StampStack's green instead of teal. Its outline now sits
+  exactly on the element under the pointer. It used to spill 4 pixels past the right and bottom
+  edges, so on a full-width bar the right-hand side of the outline was off-screen.
+- StampStack's name and description on the extensions page now appear in Simplified or
+  Traditional Chinese when your browser is set to either.
 - **Turning StampStack off for a site now follows the page you are on.** Switching off
   youtube.com used to also unblock YouTube videos embedded on every other site, with their ads
   and trackers. The same went for comment boxes and social widgets. Embeds on other sites now
@@ -37,6 +67,13 @@ Written for users, not for the commit log. Internal refactors and test-only work
   the same way. Two gaps remain because Chrome decides them by each frame's own address:
   general ad hiding inside a frame still follows the frame's own site, and a YouTube player
   on a site you switched off still has its ads blocked.
+- If Chrome refuses to switch blocking off or back on for a site, the popup now says the change
+  did not take effect and shows the site as it really is. It used to show the site as switched
+  off while blocking carried on. Settings > Add a site says so too, and keeps the address you
+  typed. This is rare.
+- Settings > Add a site now says why it cannot use an entry, such as an incomplete address
+  like `10.0.0` or `192.168.1`, and keeps what you typed so you can correct it. It used to
+  clear the field and do nothing. A pasted web address now adds its site.
 - **YouTube:** ads that get past the blocking are now skipped for as long as the tab stays
   open. The skip helper used to stop 10 minutes after you opened YouTube.
 - **More ads get a silent stand-in instead of playing.** Audio and video ads on sites such as
@@ -49,11 +86,6 @@ Written for users, not for the commit log. Internal refactors and test-only work
     ads were hidden at all, and on seznamzpravy.cz general ad hiding was off.
   - An exception meant for WordPress.com sites let the Jetpack stats tracker (stats.wp.com)
     load on every website. A LastPass ad frame was also allowed everywhere.
-  - Some scam and malware blocks blocked links leaving a bad site instead of the bad site
-    itself, and did nothing when you typed its address or opened it from a bookmark.
-  - About 135 filters that leave out one kind of content, such as images or scripts, also
-    blocked whole pages. A filter for `-banner-ads-` blocked any page with that phrase in its
-    address, and an EasyList China filter for 57 sites blocked every link leaving them.
 - Exceptions that EasyList limits to the search results of Google, DuckDuckGo and Yandex used
   to switch general ad hiding off across the whole site, Google News included. They now apply
   to the results pages only, where general hiding could hide real results. A few similar
@@ -83,6 +115,8 @@ Written for users, not for the commit log. Internal refactors and test-only work
     no effect before.
   - Rules that set a value on every object of a page no longer show up as an extra entry when
     the page lists an object's contents, which could break the page's own scripts.
+- Script patches no longer leave anything behind on the page that a site could use to spot
+  StampStack or switch its patches off.
 - Most of EasyList China's and CJX Annoyance's `:-abp-has()` and `:-abp-contains()` hiding
   rules now work. They were shipped but could never match.
 - More pattern-based filters now load, including EasyList's rule for rotating ad scripts and
@@ -96,24 +130,11 @@ Written for users, not for the commit log. Internal refactors and test-only work
   longer turns dark mode off everywhere.
 - Installs that started on the very first version no longer keep a leftover script patch that
   ran on every page.
-- **A new icon.** A postage stamp with a postmark, in the same green as the rest of StampStack.
-  The old one was a small scene of "AD" cards under a "BLOCK" stamp, and at toolbar size it
-  turned into a smudge. The new one still reads as a stamp at 16 pixels, on light and dark
-  toolbars alike.
-- The popup and Settings show that icon where the green dot used to be. In the popup it goes
-  grey whenever the current site is not being filtered, because StampStack is paused or turned
-  off for that site, just as the dot did. In Settings it goes grey while StampStack is paused.
-- **Plainer words.** "Scriptlets" are now called script patches in the popup, in Settings and
-  in the breakage report email. The Settings subtitle says what StampStack is rather than how
-  it is built, and the filter-list notes say "element hiding" instead of "cosmetics". After the
-  first repair step, the panel used to say "Ads and scriptlets are still active". It meant ad
-  blocking, and now says so. Settings now calls the sponsor toggle "Skip sponsor segments", as
-  the popup already did, instead of "SponsorBlock skip".
-- The element picker highlights in StampStack's green instead of teal. Its outline now sits
-  exactly on the element under the pointer. It used to spill 4 pixels past the right and bottom
-  edges, so on a full-width bar the right-hand side of the outline was off-screen.
-- StampStack's description on the extensions page now appears in Simplified or Traditional
-  Chinese when your browser is set to either.
+
+## 2.2.3
+
+- StampStack's name in the Chrome Web Store and on the extensions page is now
+  "StampStack — Ad & Tracker Blocker". Nothing else changed.
 
 ## 2.2.2
 

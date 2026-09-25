@@ -11,11 +11,11 @@ EasyList China turning itself on is part of the opening.
 
 ## 商品名稱 (Item name)
 
-"Title from package": the manifest `name`, the literal `StampStack`, in every language. The old
-localized name here ("StampStack — 廣告與追蹤器攔截") could never reach the store.
+"Title from package": the manifest `name`, which resolves to `extName` in
+`src/_locales/zh_TW/messages.json`. Edit it there and keep this copy identical. 22 characters.
 
 ```
-StampStack
+StampStack — 廣告與追蹤器攔截器
 ```
 
 ## 摘要 (Summary, ≤132 characters)

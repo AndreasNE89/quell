@@ -85,15 +85,21 @@ function assertScriptsValid(scripts) {
   }
 }
 
+/** What Chrome said when a long Windows profile path broke updateDynamicRules (diagnosis C11). */
+const DNR_INTERNAL_ERROR = 'Internal error while updating dynamic rules.';
+
 /**
  * Load a fresh service worker against a fake chrome.
  * `failRegistration` simulates chrome.scripting rejecting every payload; the returned
  * `failNext(ids)` rejects only the next payload for each listed script id.
+ * `refuseDynamicRules` makes every updateDynamicRules call reject, as Chrome does, without
+ * changing anything; the returned `refuseDynamicRules(bool)` switches that later.
  * `settings`, `dynamicRules` and `registered` seed state left behind by an earlier build.
  */
 async function bootServiceWorker({
   host,
   failRegistration = false,
+  refuseDynamicRules = false,
   settings,
   license,
   dynamicRules: seedRules = [],
@@ -112,6 +118,7 @@ async function bootServiceWorker({
   const executed = [];
   const registerLog = [];
   let rejectNext = new Set();
+  let refuseDynamic = refuseDynamicRules;
   // Every fake chrome call bumps this, so settle() can tell when the worker has gone quiet.
   let activity = 0;
   const rejectPayload = (scripts) => {
@@ -172,6 +179,8 @@ async function bootServiceWorker({
       },
       updateDynamicRules: async ({ removeRuleIds = [], addRules = [] }) => {
         activity++;
+        // Chrome applies an update whole or not at all.
+        if (refuseDynamic) throw new Error(DNR_INTERNAL_ERROR);
         dynamicRules = dynamicRules.filter((r) => !removeRuleIds.includes(r.id)).concat(addRules);
       },
       getEnabledRulesets: async () => enabledRulesets.slice(),
@@ -288,7 +297,21 @@ async function bootServiceWorker({
     session: () => sessionStore,
     fullReads: () => fullReads,
     failNext: (ids) => (rejectNext = new Set(ids)),
+    refuseDynamicRules: (on) => (refuseDynamic = on),
   };
+}
+
+/** Run `fn` with console.error captured; returns what was logged, one string per call. */
+async function capturingErrors(fn) {
+  const logged = [];
+  const origError = console.error;
+  console.error = (...args) => logged.push(args.map(String).join(' '));
+  try {
+    await fn();
+  } finally {
+    console.error = origError;
+  }
+  return logged;
 }
 
 const HOST = 'www.theguardian.com';
@@ -299,6 +322,7 @@ test('toggling blocking off writes the allowlist and an allowAllRequests rule', 
 
   const data = await sw.send({ type: 'popup:toggleSite', hostname: HOST, enabled: false });
   assert.ok(data, 'toggle must not answer null');
+  assert.equal(data.applied, true);
   assert.equal(data.allowlisted, true);
 
   // www is stripped, so the stored host also covers the bare domain.
@@ -331,10 +355,9 @@ test('the allowlisted host is excluded from generic cosmetics', async () => {
 });
 
 test('a cosmetic registration failure still leaves network blocking off for the site', async () => {
-  // Note what this does and does not prove. syncRegisteredScripts already swallows its own
-  // errors, so it cannot reject and the handler cannot answer null through this path — this
-  // passes with or without the allSettled change in handleToggleSite. What it does pin is that
-  // a cosmetic failure never costs the user the network allowlist, and that the failure is
+  // Note what this does and does not prove. syncRegisteredScripts swallows its own errors, so
+  // it cannot reject and the handler cannot answer null through this path. What this pins is
+  // that a cosmetic failure never costs the user the network allowlist, and that the failure is
   // invisible to them: nothing in the returned PopupData says cosmetics are stale, so element
   // hiding would continue on a site they just switched off with no way to tell.
   const sw = await bootServiceWorker({ host: HOST, failRegistration: true });
@@ -342,12 +365,90 @@ test('a cosmetic registration failure still leaves network blocking off for the 
 
   const data = await sw.send({ type: 'popup:toggleSite', hostname: HOST, enabled: false });
   assert.ok(data);
+  assert.equal(data.applied, true, 'the network switch did take effect');
   assert.equal(data.allowlisted, true);
   assert.deepEqual(sw.settings().allowlist, ['theguardian.com']);
   assert.equal(sw.rules().filter((r) => r.action?.type === 'allowAllRequests').length, 1);
   // The stale-cosmetics state is currently unreportable. If that ever becomes a field on
   // PopupData, this is the test that should start asserting it.
   assert.equal('cosmeticsStale' in data, false);
+});
+
+test('a switch Chrome refuses is reported as not applied, and nothing is stored (C11)', async () => {
+  // updateDynamicRules used to be logged and forgotten: the popup then said "off for this site"
+  // while every request was still blocked, so the user's way out silently did nothing.
+  const sw = await bootServiceWorker({ host: HOST });
+  await sw.settle();
+  const before = structuredClone(sw.script('quell-generic-cosmetic'));
+  sw.refuseDynamicRules(true);
+
+  let data;
+  const logged = await capturingErrors(async () => {
+    data = await sw.send({ type: 'popup:toggleSite', hostname: HOST, enabled: false });
+    await sw.settle();
+  });
+  assert.ok(data, 'the toggle must still answer');
+  assert.equal(data.applied, false);
+  assert.equal(data.allowlisted, false, 'the popup must show blocking as still on');
+  assert.equal(data.hostname, HOST);
+  assert.deepEqual(sw.settings()?.allowlist ?? [], [], 'a refused switch must not be stored');
+  assert.equal(sw.rules().filter((r) => r.action?.type === 'allowAllRequests').length, 0);
+  // Element hiding stays on too, so the layers agree with each other and with the popup.
+  assert.deepEqual(sw.script('quell-generic-cosmetic'), before);
+  assert.ok(logged.some((l) => l.includes(DNR_INTERNAL_ERROR)), 'the cause is logged');
+
+  // Chrome accepts it again: the same switch goes through.
+  sw.refuseDynamicRules(false);
+  const retry = await sw.send({ type: 'popup:toggleSite', hostname: HOST, enabled: false });
+  assert.equal(retry.applied, true);
+  assert.equal(retry.allowlisted, true);
+  assert.deepEqual(sw.settings().allowlist, ['theguardian.com']);
+  assert.equal(sw.rules().filter((r) => r.action?.type === 'allowAllRequests').length, 1);
+});
+
+test('turning blocking back on that Chrome refuses leaves the site switched off, and says so', async () => {
+  const sw = await bootServiceWorker({ host: HOST, settings: { allowlist: ['theguardian.com'] } });
+  await sw.settle();
+  assert.equal(sw.rules().filter((r) => r.action?.type === 'allowAllRequests').length, 1);
+  sw.refuseDynamicRules(true);
+
+  let data;
+  await capturingErrors(async () => {
+    data = await sw.send({ type: 'popup:toggleSite', hostname: HOST, enabled: true });
+  });
+  assert.equal(data.applied, false);
+  assert.equal(data.allowlisted, true, 'blocking is still off, and the popup says so');
+  assert.deepEqual(sw.settings().allowlist, ['theguardian.com']);
+  assert.equal(sw.rules().filter((r) => r.action?.type === 'allowAllRequests').length, 1);
+});
+
+test('Options > Add a site gets the same answer when Chrome refuses', async () => {
+  // Options sends popup:toggleSite with the host it validated; it must learn the rule is not in
+  // force so it can keep the entry and say why.
+  const sw = await bootServiceWorker({ host: HOST });
+  await sw.settle();
+  sw.refuseDynamicRules(true);
+  let data;
+  await capturingErrors(async () => {
+    data = await sw.send({ type: 'popup:toggleSite', hostname: 'news.example', enabled: false });
+  });
+  assert.equal(data.applied, false);
+  const rules = await sw.send({ type: 'sitefix:list' });
+  assert.deepEqual(rules.allowlist, [], 'the Settings list must not show a rule that is not in force');
+});
+
+test('a refused allowlist resync on wake is logged and does not stop the other layers', async () => {
+  const logged = await capturingErrors(async () => {
+    const sw = await bootServiceWorker({
+      host: HOST,
+      refuseDynamicRules: true,
+      settings: { allowlist: ['theguardian.com'] },
+    });
+    await sw.settle();
+    assert.ok(sw.script('quell-generic-cosmetic'), 'generic hiding was not registered');
+    assert.ok(sw.script('quell-scriptlets-youtube'), 'YouTube hooks were not registered');
+  });
+  assert.ok(logged.some((l) => l.includes('updateDynamicRules (allowlist) failed')));
 });
 
 test('toggling blocking back on removes the allowlist entry and the rule', async () => {
@@ -673,6 +774,9 @@ test('the 0.1.0 global scriptlet registration is removed on wake', async () => {
 
 const SHARDS = JSON.parse(readFileSync('src/generated/scriptlet-shards.json', 'utf8'));
 const shardScripts = (sw) => sw.scripts().filter((s) => s.id.startsWith('quell-sl-'));
+/** A registration's data files and runtime, its bundle opened up. */
+const partsOf = (s) =>
+  s.js.flatMap((f) => Object.values(SHARDS.bundles ?? {}).find((b) => b.file === f)?.parts ?? [f]);
 /** The registration that carries worldfreeware.com, whose `aopr, require` the review tested. */
 const worldfreeware = (sw) =>
   shardScripts(sw).find((s) => s.matches.includes('*://*.worldfreeware.com/*'));
@@ -693,11 +797,13 @@ test('list scriptlets are registered to run at document start, before the page (
     assert.equal(s.matchOriginAsFallback, true, s.id);
     assert.equal(s.persistAcrossSessions, true, s.id);
     assert.deepEqual(s.matches.filter((p) => !patternIsValid(p)), [], s.id);
-    assert.match(s.js.at(-1), /^scriptlets-runtime(-broad)?\.js$/, `${s.id} ends with the runtime`);
+    assert.match(partsOf(s).at(-1), /^scriptlets-runtime(-broad)?\.js$/, `${s.id} ends with the runtime`);
+    // One file: in a sandboxed frame without allow-scripts, Chrome logs an error per file.
+    assert.deepEqual(s.js, [SHARDS.bundles[s.id].file], `${s.id} injects its bundle`);
   }
   const hit = worldfreeware(sw);
   assert.ok(hit, 'worldfreeware.com is not matched by any registration');
-  assert.ok(hit.js.some((f) => f.startsWith('generated/scriptlets/ubo-filters.')));
+  assert.ok(partsOf(hit).some((f) => f.startsWith('generated/scriptlets/ubo-filters.')));
 
   // They follow the switches: the site's own switch, Pause, and the list toggle.
   await sw.send({ type: 'popup:toggleSite', hostname: 'worldfreeware.com', enabled: false });
@@ -708,7 +814,7 @@ test('list scriptlets are registered to run at document start, before the page (
   await sw.send({ type: 'lists:setEnabled', id: 'ubo-filters', enabled: false });
   await sw.settle();
   for (const s of shardScripts(sw)) {
-    assert.ok(!s.js.some((f) => f.includes('/ubo-filters.')), `${s.id} still carries a disabled list`);
+    assert.ok(!partsOf(s).some((f) => f.includes('/ubo-filters.')), `${s.id} still carries a disabled list`);
   }
   await sw.send({ type: 'popup:setPaused', paused: true });
   await sw.settle();
@@ -729,6 +835,7 @@ test('with every list on, the scriptlet registrations all parse and the runtime 
   const broad = shards.find((s) => s.id === 'quell-sl-broad');
   const bucket = shards.find((s) => s.id !== 'quell-sl-broad');
   assert.notEqual(broad.js.at(-1), bucket.js.at(-1));
+  assert.notEqual(partsOf(broad).at(-1), partsOf(bucket).at(-1));
   for (const s of shards) assert.deepEqual(s.matches.filter((p) => !patternIsValid(p)), [], s.id);
 });
 
@@ -790,7 +897,7 @@ test('a frame the registrations cannot serve gets one injection, into its own do
   assert.equal(call.injectImmediately, true);
   assert.equal(call.files.at(-1), 'scriptlets-runtime.js');
   assert.equal(call.files.at(-2), SHARDS.fallback, 'the runtime is told it is the fallback');
-  assert.ok(call.files.some((f) => worldfreeware(sw).js.includes(f)), 'the host\'s own bucket data');
+  assert.ok(call.files.some((f) => partsOf(worldfreeware(sw)).includes(f)), 'the host\'s own bucket data');
 });
 
 test('a frame on a switched-off or paused page gets nothing from the worker (B24)', async () => {
@@ -832,6 +939,32 @@ test('a frame the registrations serve gets nothing more, unless its registration
   } finally {
     console.error = origError;
   }
+});
+
+test('a registration left behind is filled in without re-running what a live bundle already ran', async () => {
+  // yts.mx has rules in its bucket and, through `yts.*`, in the broad registration.
+  const top = { frameId: 0, documentId: 'TOP', url: 'https://yts.mx/', tab: { id: 1, url: 'https://yts.mx/' } };
+  const msg = { type: 'scriptlets:get', hostname: 'yts.mx', topHost: 'yts.mx', registered: true };
+  const sw = await bootServiceWorker({ host: HOST });
+  await sw.settle();
+  const bucket = shardScripts(sw).find((s) => s.matches.includes('*://*.yts.mx/*'));
+  const broad = sw.script('quell-sl-broad');
+  assert.deepEqual(bucket.js, [SHARDS.bundles[bucket.id].file]);
+  // A restart finds the host's bucket in place and every other shard from an older build, and
+  // Chrome refuses their replacements: only the bucket is live.
+  const seeded = sw.scripts().map((s) =>
+    s.id.startsWith('quell-sl-') && s.id !== bucket.id ? { ...s, js: [`generated/scriptlets/${s.id}.old.js`] } : s,
+  );
+  const logged = await capturingErrors(async () => {
+    const broken = await bootServiceWorker({ host: HOST, registered: seeded, failRegistration: true });
+    await broken.settle();
+    assert.deepEqual(shardScripts(broken).map((s) => s.id), [bucket.id]);
+    assert.deepEqual(await broken.send(msg, top), { allowlisted: false, injected: true });
+    const [call] = broken.executed();
+    // The broad data only: the bucket's bundle ran its own data files at document start.
+    assert.deepEqual(call.files, [...partsOf(broad).slice(0, -1), SHARDS.fallback, 'scriptlets-runtime.js']);
+  });
+  assert.ok(logged.length > 0, 'the refused registrations were reported');
 });
 
 test('a host without scriptlet rules costs no injection', async () => {

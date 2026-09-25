@@ -2,6 +2,9 @@
   "extDescription": {
     "message": "攔截廣告與追蹤器。查看網頁連線到哪些已知追蹤器，一鍵隱藏任何礙眼的內容，網站出問題時也不必關閉攔截。"
   },
+  "extName": {
+    "message": "StampStack — 廣告與追蹤器攔截器"
+  },
   "options_add": {
     "message": "新增"
   },
@@ -366,6 +369,24 @@
       "host": {
         "content": "$1",
         "example": "10.0.0"
+      }
+    }
+  },
+  "options_site_rule_not_applied": {
+    "message": "Chrome 未接受此變更，「$HOST$」仍在攔截。沒有儲存任何內容，請再試一次。",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
+  },
+  "options_site_rule_remove_not_applied": {
+    "message": "Chrome 未接受此變更，「$HOST$」的攔截仍為關閉。請再試一次。",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "example.com"
       }
     }
   },
@@ -806,6 +827,12 @@
   },
   "popup_site_toggle_failed": {
     "message": "無法變更此網站 — 請看設定"
+  },
+  "popup_site_toggle_not_applied_off": {
+    "message": "Chrome 未接受此變更 — 仍在攔截"
+  },
+  "popup_site_toggle_not_applied_on": {
+    "message": "Chrome 未接受此變更 — 攔截仍為關閉"
   },
   "popup_skip_sponsor_segments": {
     "message": "略過贊助片段"

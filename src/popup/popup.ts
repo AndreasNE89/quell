@@ -6,6 +6,7 @@ import type {
   PageReport,
   PopupData,
   SiteFixLevel,
+  SiteToggleData,
 } from '../shared/types.js';
 import { nextSiteFix } from '../shared/site-fix.js';
 import type { BreakageReport } from '../shared/breakage-report.js';
@@ -110,6 +111,8 @@ function render(data: PopupData): void {
 
   el.siteToggle.checked = blockingHere;
   el.siteToggle.disabled = data.paused || !data.hostname;
+  // A warning belongs to the attempt that raised it; any fresh state replaces it.
+  el.siteToggleLabel.classList.remove('warn');
   if (!data.hostname) el.siteToggleLabel.textContent = msg('popup_not_available_on_this_page');
   else if (data.coveredBy)
     el.siteToggleLabel.textContent = msg('popup_blocking_off_via', [data.coveredBy]);
@@ -460,6 +463,24 @@ async function setSiteFix(level: SiteFixLevel | null): Promise<void> {
   promptReload();
 }
 
+/**
+ * Render a popup:toggleSite answer. Returns whether the switch took effect.
+ *
+ * Chrome can refuse the allowlist rule change. The worker then stores nothing and answers
+ * `applied: false` with the site as it still is, so the switch goes back to the truth and the
+ * note says the change did not happen, rather than showing blocking off while it is still on.
+ */
+function renderToggleResult(data: SiteToggleData, wantedBlocking: boolean): boolean {
+  current = data;
+  render(data);
+  if (data.applied !== false) return true;
+  el.siteToggleLabel.textContent = msg(
+    wantedBlocking ? 'popup_site_toggle_not_applied_on' : 'popup_site_toggle_not_applied_off',
+  );
+  el.siteToggleLabel.classList.add('warn');
+  return false;
+}
+
 el.repairNext.addEventListener('click', async () => {
   const step = el.repairNext.dataset['level'];
   // The bottom rung is the existing allowlist, not another fix level.
@@ -469,10 +490,15 @@ el.repairNext.addEventListener('click', async () => {
       type: 'popup:toggleSite',
       hostname: current.hostname,
       enabled: false,
-    })) as PopupData;
-    current = data;
-    render(data);
-    promptReload();
+    })) as SiteToggleData | null;
+    if (!data) {
+      el.siteToggleLabel.textContent = msg('popup_site_toggle_failed');
+      el.siteToggleLabel.classList.add('warn');
+      return;
+    }
+    if (renderToggleResult(data, false)) promptReload();
+    // The panel is where the user is looking; say it there too.
+    else el.repairHint.textContent = msg('popup_site_toggle_not_applied_off');
     return;
   }
   await setSiteFix(step === 'injection' ? 'injection' : 'cosmetics');
@@ -559,7 +585,7 @@ el.siteToggle.addEventListener('change', async () => {
   // A null answer used to reach render() and throw inside this async listener: no UI change, no
   // error, switch left claiming a state that was never applied. Not the cause of the 2.1.1 bug
   // (the click never reached this handler at all) but the same silence, one layer up.
-  const data = await sendWithRetry<PopupData>({
+  const data = await sendWithRetry<SiteToggleData>({
     type: 'popup:toggleSite',
     hostname: current.hostname,
     enabled: wanted,
@@ -570,10 +596,8 @@ el.siteToggle.addEventListener('change', async () => {
     el.siteToggleLabel.classList.add('warn');
     return;
   }
-  el.siteToggleLabel.classList.remove('warn');
-  current = data;
-  render(data);
-  promptReload();
+  // Nothing changed when Chrome refused, so there is nothing to reload for.
+  if (renderToggleResult(data, wanted)) promptReload();
 });
 
 el.pauseToggle.addEventListener('change', async () => {

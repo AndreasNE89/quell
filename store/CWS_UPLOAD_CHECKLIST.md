@@ -20,10 +20,11 @@ dashboard requires.
 
 ## Listing (paste)
 
-**Name**
+**Name** — nothing to paste. The dashboard shows "Title from package": `extName` in
+`src/_locales/*/messages.json` (see `store/LISTING.md`). In English:
 
 ```
-StampStack
+StampStack — Ad & Tracker Blocker
 ```
 
 **Summary** — nothing to paste. The dashboard shows "Summary from package": `extDescription` in

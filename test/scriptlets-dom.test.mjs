@@ -16,7 +16,7 @@ import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildScriptletShards } from '../scripts/lib/scriptlet-shards.mjs';
+import { buildScriptletShards, joinScriptletBundle } from '../scripts/lib/scriptlet-shards.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const ORIGIN = 'https://stampstack.test';
@@ -122,7 +122,8 @@ async function openWithRules(rules, html, files = {}, { pages = {}, fallback = f
     return route.fulfill({ status: 404, body: '' });
   });
   await page.addInitScript({
-    content: `${dataFiles(rules, { fallback })}\n${bundle}\n//# sourceURL=stampstack-scriptlets.js`,
+    // Joined the way scripts/build.mjs joins a registration's bundle, strict runtime included.
+    content: `${joinScriptletBundle([dataFiles(rules, { fallback }), bundle])}//# sourceURL=stampstack-scriptlets.js`,
   });
   await page.goto(url, { waitUntil: 'load' });
   return { context, page };

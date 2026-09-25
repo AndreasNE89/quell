@@ -43,11 +43,10 @@ const LEGACY_TEMP_PROFILE = join(tmpdir(), 'stampstack-cws-chrome-profile');
 const CDP_PORT = 9333;
 const CDP_URL = `http://127.0.0.1:${CDP_PORT}`;
 
-const NAME = 'StampStack';
 // The listing copy lives in one place each, so this script can never paste an older wording
-// over it: the summary is the manifest description (en `extDescription`, which the dashboard
-// shows as "Summary from package"), and the description is the fenced block under
-// "## Detailed description" in store/LISTING.md.
+// over it: the name and summary are the manifest's (en `extName` and `extDescription`, which the
+// dashboard shows as "Title from package" and "Summary from package"), and the description is
+// the fenced block under "## Detailed description" in store/LISTING.md.
 function listingBlock(heading) {
   const md = readFileSync(join(ROOT, 'store', 'LISTING.md'), 'utf8').replace(/\r\n/g, '\n');
   const at = md.indexOf(`\n## ${heading}\n`);
@@ -56,9 +55,11 @@ function listingBlock(heading) {
   return block[1].trim();
 }
 
-const SUMMARY = JSON.parse(
+const EN_MESSAGES = JSON.parse(
   readFileSync(join(ROOT, 'src', '_locales', 'en', 'messages.json'), 'utf8'),
-).extDescription.message;
+);
+const NAME = EN_MESSAGES.extName.message;
+const SUMMARY = EN_MESSAGES.extDescription.message;
 const DESCRIPTION = listingBlock('Detailed description');
 
 const HOMEPAGE = 'https://github.com/AndreasNE89/quell';
@@ -540,7 +541,7 @@ async function main() {
     log(`URL after upload step: ${report.draftUrl}`);
 
     if (await fillFirst(page, ['input[aria-label*="name" i]', 'input[name*="name" i]', 'input[placeholder*="name" i]'], NAME, 'name')) {
-      report.succeeded.push('Set name StampStack');
+      report.succeeded.push(`Set name ${NAME}`);
     }
     if (
       await fillFirst(

@@ -9,12 +9,15 @@ to the store art only. It does not appear in this copy or anywhere in the produc
 
 ## Item name
 
-The dashboard shows "Title from package". That is the manifest `name`, the literal `StampStack`,
-in every language.
+The dashboard shows "Title from package". That is the manifest `name`, which resolves to
+`extName` in `src/_locales/en/messages.json` (each locale has its own). Edit it there, not in
+the dashboard, and keep this copy identical. 33 characters; the store allows 75.
 
 ```
-StampStack
+StampStack — Ad & Tracker Blocker
 ```
+
+The toolbar tooltip (`action.default_title`) stays the short `StampStack`.
 
 ## Summary (≤132 characters)
 

@@ -17,7 +17,7 @@ Tiny cross-fixes are OK when they unblock a release.
 
 ## Before every store zip
 
-1. **Version bump** in `package.json` (and thus `manifest.json` via build) — must be **greater** than the last uploaded CWS version.
+1. **Version bump** in `package.json` (and thus `manifest.json` via build) — must be **greater** than the last uploaded CWS version. Keep `src/manifest.json` and both `version` fields in `package-lock.json` in step by hand; `npm install` is not needed for that.
 2. **Lists current** (or intentional skip on dark-only even releases):
    - Normally there is nothing to do here: the **Refresh filter lists** workflow runs on the 1st and 15th and opens a PR with the rule-count delta. Merge it and the lists are current.
    - That PR is opened with `GITHUB_TOKEN`, so GitHub will **not** attach the named `CI / build` check (the refresh job’s own Gate already ran the same commands, including byte-for-byte). If branch protection requires `CI / build`, either allow a bypass for that branch or open refresh PRs with a PAT/GitHub App that can trigger workflows.
@@ -29,10 +29,16 @@ Tiny cross-fixes are OK when they unblock a release.
    - `npm run typecheck`
    - `npm test`
    - `npm run smoke-extpay` (ExtPay id + store Dev-unlock gate + obfuscation scan; restores `[dev]` `dist/` after) — **not** covered by CI, because it depends on the local ExtPay configuration
-4. **Package**
+4. **Commit and tag first.** The zip you upload must be built from a committed, tagged tree, and nothing else:
+   - Commit everything that goes into the zip, version bump and `CHANGELOG.md` included. `git status --porcelain -- src scripts filters package.json package-lock.json` must print nothing. Untracked notes elsewhere (`docs/REVIEW_*.md`) never reach the zip and can stay.
+   - Tag that commit `git tag v<version>` and package from it.
+   - Put the sha256 that `npm run package` prints, and the tagged commit (`git rev-parse v<version>^{commit}`), in `store/SUBMIT-<version>.md`, then commit the doc. It is not in the zip, so committing it after the tag changes nothing in the package.
+   - **Check the SUBMIT hash before uploading:** `npm run package` must print the sha256 the SUBMIT doc quotes, with the Node version the doc names. It warns when they differ. A mismatch means the zip is not the tagged tree: rebuild from the tag, or find what changed, before uploading.
+   - Why: 2.2.3 was uploaded from an uncommitted tree (see [Release history gaps](#release-history-gaps)).
+5. **Package**
    - `npm run package` (or `npm run package -- --skip-lists` if lists already fresh)
    - Confirm `release/stampstack-<version>.zip`
-5. **Obfuscation** — `npm run package` runs `scan-package` automatically. Manually: `npm run scan-package`.
+6. **Obfuscation** — `npm run package` runs `scan-package` automatically. Manually: `npm run scan-package`.
 
 **Local QA note:** `smoke-extpay` / `build:store` / `package` leave or briefly use a store build. After smoke, `dist/` is restored to `[dev]`. After `package`, run `npm run build` before expecting **Dev unlock**.
 
@@ -80,6 +86,14 @@ Single purpose: block ads/trackers (DNR + cosmetics + scriptlets). Optional $2 d
 - Update `docs/DARK_MODE_SITES.md` if the release includes dark-mode fixes
 - Note ExtPay/listing/review issues for the next cadence cycle
 - Triage any new CWS reviews with [`SUPPORT_TRIAGE.md`](./SUPPORT_TRIAGE.md)
+
+## Release history gaps
+
+Uploads that did not follow the rules above, so nobody goes looking for a commit that does not exist.
+
+| Store version | What happened | What the repo has |
+|---|---|---|
+| 2.2.3 (published) | Uploaded from an uncommitted working tree. The code is byte-identical to 2.2.2. Only two manifest fields changed: `name` became "StampStack — Ad & Tracker Blocker" and `version` became 2.2.3. | No commit, no `v2.2.3` tag and no `store/SUBMIT-2.2.3.md`. 2.3.0 takes the name over properly as `extName` in `src/_locales/*/messages.json`, so the store name comes from the package in every language. |
 
 ## Related
 
