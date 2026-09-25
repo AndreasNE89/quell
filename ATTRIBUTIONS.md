@@ -34,3 +34,11 @@ StampStack queries it only with a 4-character hash prefix of the video id; see t
 
 The optional one-time dark-mode purchase is processed by
 [ExtensionPay](https://extensionpay.com) (Stripe).
+
+## Bundled libraries
+
+StampStack's JavaScript includes open-source libraries, among them
+[ExtPay](https://github.com/Glench/ExtPay) (the ExtensionPay client) and Mozilla's
+[webextension-polyfill](https://github.com/mozilla/webextension-polyfill). The build writes
+`THIRD_PARTY_NOTICES.txt` into the package root from what esbuild actually bundled: each library
+with its version, the licence information it publishes, and the address of its source.

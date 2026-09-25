@@ -19,6 +19,7 @@ import {
 } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { writeThirdPartyNotices } from './third-party-notices.mjs';
 import { readExtPayIds, storeExtPayLocalStub } from './lib/store-gates.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -226,9 +227,17 @@ async function run() {
     copyStatic();
     console.log('watching for changes… (re-run `npm run compile-filters` if filters change)');
   } else {
-    await Promise.all(configs.map((c) => build(c)));
+    const results = await Promise.all(configs.map((c) => build({ ...c, metafile: true })));
     buildManifest();
     copyStatic();
+    // Only here, not in --watch: a watch session is never what gets zipped, and the notices
+    // come from what esbuild actually bundled — see scripts/third-party-notices.mjs. The text
+    // is LF-only and sorted, so it keeps the package reproducible.
+    const bundled = writeThirdPartyNotices(
+      results.map((r) => r.metafile),
+      join(DIST, 'THIRD_PARTY_NOTICES.txt'),
+    );
+    console.log(`third-party notices: ${bundled.join(', ') || 'none'}`);
     const mode = store ? 'store' : 'dev';
     console.log(
       `\nBuilt unpacked extension → dist/  [${mode}]  (chrome://extensions → Load unpacked)`,
