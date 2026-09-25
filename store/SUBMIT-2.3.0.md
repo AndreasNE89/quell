@@ -9,8 +9,8 @@ art and listing copy.
 **Size:** 3.57 MiB (3,740,064 bytes) · 126 files · 129,712 DNR rules across 8 rulesets
 (114,746 in the five on by default; 228 of 1,000 regex slots)
 **Toolchain:** node v22.23.2, Windows, `core.autocrlf=true`
-**Built from:** the uncommitted 2.3.0 working tree on top of `39fbe1b`
-**Tagged commit:** _not yet: fill in `git rev-parse v2.3.0^{commit}` (see section 5)_
+**Built from:** tag `v2.3.0` (commit `70ca1e5`); a rebuild from the tag reproduced the hash above
+**Tagged commit:** `70ca1e59f1bd92a335201483f2710914ebd0d9ac` (annotated tag `v2.3.0`)
 
 Built with `npm run build:store`, then `npm run package -- --skip-lists`. Both runs of
 `npm run package -- --skip-lists` gave byte-identical zips with the hash above.
@@ -181,11 +181,11 @@ unchanged. No change to permissions, host permissions, network endpoints, or dat
 
 `docs/RELEASE_CHECKLIST.md` step 4 says to commit and tag first:
 
-- [ ] Commit the 2.3.0 tree. `git status --porcelain -- src scripts filters package.json package-lock.json`
+- [x] Commit the 2.3.0 tree. `git status --porcelain -- src scripts filters package.json package-lock.json`
       must print nothing. Leave `docs/REVIEW_*.md`, `undefined/`, `dist/`, `release/` and
       `store/screenshots/*.png` out of the commit.
-- [ ] `git tag v2.3.0`, then fill in "Tagged commit" at the top and commit this doc.
-- [ ] From the tag, run `npm run build:store` and then `npm run package -- --skip-lists`. It
+- [x] `git tag v2.3.0`, then fill in "Tagged commit" at the top and commit this doc.
+- [x] From the tag, run `npm run build:store` and then `npm run package -- --skip-lists`. It
       must print the sha256 above with node v22.23.2. `package.mjs` warns if it prints a
       different one. A mismatch means the zip is not the tagged tree.
 - [ ] Expect CI to print a **different** sha256 for the same commit. `scripts/build.mjs` copies
