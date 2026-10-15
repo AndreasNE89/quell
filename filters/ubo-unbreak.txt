@@ -1,7 +1,7 @@
 ! Title: uBlock filters – Unbreak
 ! Expires: 5 days
-! Last modified: Wed, 23 Sep 2026 10:04:33 +0000
-! Diff-Path: ../patches/2026.9.25.819.patch#ublock-unbreak
+! Last modified: Tue, 13 Oct 2026 08:48:49 +0000
+! Diff-Path: ../patches/2026.10.15.587.patch#ublock-unbreak
 ! Diff-Expires: 317 minutes
 ! License: https://github.com/uBlockOrigin/uAssets/blob/master/LICENSE
 ! *** uAssets:filters/unbreak.txt ***
@@ -1034,6 +1034,7 @@ usnews.com##+js(set, Object.prototype.vjsPlayer.ads, noopFunc)
 ! CNAME https://github.com/uBlockOrigin/uAssets/issues/8033
 @@||privacy-mgmt.com^$script,domain=praxisvita.de
 @@||cdn.playwire.com/bolt/js/zeus/embed.js$script,domain=neopets.com
+neopets.com#@##ad-overlay
 @@||lubin.pl^$cname
 @@||ze.tt/wp-content/plugins/zett-cmp/dist/sourcepoint.js$script,1p
 @@||sp-prod.net/wrapperMessagingWithoutDetection.js$script,domain=ze.tt
@@ -2868,3 +2869,5 @@ hktvmall.com##+js(set, Object.prototype.componentInScreen, noopFunc)
 @@||pagead2.googlesyndication.com/tag/js/gpt.js$script,redirect-rule,domain=kick.com
 expatexplorer.hsbc.com##+js(trusted-set, HSBC, 'json:{"SITE":{},"DCS":{},"PAGE":{}}')
 @@||homedepot.com.ssl.d2.sc.omtrdc.net^$xhr,domain=homedepot.com
+||imasdk.googleapis.com/js/sdkloader/ima3.js$redirect=google-ima.js,domain=aryplus.tv
+www.bankofamerica.com##+js(no-fetch-if, smetrics.bankofamerica.com)

@@ -1,6 +1,6 @@
 {
   "comment": "Integrity record for the lists compiled into a release. Written by `npm run update-lists`; verify with `npm run check-lists`. The .txt files themselves are the source of truth.",
-  "updated": "2026-09-25T17:00:19.703Z",
+  "updated": "2026-10-15T10:57:18.296Z",
   "lists": {
     "quell-seed": {
       "file": "quell-seed.txt",
@@ -9,43 +9,43 @@
     },
     "easylist": {
       "file": "easylist.txt",
-      "bytes": 2203057,
-      "sha256": "9ad31f81614cdcd5ab70d8bb92e49bda264cdecd44185176a115cf43d75d93f0"
+      "bytes": 2166260,
+      "sha256": "9e28c4966b3de53aa68d52d1605f9db37f05781c62b83e9fe94bb38da50d49bf"
     },
     "easyprivacy": {
       "file": "easyprivacy.txt",
-      "bytes": 1505879,
-      "sha256": "dc77c273e1873059acccc580d1b75442563dbd6949786d0cc89fd8f3aa45beae"
+      "bytes": 1509451,
+      "sha256": "fff0e0c69dadbd73e0a1c4ec98afba8afd7e6209902d83e5bce9f9bc5342f2a8"
     },
     "ubo-filters": {
       "file": "ubo-filters.txt",
-      "bytes": 1901811,
-      "sha256": "308bde7e98fe1c6b319083edcaa4219954a3899fc25026bcb820e38d93febe8f"
+      "bytes": 1926514,
+      "sha256": "1e7b5cd87c20be72e707b4ac46c5ac09718af6785f209d6351d7f595a06c03b6"
     },
     "ubo-badware": {
       "file": "ubo-badware.txt",
-      "bytes": 150002,
-      "sha256": "5fcfb65507aed403e98be7fcb948427e67a586aa120abdf6ce4e2efe255b741b"
+      "bytes": 151901,
+      "sha256": "0c3950d403717ebd2ed993aba87e2dc8c30d97146a2d4f5b12ab8f1c5bf66407"
     },
     "ubo-unbreak": {
       "file": "ubo-unbreak.txt",
-      "bytes": 177536,
-      "sha256": "1edefb77acaac506b9d698f411b7fa37c0d1c605fcb3fd85518f35bcd5834ea2"
+      "bytes": 177717,
+      "sha256": "ef9979d75c5f7d104445f20f96bf10fef367907a525b1d38a711fc29dc4585be"
     },
     "easylist-cookie": {
       "file": "easylist-cookie.txt",
-      "bytes": 898021,
-      "sha256": "3c15529a499984558f085ea2443e18803f6cda021845382e1c1ccf9584143736"
+      "bytes": 900985,
+      "sha256": "09fe825820e69735cb849326af6d077d0aa4ad4e13846f8b9520499f6e871125"
     },
     "easylist-china": {
       "file": "easylist-china.txt",
-      "bytes": 547328,
-      "sha256": "c4d646b74338dfd0febe314a9734d1ea93caa21df9096250f99da485ca3d15dc"
+      "bytes": 505516,
+      "sha256": "52c14ae75f91d399ab268b369b16e67daf86266d9e5f289841162ff91614833e"
     },
     "cjx-annoyance": {
       "file": "cjx-annoyance.txt",
-      "bytes": 57196,
-      "sha256": "e07fa5f05a8078dec3491c94a4a78156e3cbb9de10c27c7f112efbfa1c984efc"
+      "bytes": 57229,
+      "sha256": "f5afcf694eb62c42bdaa1294915f10a78577d1005c8d7a13b61a4808ccddb528"
     }
   }
 }

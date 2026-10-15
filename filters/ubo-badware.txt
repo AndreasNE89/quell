@@ -1,7 +1,7 @@
 ! Title: uBlock filters – Badware risks
 ! Expires: 5 days
-! Last modified: Mon, 21 Sep 2026 13:22:28 +0000
-! Diff-Path: ../patches/2026.9.25.819.patch#ublock-badware
+! Last modified: Tue, 13 Oct 2026 12:37:28 +0000
+! Diff-Path: ../patches/2026.10.15.587.patch#ublock-badware
 ! Diff-Expires: 317 minutes
 ! License: https://github.com/uBlockOrigin/uAssets/blob/master/LICENSE
 ! *** uAssets:filters/badware.txt ***
@@ -777,6 +777,15 @@ cracksmid.com##div[style=""] > center > center
 ||rerrioara.live^$3p
 ||gbelitesolutions.com^$all
 ||app-download.kuashouban.com^$all
+||app.ebrafoster.com^$all
+||hasoadwaznqps.com^$all
+||d3so1q8pr29y0t.cloudfront.net^$all
+||canxe.cojoystreut.com^$all
+||dezhou.hnambui01zs.com^$all
+||xsapd.19slot-ph.com^$all
+||ming.nongyuenongyz.com^$all
+||dailyque.site^$all
+||calmnotice.site^$all
 ! scam sites
 ||webuzz.me^$doc
 ||coup-ling.net^$all
@@ -2176,6 +2185,7 @@ azurefd.net,azurestaticapps.net,ondigitalocean.app,web.core.windows.net##body#my
 azurefd.net,azurestaticapps.net,ondigitalocean.app,web.core.windows.net###frame[title="encrypted shop"][allowfullscreen][src^="blob:https"][style="display: block;"]
 ||azurefd.net/Win20Errfb020/index.html$doc
 sgp1.cdn.digitaloceanspaces.com###frame[title="encrypted shop"][allowfullscreen][allow="fullscreen"][src^="blob"][style="display: block;"]
+||azurefd.net/?smash=$doc
 ||pages.dev/*/Fm7-alert.wav
 ||pages.dev/*/ai2.mp3
 ||pages.dev/*_Fm7-alert.mp3
@@ -2300,12 +2310,18 @@ sgp1.cdn.digitaloceanspaces.com###frame[title="encrypted shop"][allowfullscreen]
 ||ondigitalocean.app/nvidia.js
 ||ondigitalocean.app/b00p.mp3
 ||ondigitalocean.app/webs.mp4
-||web.core.windows.net/js/01d1fgshfddfg.js
-||web.core.windows.net/js/02dgdsg3d.js
-||web.core.windows.net/js/03fgsskryeivh.js
-||web.core.windows.net/js/04shesc1.js
-||web.core.windows.net/dgdh1.wav
-||web.core.windows.net/hel0sgfy.mp4
+/js/01d1fgshfddfg.js$domain=azurefd.net|windows.net
+/js/02dgdsg3d.js$domain=azurefd.net|windows.net
+/js/03fgsskryeivh.js$domain=azurefd.net|windows.net
+/js/04shesc1.js$domain=azurefd.net|windows.net
+/js/05sdghdf.js$domain=azurefd.net|windows.net
+/js/08dgsg3d.js$domain=azurefd.net|windows.net
+/js/11gfdjuef.js$domain=azurefd.net|windows.net
+/js/12dgdur.js$domain=azurefd.net|windows.net
+.net/dgdh1.wav$domain=azurefd.net|windows.net
+/hel0sgfy.mp4$domain=azurefd.net|windows.net
+||azurefd.net/media/beepp.WAV
+||azurefd.net/media/audio.mp3
 z13.web.core.windows.net##+js(aeld, DOMContentLoaded, fullscreenEnabled)
 web.core.windows.net##+js(aeld, beforeunload, /[Ww]orker/)
 ondigitalocean.app##+js(aeld, mousemove, loadSecret)
@@ -2332,6 +2348,14 @@ monster###bw-rc-host[style="position: fixed !important; inset: 0px !important; z
 ||sites.google.com/view/codex-desktop-app$doc
 ||whirlpoploaderfast.com^
 ##body > .main-wrapper > .main-content > .intro > #checkbox-window
+/\/t\.js\?site=[a-f0-9]{32}\b/$script,3p,match-case
+##body.wp-singular > div[id$="-overlay"] > div[id$="-container"] > div[class*="-container"] > div[id$="-checkbox-window"]
+!#if ext_ubol
+/\/t\.js\?site=[0-9-a-f]{19,}$/$script,3p,match-case
+!#endif
+!#if env_safari
+/\/t\.js\?site=[0-9-a-f][0-9-a-f][0-9-a-f][0-9-a-f][0-9-a-f][0-9-a-f][0-9-a-f][0-9-a-f][0-9-a-f][0-9-a-f][0-9-a-f][0-9-a-f][0-9-a-f][0-9-a-f][0-9-a-f][0-9-a-f][0-9-a-f][0-9-a-f][0-9-a-f][0-9-a-f][0-9-a-f][0-9-a-f][0-9-a-f][0-9-a-f][0-9-a-f][0-9-a-f][0-9-a-f][0-9-a-f][0-9-a-f][0-9-a-f][0-9-a-f][0-9-a-f]$/$script,3p,match-case
+!#endif
 ##div.card > div#cbRow.checkbox-row[onclick="startVerify()"]
 gemfellowship.org##+js(rmnt, script, TextDecoder)
 ##html > #bw-cf-root
@@ -2344,6 +2368,8 @@ longhall.consulting##+js(rmnt, script, /document\.currentScript\.remove|0x0/)
 ||re-captcha.xyz^$all
 ||gtm-tools.xyz^$all
 ||cloudproxy.digital^$3p,xhr
+||browseid.codes^
+||ohhhhhmoney.com^$xhr,redirect=noop.txt
 ##html.canvas > body.wp-singular + div[popover="manual"]
 ||low-house.com^$all
 ###uc-cf-overlay
@@ -2360,7 +2386,7 @@ longhall.consulting##+js(rmnt, script, /document\.currentScript\.remove|0x0/)
 ##.cta-button[onclick="openUpdateModal()"]
 ||playcomla.com.ar^$all
 ||jarretelvankortrijk.be^$all
-###captchaBox
+! ###captchaBox
 ! ##.captcha-wrap
 ###mainBtn[onclick="startVerify()"]
 ###ipBar + .main
@@ -2414,8 +2440,24 @@ pentest.blog##+js(acs, atob, new )
 ||guildkit.org^$doc,reason=malicious
 darumasushiantofagasta.cl##+js(aost, Function, /bxslider|wow/)
 ||cloudflare-check.net^$all
-/\/t\.js\?site=[a-f0-9]{32}\b/$script,3p,match-case
-##body.wp-singular > div[id$="-overlay"] > div[id$="-container"] > div[class*="-container"] > div[id$="-checkbox-window"]
+||lichsuvanhoa.net^$all
+||diabetescareth.com^$all
+||clickzona.net^$all
+||trackerredirect.online^$all
+||campaigntracker.icu^$all
+||entry-verifed-cdn.
+/^https:\/\/[a-z]{15,}\.[a-z]{3,}\/embed\.js\?v=\d+$/$script,3p,match-case,to=~com|~net|~org
+/^https:\/\/[a-z]{8,}\.[a-z]+\/[a-zA-Z][a-z]+_[Pp]roliv\/api\?ver=\d\.\d\.\d$/$script,3p,match-case
+/^https:\/\/[-a-z]{9,}\.net\/embed\/[a-f0-9]{16}\?embed=1&host=/$frame,3p,match-case,to=net
+||way-to-ai.com^$all
+/checking?domain=*&captchashowed=$xhr,3p
+||ikeymate.co.nz^$all
+||59na.com^$all
+##body > .cf-page-wrap
+||third-party.com^$all
+##body > .main-wrapper > .main-content > .intro > .checkbox-window
+||raw.githubusercontent.com/om5678774/kt4567/main/landing2.txt
+||precisionproving.com^$3p
 ! !SECTION: ClickFix
 ||cracksway.com^$all
 ||gamingdebates.com^$all
@@ -3899,7 +3941,7 @@ rapidkil.com.au##+js(aost, XMLHttpRequest, /wp-content)
 !#if ext_ubol
 /^https:\/\/(?:[a-z]{3,5}|[ej][ac])\.[a-z]{4,10}\.[a-z]{2,6}\/item-(?:[0-9A-Za-z]{10}|\d{8}|[0-9a-f]{32})\.html$/$doc,match-case,to=art|autos|baby|best|boats|buzz|cards|cfd|click|cyou|eu|fit|fun|guru|hair|homes|ink|lat|lol|mom|my|pics|qpon|quest|rest|sale|sbs|skin|today|top|wiki|work|world|xyz
 /^https:\/\/(?:[a-z]{4,5}|[ej][ac])\.[a-z]{4,10}\.[a-z]{2,6}\/item-(?:[0-9A-Za-z]{10}|\d{8}|[0-9a-f]{32})\.html$/$doc,match-case,to=biz|blog|cc|cloud|club|info|life|live|me|one|online|shop|site|space|store
-/^https:\/\/([a-vx-z][a-z]{2,}\.)?[0-9a-z-]{3,}\.(com|net|org)\/index\.php\?main_page=product_info(&stl=\d)?&(cPath|products_id)=/$doc
+/^https:\/\/([a-vx-z][a-z]{2,}\.)?[0-9a-z-]{3,}\.(com|net|org)\/index\.php\?main_page=product_info&/$doc
 !#endif
 ||zoom.us*web.us^$doc
 ||e-zpass.com-$doc
@@ -4585,3 +4627,8 @@ top##body > center + .A + .post
 ||mobel-wahls.shop^$doc
 ||flingtrainer.io^$all
 ||simplemobgtnc.shop^$all
+||koboldcpp.com^$all
+msm-wroclaw.pl##+js(noeval-if, _0x)
+||bringmeday.icu^$all
+||bringmelove.icu^$all
+||timbuk2.com.de^$all
